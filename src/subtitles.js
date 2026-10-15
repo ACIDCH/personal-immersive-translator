@@ -61,12 +61,13 @@
       });
       const text=info.text;
       if(!text){render('');return;}
-      if(text===state.latestDomText) return;
       state.latestDomText=text;
       const key='dom:'+text;
       if(state.cache.has(key)){render(state.cache.get(key));return;}
+      const budget=state.mode==='ai'?80:1200;
+      if(state.requestCount>=budget){render('本次翻译已达到安全请求上限，请停止后重新开始。');return;}
       render('正在翻译…');
-      if(state.domPending || Date.now()-state.failedAt<2500 || state.requestCount>=120) return;
+      if(state.domPending || Date.now()-state.failedAt<2500) return;
       state.requestCount++;state.domPending=true;
       const generation=state.generation;
       try {
@@ -95,7 +96,10 @@
     render(current ? (state.cache.get(current.key) || '正在翻译…') : '');
     if(state.busy || Date.now()-state.failedAt < 3000) return;
     const upcoming=core.upcomingCues(cues,now,video.playbackRate,5);
-    if(!upcoming.length) return;
+    if(!upcoming.length || !upcoming.some(c=>!state.cache.has(c.key))) return;
+    const budget=state.mode==='ai'?80:1200;
+    if(state.requestCount>=budget){render('本次字幕翻译已达到安全请求上限');return;}
+    state.requestCount++;
     state.busy=true;
     try {
       await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation));
