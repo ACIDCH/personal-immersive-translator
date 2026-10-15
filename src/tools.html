@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图片与 PDF 翻译</title><link rel="stylesheet" href="ui.css"><style>.layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.layout{grid-template-columns:1fr}}.result{white-space:pre-wrap;min-height:80px;max-height:360px;overflow:auto;border-radius:8px;border:1px solid #bdcbd9;padding:14px;overflow-wrap:anywhere}.preview{max-width:100%;max-height:240px;object-fit:contain}button{padding:10px 14px;border-radius:8px;cursor:pointer}</style></head>
+<body class="options"><main>
+<h1>文件与图片翻译</h1><p class="muted">图片可使用 Gemini OCR+翻译（主动上传到你的 Gemini API，可能计费）；PDF 高保真翻译需要在本机启动 BabelDOC 服务。</p>
+<div class="layout"><section class="panel"><h2>图片 OCR + 双语翻译</h2>
+<label>选择 PNG、JPEG、WebP 图片<input id="image" type="file" accept="image/png,image/jpeg,image/webp"></label><img id="imagePreview" class="preview" hidden alt="所选图片预览">
+<button class="primary" id="imageTranslate">识别并翻译所选图片（Gemini）</button>
+<p class="muted">不会在未点击时发送图片。初版 OCR 与翻译由 Gemini 多模态完成；离线 Tesseract/PaddleOCR 尚未集成到浏览器包。</p>
+<h3>原文</h3><div id="original" class="result"></div><h3>译文</h3><div id="translated" class="result"></div><p id="imageStatus" role="status"></p>
+</section>
+<section class="panel"><h2>PDF 文档 OCR 与 BabelDOC 版面保留翻译</h2>
+<label>选择 PDF（不超过 25MB）<input id="pdf" type="file" accept="application/pdf"></label>
+<label>原文语言<select id="source"><option value="en">英语</option><option value="zh">中文</option><option value="ja">日语</option><option value="ko">韩语</option><option value="fr">法语</option><option value="de">德语</option><option value="es">西班牙语</option></select></label>
+<label>目标语言<select id="target"><option value="zh">简体中文</option><option value="en">英语</option><option value="ja">日语</option><option value="ko">韩语</option><option value="fr">法语</option><option value="de">德语</option><option value="es">西班牙语</option></select></label>
+<label class="inline"><input id="ocr" type="checkbox" checked> 扫描件时先运行 OCR（需要本地 OCRmyPDF）</label>
+<label>本机服务令牌（仅本页本次使用）<input id="token" type="password" autocomplete="off" placeholder="PIT_BRIDGE_TOKEN"></label>
+<button id="pdfTranslate" class="primary">开始高保真翻译并下载 PDF</button>
+<p id="pdfStatus" role="status"></p><p class="muted">本机服务：127.0.0.1:8765。需要 Python、BabelDOC、OCRmyPDF 与独立设置的 DeepSeek API Key。不能使用 Supabase Edge Functions 直接运行这种高内存文档处理任务。</p>
+<p><a href="https://github.com/ACIDCH/personal-immersive-translator/blob/feat/initial-video-ocr-pdf-modules/docs/PDF_OCR_SETUP.md" target="_blank" rel="noopener noreferrer">查看 BabelDOC / OCR 安装说明</a></p>
+</section></div>
+</main><script type="module" src="tools.js"></script></body></html>
