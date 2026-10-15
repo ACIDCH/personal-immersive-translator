@@ -112,3 +112,16 @@ if(new URLSearchParams(location.search).get('screenshot')==='1'){
   $('imageStatus').textContent='已载入当前网页截图。请选择 Gemini 或本机 OCR 开始识别。';
  }).catch(e=>$('imageStatus').textContent=String(e.message||e));
 }
+
+
+$('pdf').addEventListener('change',async()=>{
+  const file=$('pdf').files?.[0],status=$('pdfPreviewStatus');
+  $('pdfPreview').replaceChildren();
+  if(!file){status.textContent='';return;}
+  status.textContent='正在用 Mozilla PDF.js 在本地解析第一页…';
+  try{
+    const {previewPdf}=await import('./pdf-preview.js');
+    const result=await previewPdf(file,$('pdfPreview'));
+    status.textContent=result.needsOCR?'首页可能为扫描页，建议启用 OCR':'首页可读取文字；若包含扫描附件仍建议选择 OCR';
+  }catch(error){status.textContent='预览失败：'+String(error.message||error);}
+});
