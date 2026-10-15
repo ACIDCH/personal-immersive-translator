@@ -29,7 +29,8 @@
     const p95=percentile(.95);
     meta.textContent=latency+
       (p95===null?'':' · p95约 '+(p95/1000).toFixed(1)+'s')+
-      ' · 丢弃 '+stats.dropped+' 段 · 识别错误 '+stats.errors;
+      ' · 丢弃 '+stats.dropped+' 段 · 识别错误 '+stats.errors+
+      (stats.p95Ms>8000?' · 识别延迟偏高，建议使用小模型':'');
     overlay.append(meta);
   }
   async function drain(){
