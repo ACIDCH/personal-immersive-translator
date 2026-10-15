@@ -12,9 +12,11 @@ if(packageJson.version!=='6.4.299' || packageJson.license!=='Apache-2.0') {
 }
 const output=join(process.cwd(),'src','vendor');
 mkdirSync(output,{recursive:true});
+// Prefer upstream legacy distribution for Chrome 116+ compatibility: it
+// provides the required ECMAScript polyfills instead of relying on Chrome 145.
 const files=[
- ['build/pdf.mjs','pdf.mjs'],
- ['build/pdf.worker.mjs','pdf.worker.mjs'],
+ ['legacy/build/pdf.mjs','pdf.mjs'],
+ ['legacy/build/pdf.worker.mjs','pdf.worker.mjs'],
  ['LICENSE','PDFJS-LICENSE.txt']
 ];
 for(const [from,to] of files){
