@@ -1,4 +1,5 @@
 import {translateImage} from './lib/vision.js';
+import {translateBatch} from './lib/providers.js';
 import {normalizeSettings,SETTINGS_KEY} from './lib/settings.js';
 const $=id=>document.getElementById(id);
 let previewUrl=null;
@@ -60,4 +61,38 @@ $('pdfTranslate').addEventListener('click',async()=>{
    status.textContent='已触发双语 PDF 下载。请检查输出是否保留了所需排版。';
  }catch(error){status.textContent='PDF 翻译失败：'+String(error.message||error);}
  finally{$('pdfTranslate').disabled=false;}
+});
+
+
+$('localOCR').addEventListener('click',async()=>{
+ const file=$('image').files?.[0],status=$('imageStatus'),token=$('token').value;
+ if(!file){status.textContent='先选择需要 OCR 的图片';return;}
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>8_000_000){status.textContent='只支持不超过 8MB 的 PNG/JPEG/WebP';return;}
+ if(token.length<16){status.textContent='先在右侧填写本机服务令牌';return;}
+ if(!confirm('确认发送图片到当前电脑的 OCR 服务，然后使用你配置的机器翻译 API 翻译识别出的文字？'))return;
+ $('localOCR').disabled=true;status.textContent='正在执行本地 OCR…';
+ try{
+  const granted=await chrome.permissions.request({origins:['http://127.0.0.1/*']});
+  if(!granted)throw new Error('未授权本地 OCR 服务');
+  const form=new FormData();form.append('image',file,file.name);form.append('source',$('imageSource').value);
+  const response=await fetch('http://127.0.0.1:8765/ocr-image',
+   {method:'POST',headers:{'X-PIT-Token':token},body:form,signal:AbortSignal.timeout(110000)});
+  if(!response.ok)throw new Error('OCR 服务响应 HTTP '+response.status);
+  const result=await response.json();
+  const original=String(result.original_text||'').slice(0,12000);
+  if(!original.trim())throw new Error('没有检测到可识别的文字');
+  $('original').textContent=original;
+  status.textContent='识别完成，正在调用常规翻译服务…';
+  const settings=normalizeSettings((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
+  const fragments=original.match(/[\s\S]{1,950}/g)||[];
+  const out=[];
+  for(let i=0;i<fragments.length;i+=8){
+   const translated=await translateBatch(fragments.slice(i,i+8),{
+     ...settings,provider:settings.standardProvider,source:$('imageSource').value,target:settings.target});
+   out.push(...translated);
+  }
+  $('translated').textContent=out.join('');
+  status.textContent='已完成本地 OCR + 常规翻译。';
+ }catch(error){status.textContent='本地 OCR 失败：'+String(error.message||error);}
+ finally{$('localOCR').disabled=false;}
 });
