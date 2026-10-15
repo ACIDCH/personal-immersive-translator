@@ -1,0 +1,15 @@
+:root { color-scheme:light dark; font-family:system-ui,-apple-system,'Segoe UI',sans-serif; font-size:14px; }
+* {box-sizing:border-box} body {margin:0;background:#f5f7fa;color:#1d2b40}
+.popup {width:350px;min-height:340px}.popup main{padding:15px}
+header,.brand,.segmented,.controls,.buttons {display:flex;align-items:center;gap:8px}
+header{justify-content:space-between;margin-bottom:15px}.brand{font-weight:700}.textbtn {background:none;border:none;cursor:pointer;color:#53647b}
+.panel {background:white;border:1px solid #dce5f0;border-radius:12px;padding:16px;margin:12px 0;box-shadow:0 1px 5px #101c3109}
+.panel h2{font-size:16px;margin:0 0 14px}.label{font-weight:700;margin-bottom:10px}.muted,.notice{color:#64748b;font-size:12px;line-height:1.6}
+.provider{font-size:13px;margin-bottom:0}.segmented button{flex:1;border:0;background:#edf1f6;color:#36475e;padding:11px 8px;border-radius:8px;cursor:pointer}.segmented .selected{background:#2458c6;color:white}
+.controls{flex-direction:column}.controls button,.buttons button{width:100%;padding:11px 12px;border-radius:8px;border:1px solid #c5d1e0;background:#fff;cursor:pointer;color:#1d2b40;font-weight:600}.controls .primary,.buttons .primary{background:#2458c6;border-color:#2458c6;color:#fff}
+.status{min-height:20px;margin-top:10px;line-height:1.5;color:#1250a7;font-size:12px}
+.options{max-width:790px;margin:auto;padding:16px 24px}.options main{padding-bottom:30px}.options h1{font-size:24px}.options .panel{padding:22px}
+label:not(.inline){display:flex;flex-direction:column;font-weight:600;gap:6px;margin:12px 0}label.inline{display:flex;gap:10px;align-items:center;margin-top:10px}
+input:not([type=checkbox]),textarea,select{font:inherit;padding:10px;border:1px solid #b9c9da;border-radius:7px;background:white;color:#1d2b40;width:100%;outline-offset:1px}
+.buttons{flex-wrap:wrap}.buttons button{width:auto}.notice{padding:0 4px}
+@media(prefers-color-scheme:dark){body{background:#111827;color:#e4ebf7}.panel{background:#1f2937;border-color:#364356}.segmented button{background:#334155;color:#e4ebf7}.segmented .selected{background:#3c72df}input:not([type=checkbox]),textarea,select,.controls button,.buttons button{background:#293548;border-color:#53647d;color:#eff4fc}.controls .primary,.buttons .primary{background:#3267d7;color:white}.muted,.notice{color:#9baac1}.textbtn{color:#aab8ce}}
