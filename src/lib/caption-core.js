@@ -5,10 +5,18 @@
   function cleanText(s) {
     return String(s ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 3000);
   }
-  function normalizeCues(cues) {
+  function normalizeCues(cues, aroundTime=null) {
     if (!Array.isArray(cues)) return [];
+    // A long VOD/live event may have >3000 cues. Never pin extraction to the
+    // beginning of the video after the user seeks far ahead.
+    let selected=cues;
+    if (cues.length > MAX_EVENTS) {
+      selected=Number.isFinite(aroundTime)
+        ? cues.filter(c=>Number(c.endTime)>=aroundTime-30 && Number(c.startTime)<=aroundTime+300)
+        : cues.slice(-MAX_EVENTS);
+    }
     const seen = new Set(), out = [];
-    for (const c of cues.slice(0, MAX_EVENTS)) {
+    for (const c of selected.slice(0, MAX_EVENTS)) {
       const start = Number(c.startTime), end = Number(c.endTime), text = cleanText(c.text);
       if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end - start > 180 || !text) continue;
       const key = [start.toFixed(3),end.toFixed(3),text].join('|');
