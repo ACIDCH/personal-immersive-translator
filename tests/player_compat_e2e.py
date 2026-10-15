@@ -76,7 +76,6 @@ async def run():
       await setup(page,"https://example.com/","<div>Unknown video</div>")
       unsupported=await page.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
       assert not unsupported["ok"],unsupported
-      await page.close()
       print("PASS unsupported page reports missing caption source")
       # A manually imported SRT cannot be aligned without a video time axis.
       # Prior versions threw by dereferencing video.currentTime when video=null.
@@ -85,6 +84,7 @@ async def run():
       ])""")
       assert not imported["ok"] and "视频时间轴" in imported["reason"],imported
       print("PASS imported SRT without video fails gracefully, no runtime crash")
+      await page.close()
 
       # The LMS top document cannot inspect a Panopto cross-origin iframe.
       # Tell the user why; never reach through the frame's access boundary.
