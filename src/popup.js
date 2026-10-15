@@ -37,7 +37,7 @@ async function subtitleAction(type){
     if(type==='PIT_CAPTIONS_START'){
       await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['src/content.css']});
       await chrome.scripting.executeScript({target:{tabId:tab.id},
-        files:['src/lib/caption-core.js','src/subtitles.js']});
+        files:['src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js']});
     }
     const res=await chrome.tabs.sendMessage(tab.id,{type,mode});
     if(!res?.ok) throw new Error(res?.reason||'字幕操作失败');
