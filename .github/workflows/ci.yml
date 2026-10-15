@@ -16,6 +16,12 @@ jobs:
         run: npm install --no-audit --no-fund --ignore-scripts
       - name: Static checks and unit tests
         run: npm run verify
+      - name: Export reproducible dependency lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-lockfile
+          path: package-lock.json
+          retention-days: 7
       - name: Validate Python PDF/OCR bridge syntax
         run: python -m compileall -q services benchmarks
       - name: Package installable extension
