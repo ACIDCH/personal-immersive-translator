@@ -61,7 +61,7 @@ References: KISS issues #387, #168, #877 show retrieval failure, subtitle delay,
 | HTML5 video with native VTT and captions enabled | Bilingual overlay synchronized after seek, pause, resume and 2x | Core adapter + unit tests; browser E2E pending |
 | YouTube manual CC / automatic CC | Adapt to actual track, don't rely on undocumented hacks | Research/adapter needed |
 | Video with no captions | Explicit “no source” state; optional consent-based ASR in future | Detect & explain only |
-| Streaming lecture / livestream | Optional ASR with p50/p95 measurements and stopping/cleanup | Not implemented |
+| Streaming lecture / livestream | Optional ASR with p50/p95 measurements and stopping/cleanup | Experimental capture + local whisper-cli; not browser-validated |
 | Slide/PPT-like SPA | Find visible slide text after navigation without duplicating | Open Shadow DOM + mutation first pass |
 | Cross-origin iframe slides | Request only necessary host permissions with explicit user grant | Not implemented |
 | Canvas/diagram/scanned PDF | OCR opt-in, distinguish low-confidence text | Not implemented |
