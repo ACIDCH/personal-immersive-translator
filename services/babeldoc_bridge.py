@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import json
+import struct
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.responses import Response
@@ -101,6 +102,23 @@ async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
     return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
 
 
+def validate_asr_wav(data: bytes):
+    """Accept the exact mono PCM16, 16kHz WAV format emitted by the extension."""
+    if len(data) < 46 or len(data) > 44 + 16_000 * 2 * 12:
+        raise ValueError("PCM WAV 时长无效")
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE" or data[12:16] != b"fmt ":
+        raise ValueError("不支持该音频封装")
+    if struct.unpack_from("<I",data,4)[0] != len(data)-8:
+        raise ValueError("WAV 文件长度不一致")
+    if struct.unpack_from("<I",data,16)[0] != 16 or data[36:40] != b"data":
+        raise ValueError("只支持标准 44 字节 PCM WAV")
+    codec,channels,rate,byte_rate,align,bits=struct.unpack_from("<HHIIHH",data,20)
+    if (codec,channels,rate,byte_rate,align,bits)!=(1,1,16000,32000,2,16):
+        raise ValueError("Whisper 仅接受 16 kHz / 16-bit / 单声道 PCM")
+    if struct.unpack_from("<I",data,40)[0] != len(data)-44:
+        raise ValueError("PCM 数据区大小无效")
+    return (len(data)-44)//2
+
 ASR_MODEL=os.environ.get("PIT_WHISPER_MODEL","")
 ASR_BIN=os.environ.get("PIT_WHISPER_BIN","whisper-cli")
 asr_lock=asyncio.Lock()
@@ -110,8 +128,10 @@ async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Hea
     if not ASR_MODEL or not pathlib.Path(ASR_MODEL).is_file() or not shutil.which(ASR_BIN):
         raise HTTPException(status_code=503,detail="尚未配置本地 Whisper 模型或 whisper-cli")
     data=await audio.read(2_000_001)
-    if len(data)>2_000_000 or len(data)<44 or not data.startswith(b"RIFF") or data[8:12]!=b"WAVE":
-        raise HTTPException(status_code=400,detail="仅支持不超过 2MB 的 PCM WAV")
+    try:
+        validate_asr_wav(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
     if asr_lock.locked():
         raise HTTPException(status_code=429,detail="语音模型繁忙；当前音频片段已跳过")
     async with asr_lock:
