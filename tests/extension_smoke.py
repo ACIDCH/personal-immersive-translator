@@ -69,6 +69,25 @@ async def main():
                 assert await tools.locator("#pdfTranslate").count()==1
                 assert await tools.locator("#localOCR").count()==1
                 print("PASS: image OCR and PDF tools render")
+
+                # Render an actual born-digital PDF through the vendored PDF.js
+                # renderer/worker. No cloud OCR, keys or network access.
+                import fitz
+                from playwright.async_api import TimeoutError as PlaywrightTimeout
+                doc=fitz.open()
+                pg=doc.new_page()
+                pg.insert_text((40,70),"University course PDF text sample for preview.")
+                data=doc.tobytes()
+                doc.close()
+                await tools.locator('#pdf').set_input_files({
+                    "name":"fixture.pdf","mimeType":"application/pdf","buffer":data
+                })
+                await tools.locator('#pdfPreview canvas').wait_for(timeout=20000)
+                info=await tools.locator('#pdfPreviewStatus').inner_text()
+                assert "首页可读取文字" in info,info
+                assert await tools.locator('#pdfPreview canvas').evaluate("(el)=>el.width>100 && el.height>100")
+                print("PASS: actual PDF.js worker renders PDF in installed extension")
+
                 assert not errors,errors
             finally:
                 await context.close()
