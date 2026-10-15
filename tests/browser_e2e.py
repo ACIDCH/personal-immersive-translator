@@ -16,6 +16,7 @@ async def main():
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(
             executable_path=os.getenv("PIT_CHROMIUM_PATH") or None,
+            channel=None if os.getenv("PIT_CHROMIUM_PATH") else "chrome",
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
