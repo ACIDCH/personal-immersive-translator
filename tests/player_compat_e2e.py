@@ -78,6 +78,16 @@ async def run():
       assert not unsupported["ok"],unsupported
       await page.close()
       print("PASS unsupported page reports missing caption source")
+
+      # The LMS top document cannot inspect a Panopto cross-origin iframe.
+      # Tell the user why; never reach through the frame's access boundary.
+      embedded=await browser.new_page()
+      await setup(embedded,"https://learning.example.edu/lecture",
+          '<iframe src="https://uni.panopto.com/Panopto/Pages/Embed.aspx?id=test"></iframe>')
+      denied=await embedded.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert not denied["ok"] and "跨域" in denied["reason"],denied
+      await embedded.close()
+      print("PASS cross-origin embedded player reports explicit limitation")
     finally:await browser.close()
 
 if __name__=="__main__":
