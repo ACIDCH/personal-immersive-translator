@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import json
 import struct
+import io
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.responses import Response
@@ -116,14 +118,26 @@ async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
     payload=await image.read(8_000_001)
     if len(payload)>8_000_000:raise HTTPException(status_code=413)
     if not shutil.which("tesseract"):raise HTTPException(status_code=503,detail="未安装 Tesseract OCR")
-    with tempfile.TemporaryDirectory(prefix="pit-ocr-") as temp:
-        path=pathlib.Path(temp)/("image.png" if image.content_type=="image/png" else "image.jpg")
-        path.write_bytes(payload)
-        try:
-            result=await asyncio.to_thread(subprocess.run,["tesseract",str(path),"stdout","-l",LANGS[source]],
-                capture_output=True,timeout=100,check=True)
-        except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
-            raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
+    # Image formats are not interchangeable: a WebP payload saved as .jpg
+    # may fail in Tesseract. Normalize with the actual Pillow decoder, correct
+    # mobile EXIF orientation, and guard against huge decompression bombs.
+    try:
+        with Image.open(io.BytesIO(payload)) as original:
+            width,height=original.size
+            if width<1 or height<1 or width*height>20_000_000:
+                raise ValueError("图片像素超过 2000 万上限")
+            normalized=ImageOps.exif_transpose(original).convert("RGB")
+            with tempfile.TemporaryDirectory(prefix="pit-ocr-") as temp:
+                path=pathlib.Path(temp)/"normalized.png"
+                normalized.save(path,format="PNG")
+                try:
+                    result=await asyncio.to_thread(subprocess.run,
+                        ["tesseract",str(path),"stdout","-l",LANGS[source]],
+                        capture_output=True,timeout=100,check=True)
+                except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
+                    raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
+    except (UnidentifiedImageError,OSError,ValueError,Image.DecompressionBombError) as exc:
+        raise HTTPException(status_code=422,detail="图片损坏、格式不匹配或尺寸超限") from exc
     return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
 
 
