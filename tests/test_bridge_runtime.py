@@ -54,6 +54,16 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code,401)
         self.assertEqual(self.client.get("/health",headers={"X-PIT-Token":"wrong"}).status_code,401)
 
+    def test_health_reports_dependency_readiness_without_exposing_secrets(self):
+        response=self.client.get("/health",headers=self.headers)
+        self.assertEqual(response.status_code,200,response.text)
+        details=response.json()
+        for key in ("ready","pdf_ocr","image_ocr","speech_asr"):
+            self.assertIsInstance(details[key],bool)
+        self.assertEqual(details["engine"],"local-only")
+        self.assertNotIn("fake-test-key-never-use",response.text)
+        self.assertNotIn("test-local-secret-at-least-16",response.text)
+
     def test_pdf_magic_and_language_validation(self):
         self.assertEqual(self.submit(b"not a pdf").status_code,400)
         self.assertEqual(self.submit(pdf(),source="ru").status_code,400)
