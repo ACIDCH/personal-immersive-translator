@@ -68,6 +68,8 @@ class BridgeContractTests(unittest.TestCase):
             assert options["lang-in"]=="en"
             assert options["lang-out"]=="zh"
             assert options["openai-api-key"]=="fake-test-key-never-use"
+            import stat
+            assert stat.S_IMODE(os.stat(args[args.index("--config")+1]).st_mode)==0o600
             (Path(options["output"])/"original.dual.pdf").write_bytes(pdf("Translated output."))
             return subprocess.CompletedProcess(args,0)
         with patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"),patch.object(bridge.subprocess,"run",side_effect=fake_run):
@@ -76,6 +78,29 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(calls,["babeldoc"])
         self.assertTrue(resp.content.startswith(b"%PDF-"))
         self.assertEqual(resp.headers["cache-control"],"no-store")
+
+    def test_mixed_document_detects_late_scanned_appendix(self):
+        import tempfile
+        document=fitz.open()
+        first=document.new_page()
+        first.insert_text((50,75),"A sufficiently long academic introduction containing searchable text.")
+        document.new_page()  # Represents a scanned/blank appendix for detection.
+        with tempfile.TemporaryDirectory() as d:
+            sample=Path(d)/"mixed.pdf"
+            sample.write_bytes(document.tobytes())
+            self.assertTrue(bridge.scanned_pdf(sample))
+        document.close()
+
+    def test_reject_invalid_babeldoc_pdf_output(self):
+        def fake_run(args,**kwargs):
+            with open(args[args.index("--config")+1],"rb") as handle:
+                options=tomllib.load(handle)["babeldoc"]
+            (Path(options["output"])/"original.dual.pdf").write_bytes(b"fake pdf")
+            return subprocess.CompletedProcess(args,0)
+        with patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"), \
+             patch.object(bridge.subprocess,"run",side_effect=fake_run):
+            response=self.submit(pdf(),ocr=False)
+        self.assertEqual(response.status_code,422)
 
     def test_scanned_pdf_requires_ocr_permission_and_retains_bilingual_file(self):
         scanned=pdf("")
