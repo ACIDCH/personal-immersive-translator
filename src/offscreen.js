@@ -36,10 +36,11 @@ async function flush(c){
   }
   const samples=c.queue.take();
   if(!samples.length || averageEnergy(samples)<0.008)return;
-  if(c.stats.requests>=MAX_REQUESTS){
+  if(c.attempts>=MAX_REQUESTS){
     await notify('PIT_ASR_ERROR',{tabId:c.tabId,message:'已到本次语音识别安全时长上限，请停止并重新启动。'});
     await stop();return;
   }
+  c.attempts++;
   c.busy=true;
   const capturedAt=Date.now();
   const started=performance.now();
@@ -61,7 +62,13 @@ async function flush(c){
     const asrMs=Math.round(performance.now()-started);
     c.stats.record(asrMs);
     const text=String(result.text||'').trim().slice(0,5000);
-    if(text)await notify('PIT_ASR_RESULT',{tabId:c.tabId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
+    if(asrMs>12000){
+      c.stats.drop(1);
+      await notify('PIT_ASR_ERROR',{tabId:c.tabId,
+        message:'本机识别延迟超过 12 秒，已跳过过期字幕。请使用较小的 Whisper 模型。'});
+    }else if(text){
+      await notify('PIT_ASR_RESULT',{tabId:c.tabId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
+    }
   }catch(e){
     if(current===c){
       c.stats.error();
@@ -92,7 +99,7 @@ async function start({streamId,tabId,token}){
     source.connect(context.destination); // Preserve playback, per Chrome tabCapture docs.
     const queue=new BoundedAudioQueue(context.sampleRate,6);
     c={context,source,processor,mute,stream,tabId,token,queue,busy:false,
-      timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0};
+      timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0};
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
     current=c;
     processor.onaudioprocess=e=>{
