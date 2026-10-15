@@ -31,8 +31,9 @@ export async function previewPdf(file,view){
     view.append(summary);
     return {pages:doc.numPages,firstPageTextLength:text.length,needsOCR:text.length<30};
   }finally{
-    page?.cleanup();
-    if(doc)await doc.destroy();
-    else await task.destroy();
+    page?.cleanup?.();
+    // LoadingTask.destroy is the stable upstream API; always tear down
+    // the matching worker, including on partial failures.
+    await task.destroy();
   }
 }
