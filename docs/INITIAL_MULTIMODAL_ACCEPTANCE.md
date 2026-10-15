@@ -9,7 +9,7 @@ Priority order: resolve video site compatibility, difficult DOM extraction and r
 | Netflix | Viewer-visible player-timedtext adapter, no protected requests | Authorized-player tests; changing private selectors |
 | Panopto | Viewer-visible caption selectors or imported SRT/VTT | Institutional iframe permissions, official caption API where authorized |
 | Generic HTML5 video | TextTrack, prefetch, seek tests | Continuous timing measurement, stress tests |
-| No subtitles / live audio | Subtitle import available; **automatic ASR not complete** | Consent-based tab capture, whisper.cpp processing, VAD, queue metrics |
+| No subtitles / live audio | Subtitle import and **experimental, user-initiated tab audio → local whisper.cpp CLI → standard translation**; still lacks browser E2E, VAD optimization and validated latency | Consent-based tab capture, whisper.cpp processing, VAD, queue metrics |
 | Image / screenshot | Gemini cloud OCR, local Tesseract bridge + standard translation | Image-region selection, PaddleOCR enhancement, accuracy suite |
 | Scanned PDF | OCRmyPDF + Tesseract, then BabelDOC local bridge | Test on real scanned files, layout QA and model install |
 | Layout-preserved PDF | BabelDOC CLI integration on local Python service | Production packaging, larger-file performance, full language coverage |
