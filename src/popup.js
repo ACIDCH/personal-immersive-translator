@@ -57,3 +57,17 @@ $('settings').onclick=()=>chrome.runtime.openOptionsPage();
 chrome.storage.local.get(SETTINGS_KEY).then(r=>{settings=normalizeSettings(r[SETTINGS_KEY]);show();}).catch(e=>status(e.message));
 
 $('fileTools').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('src/tools.html')});
+
+$('captureImage').onclick=async()=>{
+ if(!confirm('将捕获当前网页可见区域截图，并暂存于浏览器会话中供 OCR 使用。图片不会自动上传；继续？'))return;
+ status('正在截取当前可见画面…');
+ try{
+  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+  if(!tab?.id || !/^https?:\/\//.test(tab.url||''))throw Error('该页面不能截图');
+  const data=await chrome.tabs.captureVisibleTab(tab.windowId,{format:'png'});
+  if(data.length>6_000_000)throw Error('截图超过暂存大小限制，请缩小窗口或使用本地图片');
+  await chrome.storage.session.set({pit_ocr_screenshot:data});
+  await chrome.tabs.create({url:chrome.runtime.getURL('src/tools.html?screenshot=1')});
+  status('已打开截图 OCR 页面');
+ }catch(e){status('截图失败：'+String(e.message||e));}
+};
