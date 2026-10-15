@@ -116,6 +116,21 @@
     state.overlay?.remove();state.overlay=null;
     state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;
   }
+  function embeddedPlayerHint(){
+    for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
+      try{
+        const url=new URL(frame.src,location.href);
+        const host=url.hostname.toLowerCase();
+        if(url.protocol==='https:' &&
+          (host==='youtube.com'||host.endsWith('.youtube.com')||
+           host==='youtube-nocookie.com'||host.endsWith('.youtube-nocookie.com')||
+           host==='panopto.com'||host.includes('.panopto.'))){
+          return '检测到跨域嵌入的视频播放器（'+host+'）。当前页面不能读取其内部字幕；请在拥有访问权限的情况下打开源播放器，或选择授权的语音识别。';
+        }
+      }catch{}
+    }
+    return '';
+  }
   function start(mode, suppliedCues=[]) {
     stop();
     const video=pickVideo();
@@ -124,7 +139,8 @@
       ? platform.readVisibleCaptions(document,location.hostname) : null;
     // Some authorized players paint captions into DOM while their actual
     // video element is inaccessible. Observable CC still works without it.
-    if(!video && !visible?.text) return {ok:false,reason:'没有可访问的视频元素或已显示的字幕。请打开原文字幕，或在支持的播放器中导入字幕文件。'};
+    if(!video && !visible?.text) return {ok:false,
+      reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const imported=Array.isArray(suppliedCues) && suppliedCues.length
       ? suppliedCues.slice(0,5000) : null;
     const validImport=imported?.length
