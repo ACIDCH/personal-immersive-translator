@@ -39,3 +39,15 @@ jobs:
         run: google-chrome --version
       - name: Run real Chrome DOM regression fixtures
         run: python tests/browser_e2e.py
+  pdf-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local bridge test dependencies
+        run: |
+          python -m pip install -r services/requirements.txt httpx
+      - name: Check PDF/OCR local bridge integration without paid API calls
+        run: python -m unittest discover -s tests -p 'test_bridge_runtime.py' -v
