@@ -11,7 +11,7 @@
     "vendor:pdf": "node scripts/vendor-pdfjs.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "license": "MIT",
   "dependencies": {
