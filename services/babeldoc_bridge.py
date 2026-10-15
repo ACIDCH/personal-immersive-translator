@@ -96,7 +96,14 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
-    return {"ready":bool(KEY and shutil.which("babeldoc")),"ocr":bool(shutil.which("ocrmypdf"))}
+    return {
+        "ready":bool(KEY and shutil.which("babeldoc")),
+        "pdf_ocr":bool(shutil.which("ocrmypdf") and shutil.which("tesseract")),
+        "image_ocr":bool(shutil.which("tesseract")),
+        "speech_asr":bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN)),
+        "languages":list(LANGS.keys()),
+        "engine":"local-only"
+    }
 
 
 @app.post("/ocr-image")
