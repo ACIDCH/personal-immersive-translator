@@ -5,7 +5,7 @@
   const core = globalThis.PITCaptionCore;
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -79,12 +79,12 @@
       } finally {state.domPending=false;}
       return;
     }
-    if(!state.track) return;
+    if(!state.track && !state.importedCues) return;
     const generation=state.generation;
     const video=state.video, track=state.track;
     let raw=[];
     try { raw=track.cues ? [...track.cues] : []; } catch {}
-    const cues=core.normalizeCues(raw,video.currentTime);
+    const cues=state.importedCues || core.normalizeCues(raw,video.currentTime);
     if(!cues.length) {
       if(!state.seenAny) render('正在等待原生字幕轨加载；若网站使用自绘字幕或无字幕，则此模块无法抓取。');
       return;
@@ -113,27 +113,30 @@
     clearInterval(state.timer);state.timer=null;
     if(state.track && state.originalMode!==null && state.track.mode==='hidden') state.track.mode=state.originalMode;
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;
   }
-  function start(mode) {
+  function start(mode, suppliedCues=[]) {
     stop();
     const video=pickVideo();
     if(!video) return {ok:false,reason:'当前页面没有可访问的 HTML5 视频元素。嵌入式跨域播放器需另行适配。'};
-    const track=chooseTrack(video);
+    const imported=Array.isArray(suppliedCues) && suppliedCues.length
+      ? core.normalizeCues(suppliedCues.slice(0,5000)) : null;
+    const track=imported?.length ? null : chooseTrack(video);
     const adapter=platform?.identify(location.hostname);
-    if(!track && (!adapter || adapter.id==='generic')) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
+    if(!track && !imported?.length && (!adapter || adapter.id==='generic')) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
     state.originalMode=track?.mode ?? null;
-    state.domMode=!track;
+    state.domMode=!track && !imported?.length;
+    state.importedCues=imported?.length ? imported : null;
     // Hidden activates disabled native tracks without displaying a second set of original subtitles.
     if(track?.mode==='disabled') track.mode='hidden';
     state.overlay=createOverlay();state.cache=new core.CaptionCache(350);
     state.timer=setInterval(()=>{void tick();},450);
     void tick();
-    return {ok:true,reason:state.domMode?'已开启可见字幕观察。请打开播放器原文字幕；适配器可能随网站更新而失效。':'原生字幕翻译已启动。'};
+    return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察。请打开播放器原文字幕；适配器可能随网站更新而失效。':'原生字幕翻译已启动。'};
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
-    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode));
+    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues));
     else if(msg?.type==='PIT_CAPTIONS_STOP'){stop();respond({ok:true});}
   });
 })();
