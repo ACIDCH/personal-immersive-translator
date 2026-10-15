@@ -15,7 +15,9 @@ test('Microsoft request maps strings in correct order and uses region header',as
 });
 test('Google Cloud API escapes source and decodes text entities safely',async()=>{
   const f=mockResponse({data:{translations:[{translatedText:'A &amp; B &lt; C'}]}},(url,init)=>{
-    assert.ok(url.startsWith('https://translation.googleapis.com/'));
+    assert.equal(url,'https://translation.googleapis.com/language/translate/v2');
+    assert.ok(!url.includes('fake'),'API key leaked into request URL');
+    assert.equal(init.headers['x-goog-api-key'],'fake');
     assert.equal(JSON.parse(init.body).format,'text');
   });
   assert.deepEqual(await translateBatch(['A & B < C'],{...config,provider:'google',googleKey:'fake'},f),['A & B < C']);
