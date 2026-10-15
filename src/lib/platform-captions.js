@@ -30,6 +30,21 @@
     }
     return true;
   }
+  function displayedText(node,visible){
+    const doc=node.ownerDocument;
+    if(!doc?.createTreeWalker) return compact(node.textContent);
+    const walker=doc.createTreeWalker(node,4); // NodeFilter.SHOW_TEXT
+    const parts=[];
+    let part;
+    while((part=walker.nextNode())){
+      if(visible(part.parentElement)){
+        const text=compact(part.nodeValue);
+        if(text)parts.push(text);
+      }
+      if(parts.join(' ').length>3000)break;
+    }
+    return compact(parts.join(' '));
+  }
   function readVisibleCaptions(doc,hostname,visible=isVisible){
     const rule=identify(hostname);
     if(rule.id==='generic')return {provider:'generic',text:'',reason:'no-adapter'};
@@ -43,7 +58,7 @@
         // Netflix and Panopto often wrap leaf spans with an ancestor selected
         // by the fallback. Never concatenate parent and child copies.
         if(nodes.some(other=>other!==node && node.contains?.(other) && visible(other)))continue;
-        const text=compact(node.textContent);
+        const text=displayedText(node,visible);
         if(text && lines.at(-1)!==text && !lines.includes(text))lines.push(text);
       }
       if(lines.length)return {provider:rule.id,text:compact(lines.join(' ')),selector};
