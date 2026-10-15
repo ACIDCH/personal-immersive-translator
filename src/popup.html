@@ -1,0 +1,5 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>翻译控制</title><link rel="stylesheet" href="ui.css"></head>
+<body class="popup"><main><header><div class="brand"><img src="../assets/icon48.png" width="28" height="28" alt=""><span>沉浸式翻译 · Personal</span></div><button id="settings" class="textbtn" aria-label="打开设置">⚙ 设置</button></header>
+<section class="panel"><div class="label">选择翻译模式</div><div class="segmented"><button id="standard" class="selected">标准翻译</button><button id="ai">AI 增强</button></div><p class="muted" id="modeHint">常规服务优先，不消耗 Gemini / DeepSeek Token。</p><p id="providerInfo" class="provider">当前翻译服务：读取中…</p></section>
+<section class="controls"><button class="primary" id="translate">翻译当前网页</button><button id="selection">仅翻译选中文本</button><button id="restore">恢复原文</button></section>
+<p class="notice">AI 仅在你主动选择 AI 模式并点击翻译时使用。网站内容会发送至所选翻译服务。</p><div id="status" class="status" role="status" aria-live="polite"></div></main><script type="module" src="popup.js"></script></body></html>
