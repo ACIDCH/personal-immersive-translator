@@ -69,7 +69,7 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
              check=True,timeout=900,cwd=str(dest),stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
     finally:
         config.unlink(missing_ok=True)
-    outputs=[f for f in dest.glob("*.pdf") if f not in {input_file,source} and not f.name.startswith("searchable")]
+    outputs=[f for f in dest.glob("*.pdf") if f not in {input_file,source} and f.is_file()]
     dual=[f for f in outputs if "dual" in f.name.lower() or "bilingual" in f.name.lower()]
     if not dual: raise RuntimeError("BabelDOC 未产生可识别的双语 PDF；请检查 CLI 版本及输出命名")
     return max(dual,key=lambda p:p.stat().st_mtime).read_bytes()

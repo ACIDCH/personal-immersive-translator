@@ -84,8 +84,8 @@
     const generation=state.generation;
     const video=state.video, track=state.track;
     let raw=[];
-    try { raw=track.cues ? [...track.cues] : []; } catch {}
-    const cues=state.importedCues || core.normalizeCues(raw,video.currentTime);
+    try { raw=track?.cues ? [...track.cues] : []; } catch {}
+    const cues=core.normalizeCues(state.importedCues || raw,video.currentTime);
     if(!cues.length) {
       if(!state.seenAny) render('正在等待原生字幕轨加载；若网站使用自绘字幕或无字幕，则此模块无法抓取。');
       return;
@@ -124,14 +124,16 @@
     const video=pickVideo();
     if(!video) return {ok:false,reason:'当前页面没有可访问的 HTML5 视频元素。嵌入式跨域播放器需另行适配。'};
     const imported=Array.isArray(suppliedCues) && suppliedCues.length
-      ? core.normalizeCues(suppliedCues.slice(0,5000)) : null;
-    const track=imported?.length ? null : chooseTrack(video);
+      ? suppliedCues.slice(0,5000) : null;
+    const validImport=imported?.length
+      ? core.normalizeCues(imported,video.currentTime).length>0 : false;
+    const track=validImport ? null : chooseTrack(video);
     const adapter=platform?.identify(location.hostname);
-    if(!track && !imported?.length && (!adapter || adapter.id==='generic')) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
+    if(!track && !validImport && (!adapter || adapter.id==='generic')) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
     state.originalMode=track?.mode ?? null;
-    state.domMode=!track && !imported?.length;
-    state.importedCues=imported?.length ? imported : null;
+    state.domMode=!track && !validImport;
+    state.importedCues=validImport ? imported : null;
     // Hidden activates disabled native tracks without displaying a second set of original subtitles.
     if(track?.mode==='disabled') track.mode='hidden';
     state.overlay=createOverlay();state.cache=new core.CaptionCache(350);
