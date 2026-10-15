@@ -3,8 +3,10 @@ import {translateBatch} from './lib/providers.js';
 import {normalizeSettings,SETTINGS_KEY} from './lib/settings.js';
 const $=id=>document.getElementById(id);
 let previewUrl=null;
+let screenshotFile=null;
 $('image').addEventListener('change',()=>{
  if(previewUrl) URL.revokeObjectURL(previewUrl);
+ screenshotFile=null;
  const file=$('image').files?.[0];
  if(file){previewUrl=URL.createObjectURL(file);$('imagePreview').src=previewUrl;$('imagePreview').hidden=false;}
  else {$('imagePreview').hidden=true;}
@@ -18,7 +20,7 @@ function base64(file){
  });
 }
 $('imageTranslate').addEventListener('click',async()=>{
- const file=$('image').files?.[0],status=$('imageStatus');
+ const file=screenshotFile||$('image').files?.[0],status=$('imageStatus');
  if(!file){status.textContent='请先选择图片';return;}
  if(file.size>4_400_000){status.textContent='图片超过本阶段 4.4MB 限制';return;}
  if(!confirm('确认将所选图片上传到 Gemini 进行 OCR + 翻译？可能产生 API 费用。'))return;
@@ -65,7 +67,7 @@ $('pdfTranslate').addEventListener('click',async()=>{
 
 
 $('localOCR').addEventListener('click',async()=>{
- const file=$('image').files?.[0],status=$('imageStatus'),token=$('token').value;
+ const file=screenshotFile||$('image').files?.[0],status=$('imageStatus'),token=$('token').value;
  if(!file){status.textContent='先选择需要 OCR 的图片';return;}
  if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>8_000_000){status.textContent='只支持不超过 8MB 的 PNG/JPEG/WebP';return;}
  if(token.length<16){status.textContent='先在右侧填写本机服务令牌';return;}
@@ -96,3 +98,17 @@ $('localOCR').addEventListener('click',async()=>{
  }catch(error){status.textContent='本地 OCR 失败：'+String(error.message||error);}
  finally{$('localOCR').disabled=false;}
 });
+
+if(new URLSearchParams(location.search).get('screenshot')==='1'){
+ chrome.storage.session.get('pit_ocr_screenshot').then(async obj=>{
+  await chrome.storage.session.remove('pit_ocr_screenshot');
+  const data=obj.pit_ocr_screenshot;
+  if(!data || !data.startsWith('data:image/png;base64,'))return;
+  const bytes=Uint8Array.from(atob(data.slice(data.indexOf(',')+1)),c=>c.charCodeAt(0));
+  screenshotFile=new File([bytes],'visible-page.png',{type:'image/png'});
+  if(previewUrl)URL.revokeObjectURL(previewUrl);
+  previewUrl=URL.createObjectURL(screenshotFile);
+  $('imagePreview').src=previewUrl;$('imagePreview').hidden=false;
+  $('imageStatus').textContent='已载入当前网页截图。请选择 Gemini 或本机 OCR 开始识别。';
+ }).catch(e=>$('imageStatus').textContent=String(e.message||e));
+}
