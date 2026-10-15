@@ -40,3 +40,18 @@ Inspired by public documentation of KISS Translator, Read Frog, FluentRead and T
 - [ ] Real-browser acceptance and API tests
 - [ ] Dynamic websites, captions and PDF enhancement
 - [ ] Final independent Codex review
+
+
+## 0.2.0 experimental multimodal branch
+
+The initial release scope now includes video captions, multilingual website translation, image OCR, experimental real-time speech captions, and an optional high-fidelity PDF reconstruction service.
+
+- Web translation: existing standard translation providers are the default; Gemini/DeepSeek are explicitly selected.
+- Video captions: TextTrack, visible YouTube/Netflix/Panopto subtitle DOM, and user-supplied SRT/VTT. Live-video selectors and institutional iframe permission are **not guaranteed**.
+- Image OCR: user-selected files or an explicitly captured visible-tab screenshot; Gemini image recognition or local Tesseract OCR, followed by standard translation.
+- PDF OCR/layout preservation: separate local OCRmyPDF + BabelDOC workflow for user-supplied PDF files. The installed browser extension alone **cannot** run BabelDOC; see [setup](docs/PDF_OCR_SETUP.md).
+- Experimental tab audio: opt-in, localhost-only short WAV chunks and whisper.cpp ASR, then translated text via the selected standard translation API; no guarantee of realtime performance or capture of DRM material.
+
+Full functionality requires the separate local bridge, the relevant OCR/ASR models and user-owned API credentials. Preview branch is not a production release. No testing yet establishes that its speed or accuracy exceeds the commercial Immersive Translate extension.
+
+[Initial acceptance matrix](docs/INITIAL_MULTIMODAL_ACCEPTANCE.md) · [Video/live engineering plan](docs/MEDIA_REALTIME.md) · [OCR/PDF local setup](docs/PDF_OCR_SETUP.md).

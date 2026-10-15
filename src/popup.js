@@ -37,9 +37,16 @@ async function subtitleAction(type){
     if(type==='PIT_CAPTIONS_START'){
       await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['src/content.css']});
       await chrome.scripting.executeScript({target:{tabId:tab.id},
-        files:['src/lib/caption-core.js','src/subtitles.js']});
+        files:['src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js']});
     }
-    const res=await chrome.tabs.sendMessage(tab.id,{type,mode});
+    const file=$('captionFile').files?.[0];
+    let cues;
+    if(type==='PIT_CAPTIONS_START' && file){
+      if(file.size>2_000_000)throw new Error('字幕文件超过 2MB');
+      cues=globalThis.PITSubtitleImport.parseSubtitles(await file.text());
+      if(!cues.length)throw new Error('无法从字幕文件解析出有效时间轴');
+    }
+    const res=await chrome.tabs.sendMessage(tab.id,{type,mode,cues});
     if(!res?.ok) throw new Error(res?.reason||'字幕操作失败');
     status(res.reason||(type==='PIT_CAPTIONS_START'?'字幕翻译已启动':'字幕翻译已停止'));
   } catch(e){status('字幕操作失败：'+String(e?.message||e));}
@@ -48,3 +55,42 @@ $('captionsStart').onclick=()=>subtitleAction('PIT_CAPTIONS_START');
 $('captionsStop').onclick=()=>subtitleAction('PIT_CAPTIONS_STOP');
 $('settings').onclick=()=>chrome.runtime.openOptionsPage();
 chrome.storage.local.get(SETTINGS_KEY).then(r=>{settings=normalizeSettings(r[SETTINGS_KEY]);show();}).catch(e=>status(e.message));
+
+$('fileTools').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('src/tools.html')});
+
+$('captureImage').onclick=async()=>{
+ if(!confirm('将捕获当前网页可见区域截图，并暂存于浏览器会话中供 OCR 使用。图片不会自动上传；继续？'))return;
+ status('正在截取当前可见画面…');
+ try{
+  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+  if(!tab?.id || !/^https?:\/\//.test(tab.url||''))throw Error('该页面不能截图');
+  const data=await chrome.tabs.captureVisibleTab(tab.windowId,{format:'png'});
+  if(data.length>6_000_000)throw Error('截图超过暂存大小限制，请缩小窗口或使用本地图片');
+  await chrome.storage.session.set({pit_ocr_screenshot:data});
+  await chrome.tabs.create({url:chrome.runtime.getURL('src/tools.html?screenshot=1')});
+  status('已打开截图 OCR 页面');
+ }catch(e){status('截图失败：'+String(e.message||e));}
+};
+
+async function liveAsr(type) {
+  if(type==='PIT_ASR_START' && !confirm('即将捕获当前活动标签页的声音并送往本机 Whisper 服务进行识别。不会保存录音，也不会自动启用 AI API。确认开始？'))return;
+  const token=$('asrToken').value;
+  if(type==='PIT_ASR_START' && token.length<16){status('请先填写本机 ASR 服务令牌');return;}
+  status(type==='PIT_ASR_START'?'正在启动实时字幕…':'正在停止录音…');
+  try{
+    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+    if(type==='PIT_ASR_START') {
+      if(!tab?.id || !/^https?:\/\//.test(tab.url||''))throw Error('请打开普通视频网页');
+      const allowed=await chrome.permissions.request({origins:['http://127.0.0.1/*']});
+      if(!allowed)throw Error('未授予访问本机识别服务的权限');
+      await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['src/content.css']});
+      await chrome.scripting.executeScript({target:{tabId:tab.id},files:['src/live-captions.js']});
+    }
+    const res=await chrome.runtime.sendMessage({type,tabId:tab?.id,token:type==='PIT_ASR_START'?token:undefined});
+    if(!res?.ok)throw Error(res?.error||'操作失败');
+    status(type==='PIT_ASR_START'?'实时音频捕获已请求启动，请观察页面字幕。':'已停止实时音频捕获。');
+    $('asrToken').value='';
+  }catch(e){status('实时音频操作失败：'+String(e.message||e));}
+}
+$('asrStart').onclick=()=>liveAsr('PIT_ASR_START');
+$('asrStop').onclick=()=>liveAsr('PIT_ASR_STOP');

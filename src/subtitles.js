@@ -3,8 +3,9 @@
   if (globalThis.__PIT_CAPTION_V1__) return;
   globalThis.__PIT_CAPTION_V1__ = true;
   const core = globalThis.PITCaptionCore;
+  const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -51,12 +52,40 @@
     return response.translations;
   }
   async function tick() {
-    if(!state.active || !state.video || !state.track) return;
+    if (!state.active || !state.video) return;
+    if (state.domMode) {
+      if (!platform) return;
+      const info=platform.readVisibleCaptions(document,location.hostname,node=>{
+        const style=getComputedStyle(node);
+        return style.display!=='none' && style.visibility!=='hidden' && node.getClientRects().length>0;
+      });
+      const text=info.text;
+      if(!text){render('');return;}
+      state.latestDomText=text;
+      const key='dom:'+text;
+      if(state.cache.has(key)){render(state.cache.get(key));return;}
+      const budget=state.mode==='ai'?80:1200;
+      if(state.requestCount>=budget){render('本次翻译已达到安全请求上限，请停止后重新开始。');return;}
+      render('正在翻译…');
+      if(state.domPending || Date.now()-state.failedAt<2500) return;
+      state.requestCount++;state.domPending=true;
+      const generation=state.generation;
+      try {
+        const translations=await fetchBatch([text],generation);
+        state.cache.put(key,translations[0]);
+        if(state.active && generation===state.generation && state.latestDomText===text) render(translations[0]);
+      } catch {
+        state.failedAt=Date.now();
+        if(generation===state.generation) render('字幕翻译失败，可暂停重试或检查 API 配额');
+      } finally {state.domPending=false;}
+      return;
+    }
+    if(!state.track && !state.importedCues) return;
     const generation=state.generation;
     const video=state.video, track=state.track;
     let raw=[];
     try { raw=track.cues ? [...track.cues] : []; } catch {}
-    const cues=core.normalizeCues(raw,video.currentTime);
+    const cues=state.importedCues || core.normalizeCues(raw,video.currentTime);
     if(!cues.length) {
       if(!state.seenAny) render('正在等待原生字幕轨加载；若网站使用自绘字幕或无字幕，则此模块无法抓取。');
       return;
@@ -67,7 +96,10 @@
     render(current ? (state.cache.get(current.key) || '正在翻译…') : '');
     if(state.busy || Date.now()-state.failedAt < 3000) return;
     const upcoming=core.upcomingCues(cues,now,video.playbackRate,5);
-    if(!upcoming.length) return;
+    if(!upcoming.length || !upcoming.some(c=>!state.cache.has(c.key))) return;
+    const budget=state.mode==='ai'?80:1200;
+    if(state.requestCount>=budget){render('本次字幕翻译已达到安全请求上限');return;}
+    state.requestCount++;
     state.busy=true;
     try {
       await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation));
@@ -85,25 +117,30 @@
     clearInterval(state.timer);state.timer=null;
     if(state.track && state.originalMode!==null && state.track.mode==='hidden') state.track.mode=state.originalMode;
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;
   }
-  function start(mode) {
+  function start(mode, suppliedCues=[]) {
     stop();
     const video=pickVideo();
     if(!video) return {ok:false,reason:'当前页面没有可访问的 HTML5 视频元素。嵌入式跨域播放器需另行适配。'};
-    const track=chooseTrack(video);
-    if(!track) return {ok:false,reason:'未发现浏览器原生字幕轨。该网站可能没有字幕，或使用了独立的字幕绘制系统。'};
+    const imported=Array.isArray(suppliedCues) && suppliedCues.length
+      ? core.normalizeCues(suppliedCues.slice(0,5000)) : null;
+    const track=imported?.length ? null : chooseTrack(video);
+    const adapter=platform?.identify(location.hostname);
+    if(!track && !imported?.length && (!adapter || adapter.id==='generic')) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
-    state.originalMode=track.mode;
+    state.originalMode=track?.mode ?? null;
+    state.domMode=!track && !imported?.length;
+    state.importedCues=imported?.length ? imported : null;
     // Hidden activates disabled native tracks without displaying a second set of original subtitles.
-    if(track.mode==='disabled') track.mode='hidden';
+    if(track?.mode==='disabled') track.mode='hidden';
     state.overlay=createOverlay();state.cache=new core.CaptionCache(350);
     state.timer=setInterval(()=>{void tick();},450);
     void tick();
-    return {ok:true,reason:'原生字幕翻译已启动；如网站只提供自绘字幕，需要平台专用适配器。'};
+    return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察。请打开播放器原文字幕；适配器可能随网站更新而失效。':'原生字幕翻译已启动。'};
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
-    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode));
+    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues));
     else if(msg?.type==='PIT_CAPTIONS_STOP'){stop();respond({ok:true});}
   });
 })();

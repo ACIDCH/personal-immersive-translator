@@ -14,9 +14,11 @@ jobs:
           node-version: '22'
       - name: Static checks and unit tests
         run: npm run verify
+      - name: Validate Python PDF/OCR bridge syntax
+        run: python -m compileall -q services benchmarks
       - name: Package installable extension
         run: |
-          zip -q -r personal-immersive-translator-alpha.zip manifest.json src assets README.md LICENSE docs
+          zip -q -r personal-immersive-translator-alpha.zip manifest.json src assets README.md LICENSE docs services
           unzip -l personal-immersive-translator-alpha.zip
       - name: Upload validated package
         uses: actions/upload-artifact@v4

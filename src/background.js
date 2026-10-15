@@ -18,9 +18,60 @@ function ensureSource(sender, type) {
   if (sender.id !== chrome.runtime.id) throw new TranslationError('无效的消息来源');
   if (type === 'TRANSLATE_BATCH' && !sender.tab) throw new TranslationError('网页翻译请求必须来自当前网页');
 }
+async function stopLiveAsr() {
+  const session=await chrome.storage.session.get('pit_live_asr_tab');
+  try {if(await chrome.offscreen.hasDocument()){
+    await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_STOP'});
+    await chrome.offscreen.closeDocument();
+  }}catch {}
+  if(session.pit_live_asr_tab) {
+    await chrome.tabs.sendMessage(session.pit_live_asr_tab,{type:'PIT_ASR_VIEW_STOP'}).catch(()=>{});
+  }
+  await chrome.storage.session.remove('pit_live_asr_tab');
+}
+async function startLiveAsr(message){
+  const token=String(message.token||'');
+  if(token.length<16) throw new TranslationError('缺少本机 Whisper 服务令牌');
+  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+  if(!tab?.id || tab.id!==message.tabId || !/^https?:\/\//.test(tab.url||'')) throw new TranslationError('只有当前活动视频标签页才能启动录音');
+  await stopLiveAsr();
+  await chrome.offscreen.createDocument({url:'src/offscreen.html',reasons:['USER_MEDIA'],
+    justification:'用户明确启动的本机实时音频字幕识别'});
+  try{
+    const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
+    const started=await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_START',streamId,tabId:tab.id,token});
+    if(!started?.ok)throw Error(started?.error||'音频捕获失败');
+    await chrome.storage.session.set({pit_live_asr_tab:tab.id});
+    await chrome.tabs.sendMessage(tab.id,{type:'PIT_ASR_VIEW_START'});
+    return {started:true};
+  }catch(error) {
+    await stopLiveAsr();
+    throw new TranslationError('实时语音捕获启动失败：'+String(error.message||error));
+  }
+}
+
 async function handle(message, sender) {
   if (!message || typeof message.type !== 'string') throw new TranslationError('无效的请求');
   ensureSource(sender, message.type);
+  if(message.type==='PIT_ASR_START'){
+    if(sender.tab)throw new TranslationError('只能从插件控制面板启动实时音频');
+    return await startLiveAsr(message);
+  }
+  if(message.type==='PIT_ASR_STOP'){
+    if(sender.tab)throw new TranslationError('只能从插件控制面板停止录音');
+    await stopLiveAsr();return {stopped:true};
+  }
+  if(message.type==='PIT_ASR_RESULT' || message.type==='PIT_ASR_ERROR'){
+    if(sender.url!==chrome.runtime.getURL('src/offscreen.html'))throw new TranslationError('无效的本机 ASR 来源');
+    const session=await chrome.storage.session.get('pit_live_asr_tab');
+    if(!session.pit_live_asr_tab || session.pit_live_asr_tab!==message.tabId)return {ignored:true};
+    const type=message.type==='PIT_ASR_RESULT'?'PIT_ASR_TEXT_VIEW':'PIT_ASR_ERROR_VIEW';
+    const payload={type};
+    if(type==='PIT_ASR_TEXT_VIEW')payload.text=String(message.text||'').slice(0,5000);
+    else payload.message=String(message.message||'').slice(0,300);
+    await chrome.tabs.sendMessage(message.tabId,payload).catch(()=>{});
+    return {forwarded:true};
+  }
   if (message.type === 'GET_SETTINGS') {
     if (sender.tab) throw new TranslationError('网页不允许读取 API 配置');
     return {settings: await getSettings()};
@@ -51,6 +102,11 @@ async function handle(message, sender) {
   const target = settings.target;
   const model = isAI ? (provider === 'gemini' ? settings.geminiModel : settings.deepseekModel) : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
+  if(message.transient===true) {
+    if(message.mode!=='standard' || !sender.tab) throw new TranslationError('临时字幕只允许网页内标准翻译');
+    const translations=await translateBatch(texts,{...settings,provider,source,target,context});
+    return {translations,provider,cached:false,transient:true};
+  }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
@@ -65,7 +121,20 @@ async function handle(message, sender) {
   return {translations:values,provider,cached:missing.length===0};
 }
 chrome.runtime.onMessage.addListener((message,sender,sendResponse) => {
+  if(message?.target==='offscreen')return false;
   handle(message,sender).then(result=>sendResponse({ok:true,...result}))
     .catch(error=>sendResponse({ok:false,error: error instanceof TranslationError ? error.message : '内部错误，请检查扩展日志'}));
   return true;
+});
+
+chrome.tabs.onRemoved.addListener(async(tabId)=>{
+ const session=await chrome.storage.session.get('pit_live_asr_tab');
+ if(session.pit_live_asr_tab===tabId)await stopLiveAsr();
+});
+chrome.tabs.onUpdated.addListener((tabId,changeInfo)=>{
+ if(changeInfo.status==='loading') {
+   chrome.storage.session.get('pit_live_asr_tab').then(session=>{
+     if(session.pit_live_asr_tab===tabId)return stopLiveAsr();
+   }).catch(()=>{});
+ }
 });
