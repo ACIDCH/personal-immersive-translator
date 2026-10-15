@@ -27,3 +27,21 @@ whisper.cpp: MIT. Tesseract.js and PaddleOCR: Apache-2.0. PDF.js: Apache-2.0. Ba
 ## Status
 
 A user-facing initial module does not mean the feature has passed real Chrome/Edge tests, model accuracy testing or cross-platform acceptance. Draft branches are not stable releases. Codex is reserved for independent final review.
+
+
+## 2026-10-16 hardening milestone
+
+### Verified automatically (not commercial API integration)
+
+- Real Manifest V3 extension loads in an isolated Playwright Chromium profile. Popup, options persistence, image/PDF tools are opened with real extension APIs.
+- Browser DOM and subtitle fixtures pass in real Chrome with mocked translation API.
+- Captured tab audio is explicitly resampled to 16 kHz regardless of hardware input rate. The Python bridge rejects mislabeled/invalid PCM WAV headers and tests a mocked Whisper CLI execution.
+- Mixed native/scanned PDF pages trigger OCR preprocessing. Temporary BabelDOC credentials are created using mode 0600 from creation, and output is validated as a parseable PDF.
+- Real Tesseract English OCR CI smoke remains active. CI does not download a speech model, invoke paid translation services or bypass protected video sources.
+
+### Still blocking a stable release
+
+- Full real whisper.cpp multilingual model run of continuous video, stop/seek/offline handling and measured p50/p95 delay.
+- Authorized YouTube, Netflix and Panopto player test fixtures, cross-origin iframe restrictions and evolving subtitle DOM.
+- Actual BabelDOC CLI run on complex documents with user-owned translation credentials. BabelDOC supports the configuration and file options but its upstream CLI is primarily a debugging interface. AGPL license compliance remains mandatory.
+- Independent quantitative performance and translation accuracy comparison against Immersive Translate. No superiority claim until validated.
