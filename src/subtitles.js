@@ -74,9 +74,13 @@
           if(state.latestDomText===text) render(translations[0]);
         }
       } catch {
-        state.failedAt=Date.now();
-        if(generation===state.generation) render('字幕翻译失败，可暂停重试或检查 API 配额');
-      } finally {state.domPending=false;}
+        if(generation===state.generation){
+          state.failedAt=Date.now();
+          render('字幕翻译失败，可暂停重试或检查 API 配额');
+        }
+      } finally {
+        if(generation===state.generation)state.domPending=false;
+      }
       return;
     }
     if(!state.video || (!state.track && !state.importedCues)) return;
