@@ -1,6 +1,6 @@
 /* Experimental opt-in tab audio capture. Never uploads audio beyond user's local
    loopback Whisper bridge. No persistent audio/video recording. */
-import {encodeMonoPcm16,averageEnergy} from './lib/wav.js';
+import {encodeMonoPcm16,averageEnergy,resampleChunks,ASR_SAMPLE_RATE} from './lib/wav.js';
 let current=null;
 async function stop() {
  const old=current;current=null;
@@ -18,7 +18,7 @@ async function flush(c) {
  if(!buffers.length || averageEnergy(buffers)<0.008)return;
  c.busy=true;
  try {
-  const wav=encodeMonoPcm16(buffers,c.context.sampleRate);
+  const wav=encodeMonoPcm16(resampleChunks(buffers,c.context.sampleRate,ASR_SAMPLE_RATE),ASR_SAMPLE_RATE);
   const body=new FormData();body.append('audio',wav,'chunk.wav');
   const response=await fetch('http://127.0.0.1:8765/asr',{
     method:'POST',headers:{'X-PIT-Token':c.token},body,

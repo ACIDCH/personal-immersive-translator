@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import json
+import struct
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.responses import Response
@@ -34,9 +35,11 @@ def scanned_pdf(path):
         import fitz
         with fitz.open(path) as doc:
             if doc.page_count > 300: raise ValueError("超过 300 页上限")
-            scan=min(3,doc.page_count)
-            if not scan: raise ValueError("PDF 没有任何页面")
-            return sum(len(doc[i].get_text().strip()) for i in range(scan)) < scan*30
+            if doc.page_count < 1: raise ValueError("PDF 没有任何页面")
+            # OCRmyPDF --skip-text safely leaves searchable pages untouched.
+            # Check every page: a three-page prefix misses mixed text/scanned
+            # appendices later in a paper or thesis.
+            return any(len(doc[i].get_text().strip()) < 30 for i in range(doc.page_count))
     except (ImportError,ValueError):
         raise
     except Exception as exc:
@@ -60,10 +63,12 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
         "openai-base-url":"https://api.deepseek.com/v1",
         "openai-api-key":KEY,"lang-in":source_lang,"lang-out":target_lang,
         "output":str(dest),"no-mono":True,"qps":2}
-    with config.open("x",encoding="utf8") as f:
+    # The config contains a user-owned API key. Create it as private from
+    # the first byte: chmod AFTER writing briefly exposes a mode-0644 file.
+    fd=os.open(config,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    with os.fdopen(fd,"w",encoding="utf8") as f:
         f.write("[babeldoc]\n")
         for field,value in settings.items():f.write(field+" = "+json.dumps(value,ensure_ascii=False)+"\n")
-    config.chmod(0o600)
     try:
         subprocess.run(["babeldoc","--config",str(config),"--files",str(input_file)],
              check=True,timeout=900,cwd=str(dest),stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
@@ -72,7 +77,19 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
     outputs=[f for f in dest.glob("*.pdf") if f not in {input_file,source} and f.is_file()]
     dual=[f for f in outputs if "dual" in f.name.lower() or "bilingual" in f.name.lower()]
     if not dual: raise RuntimeError("BabelDOC 未产生可识别的双语 PDF；请检查 CLI 版本及输出命名")
-    return max(dual,key=lambda p:p.stat().st_mtime).read_bytes()
+    winner=max(dual,key=lambda p:p.stat().st_mtime)
+    if winner.stat().st_size > 100*1024*1024:
+        raise RuntimeError("BabelDOC 输出超过 100MB 上限")
+    try:
+        import fitz
+        with fitz.open(winner) as translated:
+            if translated.page_count < 1:
+                raise RuntimeError("译文 PDF 不包含有效页面")
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("BabelDOC 输出并非有效 PDF") from exc
+    return winner.read_bytes()
 
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
@@ -101,6 +118,23 @@ async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
     return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
 
 
+def validate_asr_wav(data: bytes):
+    """Accept the exact mono PCM16, 16kHz WAV format emitted by the extension."""
+    if len(data) < 46 or len(data) > 44 + 16_000 * 2 * 12:
+        raise ValueError("PCM WAV 时长无效")
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE" or data[12:16] != b"fmt ":
+        raise ValueError("不支持该音频封装")
+    if struct.unpack_from("<I",data,4)[0] != len(data)-8:
+        raise ValueError("WAV 文件长度不一致")
+    if struct.unpack_from("<I",data,16)[0] != 16 or data[36:40] != b"data":
+        raise ValueError("只支持标准 44 字节 PCM WAV")
+    codec,channels,rate,byte_rate,align,bits=struct.unpack_from("<HHIIHH",data,20)
+    if (codec,channels,rate,byte_rate,align,bits)!=(1,1,16000,32000,2,16):
+        raise ValueError("Whisper 仅接受 16 kHz / 16-bit / 单声道 PCM")
+    if struct.unpack_from("<I",data,40)[0] != len(data)-44:
+        raise ValueError("PCM 数据区大小无效")
+    return (len(data)-44)//2
+
 ASR_MODEL=os.environ.get("PIT_WHISPER_MODEL","")
 ASR_BIN=os.environ.get("PIT_WHISPER_BIN","whisper-cli")
 asr_lock=asyncio.Lock()
@@ -110,8 +144,10 @@ async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Hea
     if not ASR_MODEL or not pathlib.Path(ASR_MODEL).is_file() or not shutil.which(ASR_BIN):
         raise HTTPException(status_code=503,detail="尚未配置本地 Whisper 模型或 whisper-cli")
     data=await audio.read(2_000_001)
-    if len(data)>2_000_000 or len(data)<44 or not data.startswith(b"RIFF") or data[8:12]!=b"WAVE":
-        raise HTTPException(status_code=400,detail="仅支持不超过 2MB 的 PCM WAV")
+    try:
+        validate_asr_wav(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
     if asr_lock.locked():
         raise HTTPException(status_code=429,detail="语音模型繁忙；当前音频片段已跳过")
     async with asr_lock:

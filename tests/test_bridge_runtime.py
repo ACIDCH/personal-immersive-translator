@@ -28,6 +28,18 @@ def pdf(text="A PDF containing sufficient searchable academic text about economi
     return result
 
 
+def wav_pcm16(rate=16000, frames=16000):
+    import wave
+    import io
+    stream=io.BytesIO()
+    with wave.open(stream,"wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(rate)
+        audio.writeframes(b"\x00\x00"*frames)
+    return stream.getvalue()
+
+
 class BridgeContractTests(unittest.TestCase):
     def setUp(self):
         self.client=TestClient(bridge.app)
@@ -56,6 +68,8 @@ class BridgeContractTests(unittest.TestCase):
             assert options["lang-in"]=="en"
             assert options["lang-out"]=="zh"
             assert options["openai-api-key"]=="fake-test-key-never-use"
+            import stat
+            assert stat.S_IMODE(os.stat(args[args.index("--config")+1]).st_mode)==0o600
             (Path(options["output"])/"original.dual.pdf").write_bytes(pdf("Translated output."))
             return subprocess.CompletedProcess(args,0)
         with patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"),patch.object(bridge.subprocess,"run",side_effect=fake_run):
@@ -64,6 +78,29 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(calls,["babeldoc"])
         self.assertTrue(resp.content.startswith(b"%PDF-"))
         self.assertEqual(resp.headers["cache-control"],"no-store")
+
+    def test_mixed_document_detects_late_scanned_appendix(self):
+        import tempfile
+        document=fitz.open()
+        first=document.new_page()
+        first.insert_text((50,75),"A sufficiently long academic introduction containing searchable text.")
+        document.new_page()  # Represents a scanned/blank appendix for detection.
+        with tempfile.TemporaryDirectory() as d:
+            sample=Path(d)/"mixed.pdf"
+            sample.write_bytes(document.tobytes())
+            self.assertTrue(bridge.scanned_pdf(sample))
+        document.close()
+
+    def test_reject_invalid_babeldoc_pdf_output(self):
+        def fake_run(args,**kwargs):
+            with open(args[args.index("--config")+1],"rb") as handle:
+                options=tomllib.load(handle)["babeldoc"]
+            (Path(options["output"])/"original.dual.pdf").write_bytes(b"fake pdf")
+            return subprocess.CompletedProcess(args,0)
+        with patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"), \
+             patch.object(bridge.subprocess,"run",side_effect=fake_run):
+            response=self.submit(pdf(),ocr=False)
+        self.assertEqual(response.status_code,422)
 
     def test_scanned_pdf_requires_ocr_permission_and_retains_bilingual_file(self):
         scanned=pdf("")
@@ -102,6 +139,42 @@ class BridgeContractTests(unittest.TestCase):
             data={"source":"en"})
         self.assertEqual(response.status_code,200,response.text[:300])
         self.assertIn("HELLO WORLD",response.json()["original_text"].upper())
+
+
+    def test_wav_validator_requires_actual_16khz_mono_pcm(self):
+        good=wav_pcm16()
+        self.assertEqual(bridge.validate_asr_wav(good),16000)
+        with self.assertRaises(ValueError):
+            bridge.validate_asr_wav(wav_pcm16(rate=48000))
+        with self.assertRaises(ValueError):
+            bridge.validate_asr_wav(good[:-1])
+        with self.assertRaises(ValueError):
+            bridge.validate_asr_wav(b"RIFFWAVEfake")
+
+    def test_asr_http_contract_rejects_wrong_rate_before_inference(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model=Path(d)/"model.bin"
+            model.write_bytes(b"fake-model-fixture")
+            with patch.object(bridge,"ASR_MODEL",str(model)), \
+                 patch.object(bridge,"ASR_BIN","whisper-cli"), \
+                 patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"):
+                bad=self.client.post("/asr",headers=self.headers,
+                    files={"audio":("segment.wav",wav_pcm16(rate=48000),"audio/wav")})
+                self.assertEqual(bad.status_code,400)
+                calls=[]
+                def fake_whisper(args,**kwargs):
+                    calls.append(args)
+                    self.assertEqual(args[0],"whisper-cli")
+                    out=Path(args[args.index("-of")+1]+".txt")
+                    out.write_text("recognized English speech",encoding="utf8")
+                    return subprocess.CompletedProcess(args,0)
+                with patch.object(bridge.subprocess,"run",side_effect=fake_whisper):
+                    ok=self.client.post("/asr",headers=self.headers,
+                        files={"audio":("segment.wav",wav_pcm16(),"audio/wav")})
+                self.assertEqual(ok.status_code,200,ok.text[:200])
+                self.assertEqual(ok.json()["text"],"recognized English speech")
+                self.assertEqual(len(calls),1)
 
 
 if __name__=="__main__":
