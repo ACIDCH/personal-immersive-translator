@@ -53,11 +53,29 @@
   }
   async function tick() {
     if (!state.active) return;
+    // Prefer actual timed cues when available. Some sites advertise a native
+    // TextTrack but never populate it, while rendering visible CC in the DOM.
+    // Switch to the user's already-visible CC without reading private player
+    // requests. Recover automatically if native cues load later.
+    if(state.track && !state.importedCues && platform){
+      let raw=[];
+      try { raw=state.track.cues ? [...state.track.cues] : []; } catch {}
+      const timed=core.normalizeCues(raw,state.video?.currentTime);
+      const time=state.video?.currentTime ?? 0;
+      const canUseTimed=Boolean(core.currentCue(timed,time) ||
+        core.upcomingCues(timed,time,state.video?.playbackRate,5).length);
+      const visible=platform.readVisibleCaptions(document,location.hostname).text;
+      if(!canUseTimed && visible)state.domMode=true;
+      else if(canUseTimed && state.domMode){
+        state.domMode=false;state.latestDomText='';
+        render('');
+      }
+    }
     if (state.domMode) {
       if (!platform) return;
       const info=platform.readVisibleCaptions(document,location.hostname);
       const text=info.text;
-      if(!text){render('');return;}
+      if(!text){state.latestDomText='';render('');return;}
       state.latestDomText=text;
       const key='dom:'+text;
       if(state.cache.has(key)){render(state.cache.get(key));return;}
