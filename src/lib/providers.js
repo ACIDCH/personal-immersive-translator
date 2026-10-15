@@ -92,11 +92,12 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
     }
     case 'google': {
       const key = required(opts.googleKey, 'Google Cloud Translation API Key');
-      const url = new URL('https://translation.googleapis.com/language/translate/v2');
-      url.searchParams.set('key', key);
+      // Google Cloud explicitly supports x-goog-api-key on Translation v2.
+      // Never place credentials into URLs, which can leak via request logs.
+      const url = 'https://translation.googleapis.com/language/translate/v2';
       const body = {q: texts, target, format: 'text'};
       if (source !== 'auto') body.source = source;
-      result = await postJson(fetchFn, url.toString(), body);
+      result = await postJson(fetchFn, url, body, {'x-goog-api-key':key});
       return toPlainStringArray(result?.data?.translations?.map(x => decodeEntities(x.translatedText)), texts.length);
     }
     case 'deepl': {

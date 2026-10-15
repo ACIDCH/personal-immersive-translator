@@ -12,8 +12,8 @@
   let active = false, currentId = 0, mode = 'standard';
   let observer = null, observedRoots = new Set();
   let busy = false, queued = false, timer = null;
-  let aiCount = 0;
-  const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70;
+  let aiCount = 0, standardSpent = 0, standardBudget = 600;
+  const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70, STANDARD_STEP = 600;
 
   function roots() {
     const found=[document],pending=[document],seen=new Set(found);
@@ -133,7 +133,8 @@
     if(busy){queued=true;return;}
     busy=true;
     try{
-      const limit=mode==='ai' ? Math.max(0,AI_MAX_PER_ACTION-aiCount) : STANDARD_BATCH;
+      const limit=mode==='ai' ? Math.max(0,AI_MAX_PER_ACTION-aiCount)
+        : Math.min(STANDARD_BATCH,Math.max(0,standardBudget-standardSpent));
       const targets=candidates().slice(0,limit);
       if(!targets.length)return;
       let count=0;
@@ -148,12 +149,16 @@
           if(attach(chunk[j].el,chunk[j].original,translations[j],mode==='ai'))count++;
         }
         if(mode==='ai')aiCount+=chunk.length;
+        else standardSpent+=chunk.length;
       }
       if(count)toast('已翻译 '+count+' 个新段落 · '+(mode==='ai'?'AI':'标准')+'模式');
       // A long article can exceed the first 70/250 nodes. Process further
       // only in standard mode; AI never expands its budget automatically.
-      if(mode==='standard' && targets.length===STANDARD_BATCH && active){
+      if(mode==='standard' && targets.length===STANDARD_BATCH && active && standardSpent<standardBudget){
         queued=true;
+      }
+      if(mode==='standard' && standardSpent>=standardBudget){
+        toast('已到本次自动翻译的 '+standardBudget+' 段请求上限；如仍有未翻译内容，请在插件中点击「继续翻译」。');
       }
     }catch(error){
       if(id===currentId)toast('翻译失败：'+String(error?.message||error));
@@ -172,7 +177,7 @@
       root.querySelectorAll('.pit-translation').forEach(node=>node.remove());
     }
     document.querySelectorAll('.pit-toast').forEach(node=>node.remove());
-    processed=new WeakMap();aiCount=0;
+    processed=new WeakMap();aiCount=0;standardSpent=0;standardBudget=STANDARD_STEP;
   }
   function start(requestedMode) {
     restore();mode=requestedMode;active=true;
@@ -198,6 +203,12 @@
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
     if(message?.type==='PIT_START' && ['standard','ai'].includes(message.mode)){
       start(message.mode);reply({ok:true});
+    }else if(message?.type==='PIT_CONTINUE' && active && mode==='standard'){
+      standardBudget+=STANDARD_STEP;
+      schedule(currentId,0);
+      reply({ok:true});
+    }else if(message?.type==='PIT_CONTINUE'){
+      reply({ok:false,reason:'请先开启标准网页翻译，才能继续翻译后续段落。'});
     }else if(message?.type==='PIT_RESTORE'){
       restore();reply({ok:true});
     }else if(message?.type==='PIT_SELECTION' && ['standard','ai'].includes(message.mode)){

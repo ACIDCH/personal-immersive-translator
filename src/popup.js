@@ -10,7 +10,7 @@ function show() {
 }
 function status(msg) {$('status').textContent=msg;}
 async function send(type) {
-  if (mode==='ai' && type!=='PIT_RESTORE' && !confirm('即将调用 AI API，可能产生费用。是否确认本次翻译？（单次全文最多处理 30 段）')) return;
+  if (mode==='ai' && !['PIT_RESTORE','PIT_CONTINUE'].includes(type) && !confirm('即将调用 AI API，可能产生费用。是否确认本次翻译？（单次全文最多处理 30 段）')) return;
   status('处理中…');
   try {
     const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
@@ -18,13 +18,14 @@ async function send(type) {
     await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['src/content.css']});
     await chrome.scripting.executeScript({target:{tabId:tab.id},files:['src/content.js']});
     const res=await chrome.tabs.sendMessage(tab.id,{type,mode});
-    if (!res?.ok) throw new Error('发送翻译操作失败');
+    if (!res?.ok) throw new Error(res?.reason||'发送翻译操作失败');
     status('请求已发送，请在网页查看结果。');
   } catch(e) {status('操作失败：'+(e?.message||String(e)));}
 }
 $('standard').onclick=()=>{mode='standard';show();};
 $('ai').onclick=()=>{mode='ai';show();};
 $('translate').onclick=()=>send('PIT_START');
+$('continue').onclick=()=>send('PIT_CONTINUE');
 $('selection').onclick=()=>send('PIT_SELECTION');
 $('restore').onclick=()=>send('PIT_RESTORE');
 async function subtitleAction(type){

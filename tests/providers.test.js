@@ -15,7 +15,9 @@ test('Microsoft request maps strings in correct order and uses region header',as
 });
 test('Google Cloud API escapes source and decodes text entities safely',async()=>{
   const f=mockResponse({data:{translations:[{translatedText:'A &amp; B &lt; C'}]}},(url,init)=>{
-    assert.ok(url.startsWith('https://translation.googleapis.com/'));
+    assert.equal(url,'https://translation.googleapis.com/language/translate/v2');
+    assert.ok(!url.includes('fake'),'API key leaked into request URL');
+    assert.equal(init.headers['x-goog-api-key'],'fake');
     assert.equal(JSON.parse(init.body).format,'text');
   });
   assert.deepEqual(await translateBatch(['A & B < C'],{...config,provider:'google',googleKey:'fake'},f),['A & B < C']);
@@ -69,3 +71,12 @@ test('sanitize settings and block nested sensitive hosts',()=>{
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
 });
 test('numeric entity translation is decoded',()=>assert.equal(decodeEntities('&#65; &#x4E2D;'),'A 中'));
+
+test('Corrupted settings reset safely without enabling AI',()=>{
+  for(const input of [null,42,'broken',[]]){
+    const settings=normalizeSettings(input);
+    assert.equal(settings.autoAI,false);
+    assert.equal(settings.standardProvider,'microsoft');
+    assert.equal(settings.target,'zh');
+  }
+});

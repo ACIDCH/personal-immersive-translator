@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.1 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.2 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -64,3 +64,13 @@ Codex is reserved for final independent review; no unapproved merge to main.
 ## Stability update v0.3.1
 
 Long-article continuation beyond 250 paragraphs; SPA and open Shadow DOM source mutation refresh; no recursive bilingual feedback in lists/tables; correct unsupported-video SRT import messaging; stale video subtitle session isolation; local engine readiness diagnostics; WebP/JPEG/PNG normalization with EXIF orientation and pixel limits; serialized BabelDOC jobs. Tested through real Chromium fixtures and offline FastAPI/real Tesseract OCR. See [hardening acceptance](docs/CORE_HARDENING_ACCEPTANCE_zh-CN.md). The release remains a **development build**, not a final stable product.
+
+## Stability update v0.3.2
+
+- Google Cloud Translation credentials are transmitted via official `x-goog-api-key` header, never URL parameters.
+- Device-only translation cache has 300-entry limit, 30-day TTL and legacy data pruning; cache failures no longer suppress already-successful translation responses.
+- Standard webpage translation caps automatic requests at 600 paragraphs per activation and offers a user-initiated Continue button for the next 600. AI remains opt-in.
+- Invalid settings recover safely to defaults without activating AI.
+- Reproducible tests and evidence: [provider privacy and cache acceptance](docs/PROVIDER_PRIVACY_CACHE_ACCEPTANCE_zh-CN.md).
+
+This is **not** a guaranteed money-spending limit and does not imply real authenticated video services or real PDF/ASR model acceptance.

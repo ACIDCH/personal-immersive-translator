@@ -25,6 +25,9 @@ export const AI_PROVIDERS = ['gemini', 'deepseek'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
 export function normalizeSettings(value = {}) {
+  // Storage can contain null or malformed preferences after an interrupted
+  // browser upgrade. Never let one bad settings object disable translation.
+  if(!value || typeof value!=='object' || Array.isArray(value))value={};
   const clean = {...DEFAULT_SETTINGS};
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
     if (Object.hasOwn(value, key)) clean[key] = value[key];
