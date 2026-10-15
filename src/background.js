@@ -120,14 +120,18 @@ async function handle(message, sender) {
     return {translations,provider,cached:false,transient:true};
   }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
-  const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p)));
+  // Local cache is an optimization, never a prerequisite for translating.
+  // Storage quota exhaustion should not discard a successful provider result.
+  const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
   if (missing.length) {
     const newly = await translateBatch(missing.map(x=>x.text), {...settings, provider, source,target,context});
     for (let j=0;j<newly.length;j++) {
       const i=missing[j].index;
       values[i]=newly[j];
-      await saveTranslation(chrome.storage.local,payloads[i],newly[j]);
+      await saveTranslation(chrome.storage.local,payloads[i],newly[j]).catch(()=>{
+        console.warn('PIT translation cache unavailable; returning provider result without caching');
+      });
     }
   }
   return {translations:values,provider,cached:missing.length===0};
