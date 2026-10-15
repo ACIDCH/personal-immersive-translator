@@ -27,5 +27,24 @@ $('ai').onclick=()=>{mode='ai';show();};
 $('translate').onclick=()=>send('PIT_START');
 $('selection').onclick=()=>send('PIT_SELECTION');
 $('restore').onclick=()=>send('PIT_RESTORE');
+async function subtitleAction(type){
+  if (type==='PIT_CAPTIONS_START' && mode==='ai' &&
+      !confirm('即将持续为当前视频字幕请求 Gemini / DeepSeek，可能产生费用。确认开启，结束后请点击停止。')) return;
+  status('正在检测当前页面播放器和字幕轨…');
+  try {
+    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+    if(!tab?.id || !/^https?:\/\//.test(tab.url||'')) throw new Error('请在普通视频网站页面使用');
+    if(type==='PIT_CAPTIONS_START'){
+      await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['src/content.css']});
+      await chrome.scripting.executeScript({target:{tabId:tab.id},
+        files:['src/lib/caption-core.js','src/subtitles.js']});
+    }
+    const res=await chrome.tabs.sendMessage(tab.id,{type,mode});
+    if(!res?.ok) throw new Error(res?.reason||'字幕操作失败');
+    status(res.reason||(type==='PIT_CAPTIONS_START'?'字幕翻译已启动':'字幕翻译已停止'));
+  } catch(e){status('字幕操作失败：'+String(e?.message||e));}
+}
+$('captionsStart').onclick=()=>subtitleAction('PIT_CAPTIONS_START');
+$('captionsStop').onclick=()=>subtitleAction('PIT_CAPTIONS_STOP');
 $('settings').onclick=()=>chrome.runtime.openOptionsPage();
 chrome.storage.local.get(SETTINGS_KEY).then(r=>{settings=normalizeSettings(r[SETTINGS_KEY]);show();}).catch(e=>status(e.message));
