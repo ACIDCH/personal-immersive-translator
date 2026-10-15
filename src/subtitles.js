@@ -56,7 +56,7 @@
     const video=state.video, track=state.track;
     let raw=[];
     try { raw=track.cues ? [...track.cues] : []; } catch {}
-    const cues=core.normalizeCues(raw);
+    const cues=core.normalizeCues(raw,video.currentTime);
     if(!cues.length) {
       if(!state.seenAny) render('正在等待原生字幕轨加载；若网站使用自绘字幕或无字幕，则此模块无法抓取。');
       return;
