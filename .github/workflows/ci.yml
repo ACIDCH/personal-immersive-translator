@@ -30,11 +30,20 @@ jobs:
         run: |
           zip -q -r personal-immersive-translator-alpha.zip manifest.json BUILD_MANIFEST.json src assets README.md LICENSE docs services
           unzip -l personal-immersive-translator-alpha.zip
+      - name: Create full-source snapshot (including tests and pinned dependency lock)
+        run: |
+          zip -q -r personal-immersive-translator-full-source.zip manifest.json BUILD_MANIFEST.json src assets README.md LICENSE docs services tests scripts benchmarks .github .gitignore package.json package-lock.json
       - name: Upload validated package
         uses: actions/upload-artifact@v4
         with:
           name: personal-immersive-translator-alpha
           path: personal-immersive-translator-alpha.zip
+          retention-days: 14
+      - name: Upload complete source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-immersive-translator-source
+          path: personal-immersive-translator-full-source.zip
           retention-days: 14
   browser-dom:
     runs-on: ubuntu-latest
