@@ -48,6 +48,7 @@ async def main():
                 options=await context.new_page()
                 options.on("pageerror",lambda e: errors.append("options: "+str(e)))
                 await options.goto(f"chrome-extension://{extension_id}/src/options.html")
+                await options.locator('form[data-ready="1"]').wait_for(timeout=10000)
                 await options.locator('[name="target"]').wait_for(timeout=10000)
                 await options.locator('[name="target"]').select_option("fr")
                 await options.locator('[name="standardProvider"]').select_option("deepl")
