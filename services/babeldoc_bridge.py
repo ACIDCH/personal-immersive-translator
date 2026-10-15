@@ -21,6 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 TOKEN=os.environ.get("PIT_BRIDGE_TOKEN","")
 KEY=os.environ.get("DEEPSEEK_API_KEY","")
 MAX_BYTES=25*1024*1024
+# Never launch two memory-heavy layout/OCR translation jobs simultaneously.
+pdf_lock=asyncio.Lock()
 LANGS={"zh":"chi_sim","en":"eng","fr":"fra","ja":"jpn","ko":"kor","de":"deu","es":"spa"}
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
 app.add_middleware(CORSMiddleware,
@@ -176,15 +178,18 @@ async def translate(pdf: UploadFile=File(...), source: str=Form("en"),
     if pdf.content_type not in ("application/pdf","application/octet-stream"):raise HTTPException(status_code=415)
     data=await pdf.read(MAX_BYTES+1)
     if len(data)>MAX_BYTES or not data.startswith(b"%PDF-"):raise HTTPException(status_code=400,detail="PDF 文件格式错误或超出 25MB")
-    with tempfile.TemporaryDirectory(prefix="pit-pdf-") as d:
-        work=pathlib.Path(d)
-        source_file=work/"original.pdf"
-        source_file.write_bytes(data)
-        try:
-            result=await asyncio.to_thread(run_pipeline,source_file,work,source,target,ocr)
-        except (ValueError,RuntimeError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:
-            # Never return subprocess stderr or credentials to the client.
-            raise HTTPException(status_code=422,detail="PDF 处理失败：请检查 OCR、BabelDOC 安装、语言模型和服务端日志") from e
+    if pdf_lock.locked():
+        raise HTTPException(status_code=429,detail="已有 PDF 正在翻译，请待其完成后再试")
+    async with pdf_lock:
+        with tempfile.TemporaryDirectory(prefix="pit-pdf-") as d:
+            work=pathlib.Path(d)
+            source_file=work/"original.pdf"
+            source_file.write_bytes(data)
+            try:
+                result=await asyncio.to_thread(run_pipeline,source_file,work,source,target,ocr)
+            except (ValueError,RuntimeError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:
+                # Never return subprocess stderr or credentials to the client.
+                raise HTTPException(status_code=422,detail="PDF 处理失败：请检查 OCR、BabelDOC 安装、语言模型和服务端日志") from e
     return Response(result,media_type="application/pdf",
         headers={"Content-Disposition":'attachment; filename="translated-bilingual.pdf"',
                  "Cache-Control":"no-store"})
