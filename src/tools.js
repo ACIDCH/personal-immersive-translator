@@ -125,3 +125,28 @@ $('pdf').addEventListener('change',async()=>{
     status.textContent=result.needsOCR?'首页可能为扫描页，建议启用 OCR':'首页可读取文字；若包含扫描附件仍建议选择 OCR';
   }catch(error){status.textContent='预览失败：'+String(error.message||error);}
 });
+
+
+$('checkLocalEngines').addEventListener('click',async()=>{
+  const token=$('token').value,status=$('localEnginesStatus');
+  if(token.length<16){status.textContent='请先输入本机服务令牌';return;}
+  status.textContent='正在检测本机服务…';
+  try{
+    const permission=await chrome.permissions.request({origins:['http://127.0.0.1/*']});
+    if(!permission)throw Error('未授权访问本机服务');
+    const response=await fetch('http://127.0.0.1:8765/health',{
+      headers:{'X-PIT-Token':token},signal:AbortSignal.timeout(6000)
+    });
+    if(!response.ok)throw Error('服务返回 HTTP '+response.status);
+    const capabilities=await response.json();
+    const value=key=>capabilities[key]?'已就绪':'未就绪';
+    status.textContent='BabelDOC 翻译：'+value('ready')+
+      '；扫描 PDF OCR：'+value('pdf_ocr')+
+      '；图片 Tesseract：'+value('image_ocr')+
+      '；本机 Whisper：'+value('speech_asr')+
+      '。未就绪的模块需要依照安装文档补齐依赖和模型。';
+  }catch(error){
+    status.textContent='无法检测本机引擎：'+String(error.message||error)+
+      '。请确认服务已启动于 127.0.0.1:8765，并检查令牌和依赖。';
+  }
+});
