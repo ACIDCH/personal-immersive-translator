@@ -1,0 +1,46 @@
+export const SETTINGS_KEY = 'pit_settings_v1';
+export const DEFAULT_SETTINGS = Object.freeze({
+  target: 'zh',
+  source: 'auto',
+  standardProvider: 'microsoft',
+  aiProvider: 'gemini',
+  autoAI: false,
+  contextAI: true,
+  microsoftKey: '',
+  microsoftRegion: '',
+  googleKey: '',
+  deeplKey: '',
+  deeplPlan: 'free',
+  libreUrl: '',
+  libreKey: '',
+  geminiKey: '',
+  geminiModel: 'gemini-2.5-flash',
+  deepseekKey: '',
+  deepseekModel: 'deepseek-chat',
+  glossary: '',
+  blockedHosts: ''
+});
+export const STANDARD_PROVIDERS = ['microsoft', 'google', 'deepl', 'libre'];
+export const AI_PROVIDERS = ['gemini', 'deepseek'];
+export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
+
+export function normalizeSettings(value = {}) {
+  const clean = {...DEFAULT_SETTINGS};
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    if (Object.hasOwn(value, key)) clean[key] = value[key];
+  }
+  if (!LANGUAGES.includes(clean.target)) clean.target = 'zh';
+  if (!['auto', ...LANGUAGES].includes(clean.source)) clean.source = 'auto';
+  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'microsoft';
+  if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
+  clean.autoAI = false;
+  clean.contextAI = Boolean(clean.contextAI);
+  return clean;
+}
+export function hostIsBlocked(hostname, blockedHosts = '') {
+  const host = String(hostname ?? '').toLowerCase();
+  return String(blockedHosts).split(/[\s,;]+/).filter(Boolean).some(raw => {
+    const rule = raw.toLowerCase().replace(/^\*\./, '');
+    return host === rule || host.endsWith('.' + rule);
+  });
+}
