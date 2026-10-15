@@ -24,9 +24,11 @@ jobs:
           retention-days: 7
       - name: Validate Python PDF/OCR bridge syntax
         run: python -m compileall -q services benchmarks
+      - name: Generate and inspect hash/source manifest
+        run: node scripts/build-manifest.mjs
       - name: Package installable extension
         run: |
-          zip -q -r personal-immersive-translator-alpha.zip manifest.json src assets README.md LICENSE docs services
+          zip -q -r personal-immersive-translator-alpha.zip manifest.json BUILD_MANIFEST.json src assets README.md LICENSE docs services
           unzip -l personal-immersive-translator-alpha.zip
       - name: Upload validated package
         uses: actions/upload-artifact@v4
