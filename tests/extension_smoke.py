@@ -82,7 +82,11 @@ async def main():
                 await tools.locator('#pdf').set_input_files({
                     "name":"fixture.pdf","mimeType":"application/pdf","buffer":data
                 })
-                await tools.locator('#pdfPreview canvas').wait_for(timeout=20000)
+                try:
+                    await tools.locator('#pdfPreview canvas').wait_for(timeout=16000)
+                except Exception as exc:
+                    info=await tools.locator('#pdfPreviewStatus').inner_text()
+                    raise AssertionError(f"PDF.js preview did not render. Status={info!r}; JS errors={errors!r}") from exc
                 info=await tools.locator('#pdfPreviewStatus').inner_text()
                 assert "首页可读取文字" in info,info
                 assert await tools.locator('#pdfPreview canvas').evaluate("(el)=>el.width>100 && el.height>100")
