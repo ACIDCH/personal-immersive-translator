@@ -207,6 +207,8 @@
       standardBudget+=STANDARD_STEP;
       schedule(currentId,0);
       reply({ok:true});
+    }else if(message?.type==='PIT_CONTINUE'){
+      reply({ok:false,reason:'请先开启标准网页翻译，才能继续翻译后续段落。'});
     }else if(message?.type==='PIT_RESTORE'){
       restore();reply({ok:true});
     }else if(message?.type==='PIT_SELECTION' && ['standard','ai'].includes(message.mode)){
