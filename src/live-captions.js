@@ -67,6 +67,18 @@
       draw('本机正在识别当前标签页音频…','');
       respond({ok:true});return;
     }
+    if(msg?.type==='PIT_ASR_INTERRUPTED_VIEW'){
+      // A visible but temporary failure notice independent of the subtitle
+      // overlay; never leave the UI suggesting audio is still being captured.
+      const old=document.querySelector('.pit-asr-interrupted');
+      old?.remove();
+      const notice=document.createElement('div');
+      notice.className='pit-toast pit-asr-interrupted';
+      notice.textContent='标签页音频捕获已中断，实时字幕已停止；请检查权限或播放器状态后手动重新启动。';
+      document.documentElement.append(notice);
+      setTimeout(()=>notice.remove(),7000);
+      return;
+    }
     if(msg?.type==='PIT_ASR_VIEW_STOP'){
       enabled=false;seq++;queued=null;observed.length=0;
       overlay?.remove();overlay=null;respond({ok:true});return;
