@@ -69,8 +69,10 @@
       const generation=state.generation;
       try {
         const translations=await fetchBatch([text],generation);
-        state.cache.put(key,translations[0]);
-        if(state.active && generation===state.generation && state.latestDomText===text) render(translations[0]);
+        if(state.active && generation===state.generation) {
+          state.cache.put(key,translations[0]);
+          if(state.latestDomText===text) render(translations[0]);
+        }
       } catch {
         state.failedAt=Date.now();
         if(generation===state.generation) render('字幕翻译失败，可暂停重试或检查 API 配额');
