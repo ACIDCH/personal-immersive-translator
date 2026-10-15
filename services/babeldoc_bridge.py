@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import json
 import struct
+import io
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.responses import Response
@@ -21,6 +23,8 @@ from fastapi.middleware.cors import CORSMiddleware
 TOKEN=os.environ.get("PIT_BRIDGE_TOKEN","")
 KEY=os.environ.get("DEEPSEEK_API_KEY","")
 MAX_BYTES=25*1024*1024
+# Never launch two memory-heavy layout/OCR translation jobs simultaneously.
+pdf_lock=asyncio.Lock()
 LANGS={"zh":"chi_sim","en":"eng","fr":"fra","ja":"jpn","ko":"kor","de":"deu","es":"spa"}
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
 app.add_middleware(CORSMiddleware,
@@ -94,7 +98,14 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
-    return {"ready":bool(KEY and shutil.which("babeldoc")),"ocr":bool(shutil.which("ocrmypdf"))}
+    return {
+        "ready":bool(KEY and shutil.which("babeldoc")),
+        "pdf_ocr":bool(shutil.which("ocrmypdf") and shutil.which("tesseract")),
+        "image_ocr":bool(shutil.which("tesseract")),
+        "speech_asr":bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN)),
+        "languages":list(LANGS.keys()),
+        "engine":"local-only"
+    }
 
 
 @app.post("/ocr-image")
@@ -107,14 +118,26 @@ async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
     payload=await image.read(8_000_001)
     if len(payload)>8_000_000:raise HTTPException(status_code=413)
     if not shutil.which("tesseract"):raise HTTPException(status_code=503,detail="未安装 Tesseract OCR")
-    with tempfile.TemporaryDirectory(prefix="pit-ocr-") as temp:
-        path=pathlib.Path(temp)/("image.png" if image.content_type=="image/png" else "image.jpg")
-        path.write_bytes(payload)
-        try:
-            result=await asyncio.to_thread(subprocess.run,["tesseract",str(path),"stdout","-l",LANGS[source]],
-                capture_output=True,timeout=100,check=True)
-        except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
-            raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
+    # Image formats are not interchangeable: a WebP payload saved as .jpg
+    # may fail in Tesseract. Normalize with the actual Pillow decoder, correct
+    # mobile EXIF orientation, and guard against huge decompression bombs.
+    try:
+        with Image.open(io.BytesIO(payload)) as original:
+            width,height=original.size
+            if width<1 or height<1 or width*height>20_000_000:
+                raise ValueError("图片像素超过 2000 万上限")
+            normalized=ImageOps.exif_transpose(original).convert("RGB")
+            with tempfile.TemporaryDirectory(prefix="pit-ocr-") as temp:
+                path=pathlib.Path(temp)/"normalized.png"
+                normalized.save(path,format="PNG")
+                try:
+                    result=await asyncio.to_thread(subprocess.run,
+                        ["tesseract",str(path),"stdout","-l",LANGS[source]],
+                        capture_output=True,timeout=100,check=True)
+                except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
+                    raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
+    except (UnidentifiedImageError,OSError,ValueError,Image.DecompressionBombError) as exc:
+        raise HTTPException(status_code=422,detail="图片损坏、格式不匹配或尺寸超限") from exc
     return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
 
 
@@ -176,15 +199,18 @@ async def translate(pdf: UploadFile=File(...), source: str=Form("en"),
     if pdf.content_type not in ("application/pdf","application/octet-stream"):raise HTTPException(status_code=415)
     data=await pdf.read(MAX_BYTES+1)
     if len(data)>MAX_BYTES or not data.startswith(b"%PDF-"):raise HTTPException(status_code=400,detail="PDF 文件格式错误或超出 25MB")
-    with tempfile.TemporaryDirectory(prefix="pit-pdf-") as d:
-        work=pathlib.Path(d)
-        source_file=work/"original.pdf"
-        source_file.write_bytes(data)
-        try:
-            result=await asyncio.to_thread(run_pipeline,source_file,work,source,target,ocr)
-        except (ValueError,RuntimeError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:
-            # Never return subprocess stderr or credentials to the client.
-            raise HTTPException(status_code=422,detail="PDF 处理失败：请检查 OCR、BabelDOC 安装、语言模型和服务端日志") from e
+    if pdf_lock.locked():
+        raise HTTPException(status_code=429,detail="已有 PDF 正在翻译，请待其完成后再试")
+    async with pdf_lock:
+        with tempfile.TemporaryDirectory(prefix="pit-pdf-") as d:
+            work=pathlib.Path(d)
+            source_file=work/"original.pdf"
+            source_file.write_bytes(data)
+            try:
+                result=await asyncio.to_thread(run_pipeline,source_file,work,source,target,ocr)
+            except (ValueError,RuntimeError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:
+                # Never return subprocess stderr or credentials to the client.
+                raise HTTPException(status_code=422,detail="PDF 处理失败：请检查 OCR、BabelDOC 安装、语言模型和服务端日志") from e
     return Response(result,media_type="application/pdf",
         headers={"Content-Disposition":'attachment; filename="translated-bilingual.pdf"',
                  "Cache-Control":"no-store"})

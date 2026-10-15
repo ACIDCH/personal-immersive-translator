@@ -58,6 +58,8 @@ jobs:
         run: google-chrome --version
       - name: Run real Chrome DOM regression fixtures
         run: python tests/browser_e2e.py
+      - name: Check long-page and SPA bilingual stability
+        run: python tests/web_stability_e2e.py
       - name: Run YouTube Netflix Panopto simulated player compatibility
         run: python tests/player_compat_e2e.py
       - name: Run real Chrome ASR subtitle backpressure and latency UI test

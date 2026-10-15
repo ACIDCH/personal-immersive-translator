@@ -69,12 +69,18 @@
       const generation=state.generation;
       try {
         const translations=await fetchBatch([text],generation);
-        state.cache.put(key,translations[0]);
-        if(state.active && generation===state.generation && state.latestDomText===text) render(translations[0]);
+        if(state.active && generation===state.generation) {
+          state.cache.put(key,translations[0]);
+          if(state.latestDomText===text) render(translations[0]);
+        }
       } catch {
-        state.failedAt=Date.now();
-        if(generation===state.generation) render('字幕翻译失败，可暂停重试或检查 API 配额');
-      } finally {state.domPending=false;}
+        if(generation===state.generation){
+          state.failedAt=Date.now();
+          render('字幕翻译失败，可暂停重试或检查 API 配额');
+        }
+      } finally {
+        if(generation===state.generation)state.domPending=false;
+      }
       return;
     }
     if(!state.video || (!state.track && !state.importedCues)) return;
@@ -105,9 +111,13 @@
         render(fresh ? (state.cache.get(fresh.key) || '正在翻译…') : '');
       }
     } catch(error) {
-      state.failedAt=Date.now();
-      if(generation===state.generation) render('字幕翻译暂时失败，请检查服务或额度');
-    } finally {state.busy=false;}
+      if(generation===state.generation){
+        state.failedAt=Date.now();
+        render('字幕翻译暂时失败，请检查服务或额度');
+      }
+    } finally {
+      if(generation===state.generation)state.busy=false;
+    }
   }
   function stop() {
     state.active=false;state.generation++;
@@ -137,12 +147,12 @@
     const adapter=platform?.identify(location.hostname);
     const visible=adapter && adapter.id!=='generic'
       ? platform.readVisibleCaptions(document,location.hostname) : null;
-    // Some authorized players paint captions into DOM while their actual
-    // video element is inaccessible. Observable CC still works without it.
-    if(!video && !visible?.text) return {ok:false,
-      reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const imported=Array.isArray(suppliedCues) && suppliedCues.length
       ? suppliedCues.slice(0,5000) : null;
+    if(imported?.length && !video) return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器未提供。'};
+    // Authorized sites may paint visible captions without exposing <video>.
+    if(!video && !visible?.text) return {ok:false,
+      reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const validImport=imported?.length
       ? core.normalizeCues(imported,video.currentTime).length>0 : false;
     if(validImport && !video)return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器不提供。'};

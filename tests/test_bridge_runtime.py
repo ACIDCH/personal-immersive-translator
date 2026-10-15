@@ -54,6 +54,16 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code,401)
         self.assertEqual(self.client.get("/health",headers={"X-PIT-Token":"wrong"}).status_code,401)
 
+    def test_health_reports_dependency_readiness_without_exposing_secrets(self):
+        response=self.client.get("/health",headers=self.headers)
+        self.assertEqual(response.status_code,200,response.text)
+        details=response.json()
+        for key in ("ready","pdf_ocr","image_ocr","speech_asr"):
+            self.assertIsInstance(details[key],bool)
+        self.assertEqual(details["engine"],"local-only")
+        self.assertNotIn("fake-test-key-never-use",response.text)
+        self.assertNotIn("test-local-secret-at-least-16",response.text)
+
     def test_pdf_magic_and_language_validation(self):
         self.assertEqual(self.submit(b"not a pdf").status_code,400)
         self.assertEqual(self.submit(pdf(),source="ru").status_code,400)
@@ -140,6 +150,30 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.text[:300])
         self.assertIn("HELLO WORLD",response.json()["original_text"].upper())
 
+
+    def test_corrupt_image_is_rejected_before_running_ocr(self):
+        with patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"):
+            response=self.client.post("/ocr-image",headers=self.headers,
+                files={"image":("corrupt.webp",b"not a real image","image/webp")},
+                data={"source":"en"})
+        self.assertEqual(response.status_code,422)
+
+    def test_real_webp_is_normalized_to_png_before_ocr(self):
+        import io
+        from PIL import Image,ImageDraw,ImageFont
+        if not shutil.which("tesseract"):
+            self.skipTest("Tesseract executable not installed")
+        image=Image.new("RGB",(980,170),"white")
+        draw=ImageDraw.Draw(image)
+        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",62)
+        draw.text((45,35),"WEBP DOCUMENT TEXT",fill="black",font=font)
+        buffer=io.BytesIO()
+        image.save(buffer,format="WEBP",quality=99)
+        response=self.client.post("/ocr-image",headers=self.headers,
+            files={"image":("original.webp",buffer.getvalue(),"image/webp")},
+            data={"source":"en"})
+        self.assertEqual(response.status_code,200,response.text[:200])
+        self.assertIn("WEBP",response.json()["original_text"].upper())
 
     def test_wav_validator_requires_actual_16khz_mono_pcm(self):
         good=wav_pcm16()
