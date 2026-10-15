@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Personal Immersive Translator",
+  "short_name": "PIT Translate",
+  "description": "Privacy-first bilingual translation: standard services by default, Gemini and DeepSeek only on demand.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "114",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "https://api.cognitive.microsofttranslator.com/*",
+    "https://translation.googleapis.com/*",
+    "https://api-free.deepl.com/*",
+    "https://api.deepl.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.deepseek.com/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "action": { "default_popup": "src/popup.html", "default_title": "双语翻译" },
+  "options_page": "src/options.html",
+  "icons": { "16": "assets/icon16.png", "48": "assets/icon48.png", "128": "assets/icon128.png" }
+}
