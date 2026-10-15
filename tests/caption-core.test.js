@@ -44,3 +44,11 @@ test('retries failed subtitle batches instead of permanently marking them',async
  assert.equal(await c.prefetch(cues,async()=>['译文']),1);
  assert.equal(c.get(cues[0].key),'译文');
 });
+
+test('long captions remain accessible after seeking 4000 seconds',()=>{
+ const raw=Array.from({length:5000},(_,i)=>({startTime:i,endTime:i+0.75,text:'cue '+i}));
+ const near=normalizeCues(raw,4050);
+ assert.ok(near.some(c=>c.text==='cue 4050'));
+ assert.equal(currentCue(near,4050)?.text,'cue 4050');
+ assert.ok(near.length<3000);
+});
