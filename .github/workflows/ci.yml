@@ -39,6 +39,10 @@ jobs:
         run: google-chrome --version
       - name: Run real Chrome DOM regression fixtures
         run: python tests/browser_e2e.py
+      - name: Run YouTube Netflix Panopto simulated player compatibility
+        run: python tests/player_compat_e2e.py
+      - name: Run real Chrome ASR subtitle backpressure and latency UI test
+        run: python tests/live_caption_e2e.py
   pdf-bridge:
     runs-on: ubuntu-latest
     steps:

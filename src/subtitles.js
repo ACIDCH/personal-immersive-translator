@@ -52,13 +52,10 @@
     return response.translations;
   }
   async function tick() {
-    if (!state.active || !state.video) return;
+    if (!state.active) return;
     if (state.domMode) {
       if (!platform) return;
-      const info=platform.readVisibleCaptions(document,location.hostname,node=>{
-        const style=getComputedStyle(node);
-        return style.display!=='none' && style.visibility!=='hidden' && node.getClientRects().length>0;
-      });
+      const info=platform.readVisibleCaptions(document,location.hostname);
       const text=info.text;
       if(!text){render('');return;}
       state.latestDomText=text;
@@ -80,7 +77,7 @@
       } finally {state.domPending=false;}
       return;
     }
-    if(!state.track && !state.importedCues) return;
+    if(!state.video || (!state.track && !state.importedCues)) return;
     const generation=state.generation;
     const video=state.video, track=state.track;
     let raw=[];
@@ -119,17 +116,38 @@
     state.overlay?.remove();state.overlay=null;
     state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;
   }
+  function embeddedPlayerHint(){
+    for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
+      try{
+        const url=new URL(frame.src,location.href);
+        const host=url.hostname.toLowerCase();
+        if(url.protocol==='https:' &&
+          (host==='youtube.com'||host.endsWith('.youtube.com')||
+           host==='youtube-nocookie.com'||host.endsWith('.youtube-nocookie.com')||
+           host==='panopto.com'||host.includes('.panopto.'))){
+          return '检测到跨域嵌入的视频播放器（'+host+'）。当前页面不能读取其内部字幕；请在拥有访问权限的情况下打开源播放器，或选择授权的语音识别。';
+        }
+      }catch{}
+    }
+    return '';
+  }
   function start(mode, suppliedCues=[]) {
     stop();
     const video=pickVideo();
-    if(!video) return {ok:false,reason:'当前页面没有可访问的 HTML5 视频元素。嵌入式跨域播放器需另行适配。'};
+    const adapter=platform?.identify(location.hostname);
+    const visible=adapter && adapter.id!=='generic'
+      ? platform.readVisibleCaptions(document,location.hostname) : null;
+    // Some authorized players paint captions into DOM while their actual
+    // video element is inaccessible. Observable CC still works without it.
+    if(!video && !visible?.text) return {ok:false,
+      reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const imported=Array.isArray(suppliedCues) && suppliedCues.length
       ? suppliedCues.slice(0,5000) : null;
     const validImport=imported?.length
       ? core.normalizeCues(imported,video.currentTime).length>0 : false;
-    const track=validImport ? null : chooseTrack(video);
-    const adapter=platform?.identify(location.hostname);
-    if(!track && !validImport && (!adapter || adapter.id==='generic')) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
+    if(validImport && !video)return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器不提供。'};
+    const track=validImport ? null : video ? chooseTrack(video) : null;
+    if(!track && !validImport && !visible?.text) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
     state.originalMode=track?.mode ?? null;
     state.domMode=!track && !validImport;

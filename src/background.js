@@ -61,14 +61,26 @@ async function handle(message, sender) {
     if(sender.tab)throw new TranslationError('只能从插件控制面板停止录音');
     await stopLiveAsr();return {stopped:true};
   }
-  if(message.type==='PIT_ASR_RESULT' || message.type==='PIT_ASR_ERROR'){
+  if(['PIT_ASR_RESULT','PIT_ASR_ERROR','PIT_ASR_METRICS'].includes(message.type)){
     if(sender.url!==chrome.runtime.getURL('src/offscreen.html'))throw new TranslationError('无效的本机 ASR 来源');
     const session=await chrome.storage.session.get('pit_live_asr_tab');
     if(!session.pit_live_asr_tab || session.pit_live_asr_tab!==message.tabId)return {ignored:true};
-    const type=message.type==='PIT_ASR_RESULT'?'PIT_ASR_TEXT_VIEW':'PIT_ASR_ERROR_VIEW';
+    const type=message.type==='PIT_ASR_RESULT'?'PIT_ASR_TEXT_VIEW'
+      :message.type==='PIT_ASR_ERROR'?'PIT_ASR_ERROR_VIEW':'PIT_ASR_METRICS_VIEW';
     const payload={type};
-    if(type==='PIT_ASR_TEXT_VIEW')payload.text=String(message.text||'').slice(0,5000);
-    else payload.message=String(message.message||'').slice(0,300);
+    if(type==='PIT_ASR_TEXT_VIEW'){
+      payload.text=String(message.text||'').slice(0,5000);
+      payload.capturedAt=Number(message.capturedAt)||Date.now();
+      payload.segmentMs=Math.min(6000,Math.max(0,Number(message.segmentMs)||0));
+      payload.asrMs=Math.max(0,Number(message.asrMs)||0);
+    }else if(type==='PIT_ASR_ERROR_VIEW')payload.message=String(message.message||'').slice(0,300);
+    else {
+      const m=message.metrics||{};
+      payload.metrics={
+        requests:Number(m.requests)||0,dropped:Number(m.dropped)||0,
+        errors:Number(m.errors)||0,p50Ms:Number(m.p50Ms)||0,p95Ms:Number(m.p95Ms)||0
+      };
+    }
     await chrome.tabs.sendMessage(message.tabId,payload).catch(()=>{});
     return {forwarded:true};
   }
