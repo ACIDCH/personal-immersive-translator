@@ -1,57 +1,62 @@
 # Personal Immersive Translator
 
-An independently implemented, privacy-conscious, Manifest V3 Chrome/Edge bilingual-translation extension.
+Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Status:** 0.1.0 Alpha — not production verified. Ordinary translation uses user-configured Microsoft Translator, Google Cloud Translation, DeepL, or permitted LibreTranslate services. Optional Gemini / DeepSeek translations require explicit confirmation; AI is never the automatic fallback.
+**Version under development:** 0.3.0 — release candidate preparation, **not production or real-account verified**.
 
-## Project isolation
+## Isolation
 
-- This is the **only GitHub repository** used for the translation extension.
-- Its Supabase project is `personal-immersive-translator` (Sydney / `ap-southeast-2`), dedicated to this project and not required for the local extension.
-- YUNPAN has a dedicated `Personal-Immersive-Translator` folder for documents, releases and backups.
-- Never commit API keys or credentials.
+- Code and PRs: https://github.com/ACIDCH/personal-immersive-translator
+- Project-only Supabase: `personal-immersive-translator` (`ap-southeast-2`), reserved for future optional synchronization; no runtime requirement or database tables.
+- YUNPAN independent Drive folder: https://drive.google.com/drive/folders/1EddQ28j6XRMAknfe0lcEfuSlQwdkoO05
+- Do not modify `ACIDCH/ACIDCH`, `ACIDCH/ACIDCH.github.io` or the user's independent learning system.
 
-## Local installation
+## Real upstream integration, not just references
 
-1. Download the source archive from the [YUNPAN Alpha release](https://drive.google.com/file/d/1N27Jjvi2rxZrvfHAncU_TsVHkRwEEDOp/view?usp=drivesdk) and extract it.
-2. In Chrome or Edge visit `chrome://extensions` / `edge://extensions`.
-3. Enable Developer mode, choose **Load unpacked**, select the extracted directory with `manifest.json`.
-4. Open extension Options, configure the selected translation provider's **own official API key**, then visit an ordinary webpage and choose Translate.
-5. AI mode is optional and should be used only with your own Gemini / DeepSeek API key and attention to possible costs.
+- **Mozilla PDF.js 6.4.299 (Apache-2.0)**: actual official npm-distributed JS + Worker copied locally into the **CI-built extension** with LICENSE and SOURCE.json. Used to preview and inspect selected PDF first pages, no CDN.
+- **whisper.cpp (MIT)**: separately installed executable/model, called through the optional local Python speech service. Neither Whisper binaries nor models are inside the extension ZIP.
+- **BabelDOC (AGPL-3.0)**: separately installed executable, called from the local PDF/OCR bridge. It is not shipped in the extension ZIP.
+- **Tesseract (Apache-2.0)**: independently installed OCR executable, used through OCRmyPDF / the local image endpoint.
+- **KISS Translator (GPL-3.0)**: design research only. No GPL source is transplanted into this standalone MIT implementation.
+- PaddleOCR and browser Tesseract.js: candidates, **not presently integrated**.
 
-**Note:** A public browser extension must never embed developer-owned API secrets. Microsoft, Google and DeepL are commercial services with quotas/terms; they are not open-source translation servers.
+Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.md).
 
-## Development
+## Modes
 
-Requires Node.js 20+. Run `npm run verify` after downloading the complete project files. Tests mock external API calls and do not yet establish real-browser or live-API compatibility.
+| Mode | Current behavior | Requirements |
+| --- | --- | --- |
+| Web bilingual | Standard provider by default; original and translated text coexist | Your own official provider API Key and quota |
+| HTML5/video subtitles | Native timed cues, visible YouTube/Netflix/Panopto DOM fallback, imported SRT/VTT | Captions must be available and permitted |
+| Local speech captions | Explicit tab audio capture → optional localhost Whisper → ordinary translation service | Manually installed multilingual whisper.cpp, model and bridge; no DRM bypass |
+| Image/OCR | User-selected image or deliberately captured screenshot via Gemini OCR or local Tesseract | Own API Key or installed local OCR bridge |
+| PDF | Official PDF.js previews and scanned-page hints; separate OCRmyPDF → BabelDOC PDF reconstruction | Local Python service, system OCR packages, BabelDOC install, model and own API Key |
 
-## Architecture
+**Language selection:** zh / en / ja / ko / fr / de / es. Supported selection does **not** guarantee equal quality/compatibility across providers, platforms, BabelDOC and OCR models.
 
-Core modules: webpage text detection, rendering, translation router, standard provider adapters, AI provider adapters, extension settings and local cache. Supabase is reserved for opt-in cross-device sync; it is not a mandatory online translation gateway.
+## Install a CI-built package
 
-Inspired by public documentation of KISS Translator, Read Frog, FluentRead and Translate Web Pages. **No GPL project code is copied into this MIT-licensed implementation.**
+1. Open this branch's latest successful GitHub Actions and download `personal-immersive-translator-alpha` artifact. Extract the inner ZIP if the Actions artifact wraps it.
+2. Unzip the actual browser package into a folder containing `manifest.json`, `src/` and `assets/`; `src/vendor/pdf.mjs`, `pdf.worker.mjs` and the Apache license should be present.
+3. Visit `chrome://extensions` or `edge://extensions`, enable Developer Mode and choose **Load unpacked**.
+4. Open Options and enter your **own** official translation API Key; never place credentials in GitHub or Drive.
+5. For OCR, local ASR or layout-preserved PDFs, complete [local prerequisites](docs/PDF_OCR_SETUP.md) separately. The browser ZIP alone is insufficient for those workflows.
 
-## Roadmap
+For development from source, use Node.js 22+:
 
-- [x] Project isolation and dedicated cloud storage
-- [x] First Alpha source package saved in YUNPAN
-- [x] Dedicated Supabase project
-- [ ] Complete source mirror and automated verification in GitHub
-- [ ] Real-browser acceptance and API tests
-- [ ] Dynamic websites, captions and PDF enhancement
-- [ ] Final independent Codex review
+```sh
+npm install --ignore-scripts
+npm run verify
+```
 
+This installs the exactly pinned upstream PDF.js and regenerates the locally packaged vendor assets. No remote executable code is loaded by the extension. Release artifacts contain generated vendor files that are intentionally not committed.
 
-## 0.2.0 experimental multimodal branch
+## Validation and limitations
 
-The initial release scope now includes video captions, multilingual website translation, image OCR, experimental real-time speech captions, and an optional high-fidelity PDF reconstruction service.
+GitHub Actions checks Node tests, native Chromium MV3 installation, popup/settings, DOM fixtures, subtitle fixtures, and PDF/OCR bridge tests. Vendor PDF.js rendering is tested using a real generated PDF.
 
-- Web translation: existing standard translation providers are the default; Gemini/DeepSeek are explicitly selected.
-- Video captions: TextTrack, visible YouTube/Netflix/Panopto subtitle DOM, and user-supplied SRT/VTT. Live-video selectors and institutional iframe permission are **not guaranteed**.
-- Image OCR: user-selected files or an explicitly captured visible-tab screenshot; Gemini image recognition or local Tesseract OCR, followed by standard translation.
-- PDF OCR/layout preservation: separate local OCRmyPDF + BabelDOC workflow for user-supplied PDF files. The installed browser extension alone **cannot** run BabelDOC; see [setup](docs/PDF_OCR_SETUP.md).
-- Experimental tab audio: opt-in, localhost-only short WAV chunks and whisper.cpp ASR, then translated text via the selected standard translation API; no guarantee of realtime performance or capture of DRM material.
+**Not yet passed on real authenticated protected platforms:** Netflix, Panopto and all YouTube UI variants; real whisper.cpp multilingual 30-minute performance, real BabelDOC output on complex academic PDF, paid official API integration, or statistically valid superiority over Immersive Translate.
 
-Full functionality requires the separate local bridge, the relevant OCR/ASR models and user-owned API credentials. Preview branch is not a production release. No testing yet establishes that its speed or accuracy exceeds the commercial Immersive Translate extension.
+[Release matrix](docs/INITIAL_MULTIMODAL_ACCEPTANCE.md) · [Player latency criteria](docs/PLAYER_LATENCY_VALIDATION_zh-CN.md) · [Security](docs/SECURITY.md) · [Benchmark methodology](benchmarks/README.md).
 
-[Initial acceptance matrix](docs/INITIAL_MULTIMODAL_ACCEPTANCE.md) · [Video/live engineering plan](docs/MEDIA_REALTIME.md) · [OCR/PDF local setup](docs/PDF_OCR_SETUP.md).
+Codex is reserved for final independent review; no unapproved merge to main.

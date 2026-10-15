@@ -53,4 +53,14 @@ document.getElementById('clearCache').addEventListener('click',async()=>{
   const res=await chrome.runtime.sendMessage({type:'CLEAR_CACHE'});
   status.textContent=res.ok?'缓存已清空':'清理失败：'+res.error;
 });
-chrome.storage.local.get(SETTINGS_KEY).then(r=>viewSettings(normalizeSettings(r[SETTINGS_KEY])));
+// Hold controls until asynchronous saved preferences are rendered. Without
+// this, fast users and browser automation can have edits overwritten by init.
+form.dataset.ready='0';
+for(const el of form.elements)el.disabled=true;
+chrome.storage.local.get(SETTINGS_KEY)
+  .then(r=>viewSettings(normalizeSettings(r[SETTINGS_KEY])))
+  .catch(error=>{status.textContent='设置读取失败：'+String(error.message||error);})
+  .finally(()=>{
+    for(const el of form.elements)el.disabled=false;
+    form.dataset.ready='1';
+  });
