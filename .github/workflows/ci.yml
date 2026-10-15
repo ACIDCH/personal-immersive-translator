@@ -13,7 +13,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install pinned open-source PDF.js
-        run: npm install --no-audit --no-fund --ignore-scripts
+        run: npm install --no-audit --no-fund --ignore-scripts --omit=optional
       - name: Static checks and unit tests
         run: npm run verify
       - name: Export reproducible dependency lock
@@ -86,7 +86,7 @@ jobs:
           node-version: '22'
       - name: Install and vendor pinned PDF.js before loading extension
         run: |
-          npm install --no-audit --no-fund --ignore-scripts
+          npm install --no-audit --no-fund --ignore-scripts --omit=optional
           npm run vendor:pdf
       - name: Test real unpacked extension UI
         run: python tests/extension_smoke.py
