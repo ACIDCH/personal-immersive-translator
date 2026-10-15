@@ -79,6 +79,27 @@ def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
     return {"ready":bool(KEY and shutil.which("babeldoc")),"ocr":bool(shutil.which("ocrmypdf"))}
 
+
+@app.post("/ocr-image")
+async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
+                    x_pit_token: str|None=Header(None)):
+    if not authorized(x_pit_token): raise HTTPException(status_code=401)
+    if source not in LANGS:raise HTTPException(status_code=400,detail="语言代码无效")
+    if image.content_type not in ("image/png","image/jpeg","image/webp"):
+        raise HTTPException(status_code=415,detail="不支持的图片格式")
+    payload=await image.read(8_000_001)
+    if len(payload)>8_000_000:raise HTTPException(status_code=413)
+    if not shutil.which("tesseract"):raise HTTPException(status_code=503,detail="未安装 Tesseract OCR")
+    with tempfile.TemporaryDirectory(prefix="pit-ocr-") as temp:
+        path=pathlib.Path(temp)/("image.png" if image.content_type=="image/png" else "image.jpg")
+        path.write_bytes(payload)
+        try:
+            result=await asyncio.to_thread(subprocess.run,["tesseract",str(path),"stdout","-l",LANGS[source]],
+                capture_output=True,timeout=100,check=True)
+        except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
+            raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
+    return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
+
 @app.post("/translate")
 async def translate(pdf: UploadFile=File(...), source: str=Form("en"),
                     target: str=Form("zh"),ocr: bool=Form(True),
