@@ -69,6 +69,7 @@ async def main():
                 assert await tools.locator("#imageTranslate").count()==1
                 assert await tools.locator("#pdfTranslate").count()==1
                 assert await tools.locator("#localOCR").count()==1
+                assert await tools.locator("#checkLocalEngines").count()==1
                 print("PASS: image OCR and PDF tools render")
 
                 # Render an actual born-digital PDF through the vendored PDF.js
