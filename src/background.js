@@ -102,6 +102,11 @@ async function handle(message, sender) {
   const target = settings.target;
   const model = isAI ? (provider === 'gemini' ? settings.geminiModel : settings.deepseekModel) : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
+  if(message.transient===true) {
+    if(message.mode!=='standard' || !sender.tab) throw new TranslationError('临时字幕只允许网页内标准翻译');
+    const translations=await translateBatch(texts,{...settings,provider,source,target,context});
+    return {translations,provider,cached:false,transient:true};
+  }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
