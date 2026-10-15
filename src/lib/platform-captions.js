@@ -30,6 +30,6 @@
     }
     return {provider:rule.id,text:'',reason:'no-visible-captions'};
   }
-  function captionChanged(previous,current){return Boolean(current && current.text && current.text!==previous);}
+  function captionChanged(previous,current){const text=typeof current==='string'?current:current?.text;return Boolean(text && text!==previous);}
   root.PITPlatformCaptions=Object.freeze({identify,compact,readVisibleCaptions,captionChanged});
 })(globalThis);
