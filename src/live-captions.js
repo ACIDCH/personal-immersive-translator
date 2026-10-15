@@ -26,7 +26,7 @@
   if(!original.trim())return;
   history.push(original);if(history.length>4)history.shift();
   draw(original,'正在翻译…');
-  chrome.runtime.sendMessage({type:'TRANSLATE_BATCH',texts:[original],mode:'standard',context:''})
+  chrome.runtime.sendMessage({type:'TRANSLATE_BATCH',texts:[original],mode:'standard',transient:true,context:''})
    .then(res=>{if(enabled && n===seq)draw(original,res?.ok?res.translations[0]:'翻译服务不可用');})
    .catch(()=>{if(enabled&&n===seq)draw(original,'翻译服务连接失败');});
  });
