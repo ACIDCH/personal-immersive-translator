@@ -3,11 +3,47 @@
   window.__PIT_TRANSLATOR_V1__ = true;
 
   const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
-  const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th';
+  const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="listitem"],[role="slide"] p';
   const processed = new WeakMap();
   let active = false;
   let currentId = 0;
   let observer = null;
+  let observedRoots = new Set();
+  function getOpenRoots() {
+    const found=[document], pending=[document], seen=new Set([document]);
+    while(pending.length && found.length < 30) {
+      const root=pending.shift();
+      const elements=root.querySelectorAll('*');
+      for(const el of [...elements].slice(0,6000)) {
+        if(el.shadowRoot && !seen.has(el.shadowRoot)) {
+          seen.add(el.shadowRoot); found.push(el.shadowRoot); pending.push(el.shadowRoot);
+          if(found.length>=30) break;
+        }
+      }
+    }
+    return found;
+  }
+  function queryDeep(selector) {
+    const result=[];
+    for(const root of getOpenRoots()) result.push(...root.querySelectorAll(selector));
+    return result;
+  }
+  function isUnsafe(el) {
+    let current=el;
+    while(current) {
+      if(current.closest?.(SKIP) || current.closest?.('form')) return true;
+      current=current.getRootNode?.().host || null;
+    }
+    return false;
+  }
+  function observeOpenRoots() {
+    if(!observer) return;
+    for(const root of getOpenRoots()) {
+      if(observedRoots.has(root)) continue;
+      const target=root===document ? document.body : root;
+      if(target) {observer.observe(target,{childList:true,subtree:true});observedRoots.add(root);}
+    }
+  }
   let mode = 'standard';
   let busy = false;
   let rerunQueued = false;
@@ -19,8 +55,8 @@
     setTimeout(()=>node.remove(), 5000);
   }
   function candidates() {
-    return [...document.querySelectorAll(TARGETS)].filter(el => {
-      if (!el.isConnected || el.closest(SKIP) || el.querySelector('.pit-translation')) return false;
+    return queryDeep(TARGETS).filter(el => {
+      if (!el.isConnected || isUnsafe(el) || el.querySelector('.pit-translation') || !el.getClientRects().length) return false;
       if (el.children.length && [...el.children].some(ch => ch.matches?.(TARGETS))) return false;
       const text = el.textContent?.trim() || '';
       return text.length >= 12 && text.length <= 5000 && !processed.has(el) && !el.closest('form');
@@ -80,17 +116,17 @@
     if (requestedMode === 'standard') observer = new MutationObserver(mutations => {
       if (!active || !mutations.some(m=>[...m.addedNodes].some(n=>n.nodeType===1 && !n.closest?.('.pit-translation,.pit-toast')))) return;
       clearTimeout(debounce);
-      debounce=setTimeout(()=>{if(active)translateContent(id)},1000);
+      debounce=setTimeout(()=>{if(active){observeOpenRoots();translateContent(id);}},800);
     });
-    observer?.observe(document.body,{childList:true,subtree:true});
+    observeOpenRoots();
   }
   function restore() {
     active=false;
     currentId++;
-    observer?.disconnect(); observer=null;
-    document.querySelectorAll('.pit-translation').forEach(n=>n.remove());
+    observer?.disconnect(); observer=null; observedRoots.clear();
+    queryDeep('.pit-translation').forEach(n=>n.remove());
     document.querySelectorAll('.pit-toast').forEach(n=>n.remove());
-    document.querySelectorAll(TARGETS).forEach(el=>processed.delete(el));
+    queryDeep(TARGETS).forEach(el=>processed.delete(el));
   }
   async function translateSelection(requestedMode) {
     const selection = window.getSelection();
