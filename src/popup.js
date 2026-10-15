@@ -39,7 +39,14 @@ async function subtitleAction(type){
       await chrome.scripting.executeScript({target:{tabId:tab.id},
         files:['src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js']});
     }
-    const res=await chrome.tabs.sendMessage(tab.id,{type,mode});
+    const file=$('captionFile').files?.[0];
+    let cues;
+    if(type==='PIT_CAPTIONS_START' && file){
+      if(file.size>2_000_000)throw new Error('字幕文件超过 2MB');
+      cues=globalThis.PITSubtitleImport.parseSubtitles(await file.text());
+      if(!cues.length)throw new Error('无法从字幕文件解析出有效时间轴');
+    }
+    const res=await chrome.tabs.sendMessage(tab.id,{type,mode,cues});
     if(!res?.ok) throw new Error(res?.reason||'字幕操作失败');
     status(res.reason||(type==='PIT_CAPTIONS_START'?'字幕翻译已启动':'字幕翻译已停止'));
   } catch(e){status('字幕操作失败：'+String(e?.message||e));}
@@ -48,3 +55,5 @@ $('captionsStart').onclick=()=>subtitleAction('PIT_CAPTIONS_START');
 $('captionsStop').onclick=()=>subtitleAction('PIT_CAPTIONS_STOP');
 $('settings').onclick=()=>chrome.runtime.openOptionsPage();
 chrome.storage.local.get(SETTINGS_KEY).then(r=>{settings=normalizeSettings(r[SETTINGS_KEY]);show();}).catch(e=>status(e.message));
+
+$('fileTools').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('src/tools.html')});
