@@ -100,6 +100,37 @@ async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
             raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
     return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
 
+
+ASR_MODEL=os.environ.get("PIT_WHISPER_MODEL","")
+ASR_BIN=os.environ.get("PIT_WHISPER_BIN","whisper-cli")
+asr_lock=asyncio.Lock()
+@app.post("/asr")
+async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Header(None)):
+    if not authorized(x_pit_token): raise HTTPException(status_code=401)
+    if not ASR_MODEL or not pathlib.Path(ASR_MODEL).is_file() or not shutil.which(ASR_BIN):
+        raise HTTPException(status_code=503,detail="尚未配置本地 Whisper 模型或 whisper-cli")
+    data=await audio.read(2_000_001)
+    if len(data)>2_000_000 or len(data)<44 or not data.startswith(b"RIFF") or data[8:12]!=b"WAVE":
+        raise HTTPException(status_code=400,detail="仅支持不超过 2MB 的 PCM WAV")
+    if asr_lock.locked():
+        raise HTTPException(status_code=429,detail="语音模型繁忙；当前音频片段已跳过")
+    async with asr_lock:
+        with tempfile.TemporaryDirectory(prefix="pit-asr-") as temp:
+            work=pathlib.Path(temp)
+            input_file=work/"segment.wav"
+            output_file=work/"transcript"
+            input_file.write_bytes(data)
+            command=[ASR_BIN,"-m",ASR_MODEL,"-f",str(input_file),
+                     "-l","auto","-otxt","-of",str(output_file),"-np"]
+            try:
+                await asyncio.to_thread(subprocess.run,command,check=True,timeout=75,
+                    stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+            except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
+                raise HTTPException(status_code=422,detail="Whisper 推理失败或超时") from exc
+            txt=work/"transcript.txt"
+            text=txt.read_text(encoding="utf8",errors="replace").strip() if txt.exists() else ""
+    return {"text":text[:5000]}
+
 @app.post("/translate")
 async def translate(pdf: UploadFile=File(...), source: str=Form("en"),
                     target: str=Form("zh"),ocr: bool=Form(True),
