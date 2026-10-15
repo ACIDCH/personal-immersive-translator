@@ -85,5 +85,24 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(calls,["ocrmypdf","babeldoc"])
 
 
+    def test_real_local_tesseract_english_ocr(self):
+        import io
+        from PIL import Image, ImageDraw, ImageFont
+        if not shutil.which("tesseract"):
+            self.skipTest("Tesseract executable not installed")
+        image=Image.new("RGB",(850,150),"white")
+        painter=ImageDraw.Draw(image)
+        font=ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",58)
+        painter.text((35,36),"HELLO WORLD 1234",fill="black",font=font)
+        memory=io.BytesIO()
+        image.save(memory,format="PNG")
+        response=self.client.post("/ocr-image",headers=self.headers,
+            files={"image":("fixture.png",memory.getvalue(),"image/png")},
+            data={"source":"en"})
+        self.assertEqual(response.status_code,200,response.text[:300])
+        self.assertIn("HELLO WORLD",response.json()["original_text"].upper())
+
+
 if __name__=="__main__":
     unittest.main()
