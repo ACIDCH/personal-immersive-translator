@@ -147,13 +147,12 @@
     const adapter=platform?.identify(location.hostname);
     const visible=adapter && adapter.id!=='generic'
       ? platform.readVisibleCaptions(document,location.hostname) : null;
-    // Some authorized players paint captions into DOM while their actual
-    // video element is inaccessible. Observable CC still works without it.
-    if(!video && !visible?.text) return {ok:false,
-      reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const imported=Array.isArray(suppliedCues) && suppliedCues.length
       ? suppliedCues.slice(0,5000) : null;
     if(imported?.length && !video) return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器未提供。'};
+    // Authorized sites may paint visible captions without exposing <video>.
+    if(!video && !visible?.text) return {ok:false,
+      reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const validImport=imported?.length
       ? core.normalizeCues(imported,video.currentTime).length>0 : false;
     if(validImport && !video)return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器不提供。'};
