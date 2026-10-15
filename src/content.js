@@ -159,8 +159,8 @@
       if(id===currentId)toast('翻译失败：'+String(error?.message||error));
     }finally{
       busy=false;
-      if(queued && active && id===currentId){
-        queued=false;schedule(id,200);
+      if(queued && active){
+        queued=false;schedule(currentId,200);
       }
     }
   }
