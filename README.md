@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.0 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.1 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -38,7 +38,7 @@ Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.m
 
 1. Open this branch's latest successful GitHub Actions and download `personal-immersive-translator-alpha` artifact. Extract the inner ZIP if the Actions artifact wraps it.
 2. Unzip the actual browser package into a folder containing `manifest.json`, `src/` and `assets/`; `src/vendor/pdf.mjs`, `pdf.worker.mjs` and the Apache license should be present.
-3. Visit `chrome://extensions` or `edge://extensions`, enable Developer Mode and choose **Load unpacked**.
+3. Use Chrome/Edge **125 or later**. Visit `chrome://extensions` or `edge://extensions`, enable Developer Mode and choose **Load unpacked**.
 4. Open Options and enter your **own** official translation API Key; never place credentials in GitHub or Drive.
 5. For OCR, local ASR or layout-preserved PDFs, complete [local prerequisites](docs/PDF_OCR_SETUP.md) separately. The browser ZIP alone is insufficient for those workflows.
 
@@ -60,3 +60,7 @@ GitHub Actions checks Node tests, native Chromium MV3 installation, popup/settin
 [Release matrix](docs/INITIAL_MULTIMODAL_ACCEPTANCE.md) · [Player latency criteria](docs/PLAYER_LATENCY_VALIDATION_zh-CN.md) · [Security](docs/SECURITY.md) · [Benchmark methodology](benchmarks/README.md).
 
 Codex is reserved for final independent review; no unapproved merge to main.
+
+## Stability update v0.3.1
+
+Long-article continuation beyond 250 paragraphs; SPA and open Shadow DOM source mutation refresh; no recursive bilingual feedback in lists/tables; correct unsupported-video SRT import messaging; stale video subtitle session isolation; local engine readiness diagnostics; WebP/JPEG/PNG normalization with EXIF orientation and pixel limits; serialized BabelDOC jobs. Tested through real Chromium fixtures and offline FastAPI/real Tesseract OCR. See [hardening acceptance](docs/CORE_HARDENING_ACCEPTANCE_zh-CN.md). The release remains a **development build**, not a final stable product.
