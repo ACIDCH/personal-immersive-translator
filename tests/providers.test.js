@@ -71,3 +71,12 @@ test('sanitize settings and block nested sensitive hosts',()=>{
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
 });
 test('numeric entity translation is decoded',()=>assert.equal(decodeEntities('&#65; &#x4E2D;'),'A 中'));
+
+test('Corrupted settings reset safely without enabling AI',()=>{
+  for(const input of [null,42,'broken',[]]){
+    const settings=normalizeSettings(input);
+    assert.equal(settings.autoAI,false);
+    assert.equal(settings.standardProvider,'microsoft');
+    assert.equal(settings.target,'zh');
+  }
+});
