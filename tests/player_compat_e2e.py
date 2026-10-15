@@ -71,6 +71,40 @@ async def run():
         print("PASS",provider,"visible captions, update, hidden state, stop, bounded calls")
         await page.close()
 
+      # Real Chrome regression: the player advertises a native TextTrack
+      # but does not fill it. Visible YouTube CC must still be translated;
+      # if native cue data arrives later we must prefer its timeline.
+      fallback=await browser.new_page()
+      await setup(fallback,PLATFORMS[0][1],PLATFORMS[0][2])
+      await fallback.evaluate("""() => {
+        const video=document.querySelector('video');
+        window.testTrack=video.addTextTrack('subtitles','English','en');
+      }""")
+      status=await fallback.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert status["ok"],status
+      await fallback.locator('.pit-caption-translated').get_by_text(
+        '译文:First lecture caption').wait_for(timeout=6000)
+      print("PASS empty native TextTrack automatically falls back to visible YouTube CC")
+      await fallback.evaluate("""() => {
+        const segment=document.querySelector('.ytp-caption-segment');
+        segment.textContent='Stale caption while provider responds';
+      }""")
+      await fallback.wait_for_timeout(500)
+      await fallback.locator('.ytp-caption-segment').evaluate("(node)=>node.style.display='none'")
+      await fallback.wait_for_timeout(800)
+      hidden=await fallback.locator('.pit-caption-overlay').evaluate(
+        "(node)=>node.style.display==='none'")
+      assert hidden, "late provider response resurrected hidden caption"
+      print("PASS hidden caption cannot be resurrected by delayed provider")
+      await fallback.evaluate("""() => {
+        window.testTrack.addCue(new VTTCue(0,8,'New native timed caption'));
+      }""")
+      await fallback.locator('.pit-caption-translated').get_by_text(
+        '译文:New native timed caption').wait_for(timeout=6000)
+      await fallback.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      print("PASS native cue recovery takes priority over prior DOM fallback")
+      await fallback.close()
+
       # Unsupported sites must fail explicitly rather than make up captions.
       page=await browser.new_page()
       await setup(page,"https://example.com/","<div>Unknown video</div>")
