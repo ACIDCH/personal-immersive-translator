@@ -15,7 +15,7 @@ jobs:
       - name: Static checks and unit tests
         run: npm run verify
       - name: Validate Python PDF/OCR bridge syntax
-        run: python -m py_compile services/babeldoc_bridge.py
+        run: python -m compileall -q services benchmarks
       - name: Package installable extension
         run: |
           zip -q -r personal-immersive-translator-alpha.zip manifest.json src assets README.md LICENSE docs services
