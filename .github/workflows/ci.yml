@@ -1,4 +1,4 @@
-name: Validate extension
+name: Validate and package extension
 on:
   push:
   pull_request:
@@ -12,4 +12,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm run verify
+      - name: Static checks and unit tests
+        run: npm run verify
+      - name: Package installable extension
+        run: |
+          zip -q -r personal-immersive-translator-alpha.zip manifest.json src assets README.md LICENSE docs
+          unzip -l personal-immersive-translator-alpha.zip
+      - name: Upload validated package
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-immersive-translator-alpha
+          path: personal-immersive-translator-alpha.zip
+          retention-days: 14
