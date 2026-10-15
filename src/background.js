@@ -61,10 +61,16 @@ async function handle(message, sender) {
     if(sender.tab)throw new TranslationError('只能从插件控制面板停止录音');
     await stopLiveAsr();return {stopped:true};
   }
-  if(['PIT_ASR_RESULT','PIT_ASR_ERROR','PIT_ASR_METRICS'].includes(message.type)){
+  if(['PIT_ASR_RESULT','PIT_ASR_ERROR','PIT_ASR_METRICS','PIT_ASR_STREAM_ENDED'].includes(message.type)){
     if(sender.url!==chrome.runtime.getURL('src/offscreen.html'))throw new TranslationError('无效的本机 ASR 来源');
     const session=await chrome.storage.session.get('pit_live_asr_tab');
     if(!session.pit_live_asr_tab || session.pit_live_asr_tab!==message.tabId)return {ignored:true};
+    if(message.type==='PIT_ASR_STREAM_ENDED'){
+      const tabId=session.pit_live_asr_tab;
+      await stopLiveAsr();
+      await chrome.tabs.sendMessage(tabId,{type:'PIT_ASR_INTERRUPTED_VIEW'}).catch(()=>{});
+      return {stopped:true,reason:'capture-ended'};
+    }
     const type=message.type==='PIT_ASR_RESULT'?'PIT_ASR_TEXT_VIEW'
       :message.type==='PIT_ASR_ERROR'?'PIT_ASR_ERROR_VIEW':'PIT_ASR_METRICS_VIEW';
     const payload={type};
