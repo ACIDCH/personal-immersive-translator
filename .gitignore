@@ -5,3 +5,6 @@ node_modules/
 !.env.example
 *.log
 coverage/
+
+# Generated from pinned Mozilla PDF.js dependency during CI
+src/vendor/
