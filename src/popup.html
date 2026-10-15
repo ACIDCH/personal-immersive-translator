@@ -6,5 +6,5 @@
 <section class="panel"><div class="label">实验性实时语音翻译（本机 Whisper）</div>
 <label>本机服务令牌<input id="asrToken" type="password" autocomplete="off" placeholder="PIT_BRIDGE_TOKEN" style="width:100%"></label>
 <div class="controls"><button id="asrStart">开始捕获当前标签页声音</button><button id="asrStop">停止实时语音翻译</button></div>
-<p class="muted">只有明确点击才捕获声音；仅发送到 127.0.0.1 的本机 Whisper 服务。本模式默认只使用常规翻译，不自动调用 AI。受 DRM 保护的视频可能不能录音。</p></section>
+<p class="muted">只有明确点击才捕获声音。原始音频只发送到本机 Whisper 服务；识别后的文本会发送至你配置的常规翻译服务。不自动调用 AI。DRM 视频可能不能录音。</p></section>
 <p class="notice">AI 仅在你主动选择 AI 模式并点击翻译时使用。网站内容会发送至所选翻译服务。</p><div id="status" class="status" role="status" aria-live="polite"></div></main><script src="lib/subtitle-import.js"></script><script type="module" src="popup.js"></script></body></html>
