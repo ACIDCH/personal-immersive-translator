@@ -111,9 +111,13 @@
         render(fresh ? (state.cache.get(fresh.key) || '正在翻译…') : '');
       }
     } catch(error) {
-      state.failedAt=Date.now();
-      if(generation===state.generation) render('字幕翻译暂时失败，请检查服务或额度');
-    } finally {state.busy=false;}
+      if(generation===state.generation){
+        state.failedAt=Date.now();
+        render('字幕翻译暂时失败，请检查服务或额度');
+      }
+    } finally {
+      if(generation===state.generation)state.busy=false;
+    }
   }
   function stop() {
     state.active=false;state.generation++;
