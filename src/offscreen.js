@@ -107,7 +107,13 @@ async function start({streamId,tabId,token}){
       c.queue.push(new Float32Array(e.inputBuffer.getChannelData(0)));
     };
     stream.getAudioTracks().forEach(t=>t.addEventListener('ended',()=>{
-      if(current===c)void stop();
+      if(current===c)void (async()=>{
+        await stop();
+        // The audio track may end due to a player's device/permission change,
+        // tab closure or Chrome revoking capture. Clear the service worker's
+        // session too, rather than leaving a fake "recording" UI behind.
+        await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId});
+      })();
     },{once:true}));
     await context.resume();
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
