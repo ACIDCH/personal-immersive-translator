@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install pinned open-source PDF.js
+        run: npm install --no-audit --no-fund --ignore-scripts
       - name: Static checks and unit tests
         run: npm run verify
       - name: Validate Python PDF/OCR bridge syntax
@@ -70,5 +72,13 @@ jobs:
         run: |
           python -m pip install 'playwright==1.55.0'
           python -m playwright install --with-deps chromium
+          python -m pip install PyMuPDF
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install and vendor pinned PDF.js before loading extension
+        run: |
+          npm install --no-audit --no-fund --ignore-scripts
+          npm run vendor:pdf
       - name: Test real unpacked extension UI
         run: python tests/extension_smoke.py
