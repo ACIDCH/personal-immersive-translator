@@ -36,8 +36,8 @@ async def setup(page,url,html):
         return {ok:true,translations:msg.texts?.map(x=>'译文:'+x)};
       }
     }};
-    window.pitAction=(type)=>new Promise(r=>{
-      for(const cb of window.pitCallbacks)cb({type,mode:'standard'},{},r);
+    window.pitAction=(type,cues=[])=>new Promise(r=>{
+      for(const cb of window.pitCallbacks)cb({type,mode:'standard',cues},{},r);
     });
   }""")
   for path in ("lib/caption-core.js","lib/platform-captions.js","subtitles.js"):
@@ -78,6 +78,13 @@ async def run():
       assert not unsupported["ok"],unsupported
       await page.close()
       print("PASS unsupported page reports missing caption source")
+      # A manually imported SRT cannot be aligned without a video time axis.
+      # Prior versions threw by dereferencing video.currentTime when video=null.
+      imported=await page.evaluate("""()=>window.pitAction('PIT_CAPTIONS_START',[
+        {startTime:0,endTime:5,text:'Authorized subtitle from a file'}
+      ])""")
+      assert not imported["ok"] and "视频时间轴" in imported["reason"],imported
+      print("PASS imported SRT without video fails gracefully, no runtime crash")
 
       # The LMS top document cannot inspect a Panopto cross-origin iframe.
       # Tell the user why; never reach through the frame's access boundary.
