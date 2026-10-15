@@ -94,6 +94,27 @@ async def main():
             await video.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
             assert await video.locator(".pit-caption-overlay").count() == 0
             print("PASS: imported subtitle timestamp rendering and stop cleanup")
+
+            # Regression: long lecture subtitle files must still translate after
+            # seeking beyond the previously truncated 3000-cue boundary.
+            await video.evaluate("""() => {
+              window.pitSimTime=4050;
+              Object.defineProperty(document.querySelector('video'),'currentTime',{
+                configurable:true,get:()=>window.pitSimTime
+              });
+            }""")
+            long_result=await video.evaluate("""()=>window.pitAction(
+              'PIT_CAPTIONS_START','standard',
+              Array.from({length:5000},(_,i)=>({
+                startTime:i,endTime:i+0.75,text:'cue '+i
+              }))
+            )""")
+            assert long_result["ok"],long_result
+            await video.locator(".pit-caption-translated").get_by_text(
+                "译文:cue 4050").wait_for(timeout=5000)
+            await video.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+            assert await video.locator(".pit-caption-overlay").count() == 0
+            print("PASS: long lecture subtitle seeks beyond 3000 cues")
             assert not errors, "Browser console exceptions: "+repr(errors)
         finally:
             await browser.close()
