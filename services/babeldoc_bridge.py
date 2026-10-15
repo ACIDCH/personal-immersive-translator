@@ -35,9 +35,11 @@ def scanned_pdf(path):
         import fitz
         with fitz.open(path) as doc:
             if doc.page_count > 300: raise ValueError("超过 300 页上限")
-            scan=min(3,doc.page_count)
-            if not scan: raise ValueError("PDF 没有任何页面")
-            return sum(len(doc[i].get_text().strip()) for i in range(scan)) < scan*30
+            if doc.page_count < 1: raise ValueError("PDF 没有任何页面")
+            # OCRmyPDF --skip-text safely leaves searchable pages untouched.
+            # Check every page: a three-page prefix misses mixed text/scanned
+            # appendices later in a paper or thesis.
+            return any(len(doc[i].get_text().strip()) < 30 for i in range(doc.page_count))
     except (ImportError,ValueError):
         raise
     except Exception as exc:
@@ -61,10 +63,12 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
         "openai-base-url":"https://api.deepseek.com/v1",
         "openai-api-key":KEY,"lang-in":source_lang,"lang-out":target_lang,
         "output":str(dest),"no-mono":True,"qps":2}
-    with config.open("x",encoding="utf8") as f:
+    # The config contains a user-owned API key. Create it as private from
+    # the first byte: chmod AFTER writing briefly exposes a mode-0644 file.
+    fd=os.open(config,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    with os.fdopen(fd,"w",encoding="utf8") as f:
         f.write("[babeldoc]\n")
         for field,value in settings.items():f.write(field+" = "+json.dumps(value,ensure_ascii=False)+"\n")
-    config.chmod(0o600)
     try:
         subprocess.run(["babeldoc","--config",str(config),"--files",str(input_file)],
              check=True,timeout=900,cwd=str(dest),stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
@@ -73,7 +77,19 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
     outputs=[f for f in dest.glob("*.pdf") if f not in {input_file,source} and f.is_file()]
     dual=[f for f in outputs if "dual" in f.name.lower() or "bilingual" in f.name.lower()]
     if not dual: raise RuntimeError("BabelDOC 未产生可识别的双语 PDF；请检查 CLI 版本及输出命名")
-    return max(dual,key=lambda p:p.stat().st_mtime).read_bytes()
+    winner=max(dual,key=lambda p:p.stat().st_mtime)
+    if winner.stat().st_size > 100*1024*1024:
+        raise RuntimeError("BabelDOC 输出超过 100MB 上限")
+    try:
+        import fitz
+        with fitz.open(winner) as translated:
+            if translated.page_count < 1:
+                raise RuntimeError("译文 PDF 不包含有效页面")
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("BabelDOC 输出并非有效 PDF") from exc
+    return winner.read_bytes()
 
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
