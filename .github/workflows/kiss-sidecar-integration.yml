@@ -28,6 +28,15 @@ jobs:
           python-version: '3.12'
       - name: Verify PIT integration assembly and local Whisper readiness
         run: node --test tests/kiss-sidecar.test.js tests/kiss-whisper-readiness.test.js tests/kiss-site-diagnostics.test.js
+      - name: Check personal Windows PowerShell build script syntax without running it
+        shell: pwsh
+        run: |
+          $tokens=$null
+          $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            'scripts/build-kiss-personal-poc.ps1',[ref]$tokens,[ref]$errors
+          ) | Out-Null
+          if($errors.Count -gt 0){ $errors | Out-String | Write-Host; exit 1 }
       - name: Checkout fixed GPL KISS source outside our project
         run: |
           git clone --no-checkout --filter=blob:none https://github.com/fishjar/kiss-translator.git /tmp/pit-kiss-upstream
