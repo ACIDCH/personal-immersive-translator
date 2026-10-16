@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.9 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.4.0 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -142,3 +142,12 @@ As requested, no intermediate user-facing installer, main merge or overall UI/br
 - [v0.3.9 runtime verification details](docs/REAL_PDF_RUNTIME_GATE_039_zh-CN.md).
 
 No UI/brand redesign, intermediate installer or main merge. Final real-model testing and independent Codex audit are still required.
+
+## v0.4.0 — strict visible-iframe video caption routing
+
+- A cross-origin Panopto/YouTube embedded frame is selected by the **exact visible player URL**, not merely by hostname, so unrelated recordings on the same LMS host cannot be mixed up. Multiple indistinguishable matches fail closed.
+- The user must explicitly authorize the specific HTTPS player origin. Immediately before and after cross-origin script injection, the extension rechecks the live frame selection to detect navigation races; the top LMS and child frame each honor the user's blocked-host rules. Restarting subtitle translation stops any prior child session in the same tab.
+- A new headless Chromium **real Manifest V3 multi-frame test** creates synthetic LMS/Panopto-shaped URLs, requests optional per-site Chrome permission from an actual click, enumerates real cross-origin frames and validates isolated subtitle injection, start and stop. This tests browser security APIs on synthetic pages, **not actual authorized Panopto/Netflix or DRM streams**.
+- [v0.4.0 engineering evidence and remaining requirements](docs/EMBEDDED_CAPTION_FRAME_ACCEPTANCE_040_zh-CN.md).
+
+Per user preference, this stage does **not** deliver an interim installer ZIP and does **not** initiate the later combined UI/project naming/visual redesign. Main stays unchanged pending real-device UAT and final independent Codex audit.
