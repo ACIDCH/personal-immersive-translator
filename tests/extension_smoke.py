@@ -84,7 +84,6 @@ async def main():
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
                 await popup.reload()
-                await popup.locator("#providerInfo").get_by_text("Microsoft Translator").wait_for(timeout=8000)
                 # The persisted standard provider is DeepL after Options.
                 await popup.wait_for_function("""()=>
                     document.querySelector('#providerInfo')?.textContent.includes('DeepL')
