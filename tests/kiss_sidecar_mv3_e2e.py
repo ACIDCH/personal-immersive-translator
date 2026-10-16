@@ -21,27 +21,30 @@ async def main():
             "--no-sandbox",f"--disable-extensions-except={ext}",
             f"--load-extension={ext}"])
         try:
-          # Headless Chromium may not expose chrome://extensions or start an
-          # idle MV3 worker immediately. Resolve targets first; for unpacked
-          # extensions without a manifest key, Chrome derives the ID from
-          # the canonical absolute unpacked directory path.
-          probe=await browser.new_page()
-          session=await browser.new_cdp_session(probe)
-          targets=(await session.send("Target.getTargets"))["targetInfos"]
-          urls=[t["url"] for t in targets if
-            t.get("url","").startswith("chrome-extension://")]
-          if urls:
-            extension_id=urls[0].split("/")[2]
-          else:
-            digest=hashlib.sha256(str(ext).encode("utf-8")).digest()[:16]
-            extension_id="".join(chr(97+(b>>4))+chr(97+(b&15)) for b in digest)
-          prefs=Path(profile)/"Default/Preferences"
-          if prefs.is_file():
-            config=json.loads(prefs.read_text(encoding="utf-8"))
-            print("Chromium installed extension IDs:",list(config.get("extensions",{}).get("settings",{})),flush=True)
-          print("Chrome extension targets:",urls,
-                "candidate ID:",extension_id,flush=True)
-          origin="chrome-extension://"+extension_id
+          # Headful Chrome's actual extension manager is authoritative:
+          # do not guess an extension ID from paths if the package failed
+          # installation or the service worker did not start.
+          manager=await browser.new_page()
+          await manager.goto("chrome://extensions",wait_until="domcontentloaded")
+          await manager.wait_for_function("""() =>
+            document.querySelector('extensions-manager')?.shadowRoot
+              ?.querySelector('#items-list')?.shadowRoot !== undefined
+          """,timeout=12000)
+          installed=await manager.evaluate("""() => {
+            const list=document.querySelector('extensions-manager').shadowRoot
+              .querySelector('#items-list').shadowRoot;
+            return [...list.querySelectorAll('extensions-item')].map(e=>({
+              id:e.data?.id||e.id,
+              name:e.data?.name||e.shadowRoot?.querySelector('#name')?.textContent||'',
+              errors:e.data?.manifestErrors?.map(x=>x.message)||[]
+            }));
+          }""")
+          print("Chrome installed extension state:",installed,flush=True)
+          assert installed,"No unpacked KISS extension found in Chrome manager"
+          ids=[item["id"] for item in installed if
+               item.get("id") and len(item["id"])==32]
+          assert ids,installed
+          origin="chrome-extension://"+ids[0]
           errors=[]
           popup=await browser.new_page()
           popup.on("pageerror",lambda e:errors.append(str(e)))
