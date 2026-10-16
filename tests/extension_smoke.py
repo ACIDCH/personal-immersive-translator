@@ -78,6 +78,21 @@ async def main():
                 assert persisted["standardProvider"]=="deepl",persisted
                 assert persisted["autoAI"] is False
                 print("PASS: options work and local settings persist")
+                # A filled key means "configured", not proven to be reachable.
+                # The popup must clearly differentiate those two states.
+                await options.locator('[name="deeplKey"]').fill("fixture-key-never-used")
+                await options.get_by_role("button",name="保存设置").click()
+                await options.get_by_text("设置已保存。").wait_for(timeout=8000)
+                await popup.reload()
+                await popup.locator("#providerInfo").get_by_text("Microsoft Translator").wait_for(timeout=8000)
+                # The persisted standard provider is DeepL after Options.
+                await popup.wait_for_function("""()=>
+                    document.querySelector('#providerInfo')?.textContent.includes('DeepL')
+                """,timeout=8000)
+                setup=await popup.locator("#setupStatus").inner_text()
+                assert "已填写服务配置" in setup and "尚未验证" in setup,setup
+                print("PASS: popup reports configured key without claiming API connectivity")
+
 
                 tools=await context.new_page()
                 tools.on("pageerror",lambda e: errors.append("tools: "+str(e)))
