@@ -144,7 +144,8 @@ def server_port_valid():
 def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
     asr_ready=(bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN))
-               if ASR_BACKEND=="cli" else ASR_BACKEND=="server" and server_is_ready())
+               if ASR_BACKEND=="cli" else
+               ASR_BACKEND=="server" and ASR_SERVER_EXPERIMENTAL and server_is_ready())
     babeldoc_cli=inspect_babeldoc_cli()
     return {
         "ready":bool(KEY and babeldoc_cli["compatible"]),
@@ -154,6 +155,7 @@ def health(x_pit_token: str|None=Header(None)):
         "speech_asr":asr_ready,
         "speech_asr_backend":ASR_BACKEND,
         "speech_asr_verified":ASR_BACKEND=="server" and asr_ready,
+        "speech_asr_requires_risk_ack":ASR_BACKEND=="server" and not ASR_SERVER_EXPERIMENTAL,
         "languages":list(LANGS.keys()),
         "installed_ocr_languages":installed_ocr_languages(),
         "engine":"local-only"
@@ -257,11 +259,15 @@ def validate_asr_wav(data: bytes):
 ASR_MODEL=os.environ.get("PIT_WHISPER_MODEL","")
 ASR_BIN=os.environ.get("PIT_WHISPER_BIN","whisper-cli")
 ASR_BACKEND=os.environ.get("PIT_ASR_BACKEND","cli").strip().lower()
+ASR_SERVER_EXPERIMENTAL=os.environ.get("PIT_ACK_UNAUTH_WHISPER_SERVER","")=="1"
 asr_lock=asyncio.Lock()
 @app.post("/asr")
 async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
     if ASR_BACKEND=="server":
+        if not ASR_SERVER_EXPERIMENTAL:
+            raise HTTPException(status_code=503,
+                detail="常驻 Whisper server 默认禁用；需确认本机独立服务的跨域安全风险")
         try:
             configured_server_port()
         except ValueError as exc:
