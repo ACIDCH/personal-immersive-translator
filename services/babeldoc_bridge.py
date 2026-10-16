@@ -15,6 +15,11 @@ import json
 import struct
 import io
 import csv
+import httpx
+try:
+    from services.whisper_server import configured_server_port, transcribe_server, server_is_ready
+except ModuleNotFoundError:  # Running python services/babeldoc_bridge.py directly
+    from whisper_server import configured_server_port, transcribe_server
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
@@ -94,6 +99,22 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
         raise
     except Exception as exc:
         raise RuntimeError("BabelDOC 输出并非有效 PDF") from exc
+    # A valid file header is not proof of a usable translated document.
+    # Reject missing pages or universally unextractable text; report clipped
+    # spans as structural warnings for subsequent human review.
+    try:
+        try:
+            from services.pdf_quality import inspect_pair
+        except ModuleNotFoundError:
+            from pdf_quality import inspect_pair
+        quality=inspect_pair(source,winner)
+    except (ValueError,RuntimeError) as exc:
+        raise RuntimeError("译文 PDF 结构验收失败") from exc
+    if quality["status"]=="review-needed":
+        import logging
+        logging.getLogger(__name__).warning(
+            "PDF 翻译版面需要人工复核：%s 个越界文本对象",
+            quality["outside_text_spans"])
     return winner.read_bytes()
 
 def installed_ocr_languages():
@@ -107,14 +128,26 @@ def installed_ocr_languages():
         return []
 
 
+def server_port_valid():
+    try:
+        configured_server_port()
+        return True
+    except ValueError:
+        return False
+
+
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
+    asr_ready=(bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN))
+               if ASR_BACKEND=="cli" else ASR_BACKEND=="server" and server_is_ready())
     return {
         "ready":bool(KEY and shutil.which("babeldoc")),
         "pdf_ocr":bool(shutil.which("ocrmypdf") and shutil.which("tesseract")),
         "image_ocr":bool(shutil.which("tesseract")),
-        "speech_asr":bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN)),
+        "speech_asr":asr_ready,
+        "speech_asr_backend":ASR_BACKEND,
+        "speech_asr_verified":ASR_BACKEND=="server" and asr_ready,
         "languages":list(LANGS.keys()),
         "installed_ocr_languages":installed_ocr_languages(),
         "engine":"local-only"
@@ -217,12 +250,21 @@ def validate_asr_wav(data: bytes):
 
 ASR_MODEL=os.environ.get("PIT_WHISPER_MODEL","")
 ASR_BIN=os.environ.get("PIT_WHISPER_BIN","whisper-cli")
+ASR_BACKEND=os.environ.get("PIT_ASR_BACKEND","cli").strip().lower()
 asr_lock=asyncio.Lock()
 @app.post("/asr")
 async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
-    if not ASR_MODEL or not pathlib.Path(ASR_MODEL).is_file() or not shutil.which(ASR_BIN):
-        raise HTTPException(status_code=503,detail="尚未配置本地 Whisper 模型或 whisper-cli")
+    if ASR_BACKEND=="server":
+        try:
+            configured_server_port()
+        except ValueError as exc:
+            raise HTTPException(status_code=503,detail="本机 Whisper server 端口配置无效") from exc
+    elif ASR_BACKEND=="cli":
+        if not ASR_MODEL or not pathlib.Path(ASR_MODEL).is_file() or not shutil.which(ASR_BIN):
+            raise HTTPException(status_code=503,detail="尚未配置本地 Whisper 模型或 whisper-cli")
+    else:
+        raise HTTPException(status_code=503,detail="PIT_ASR_BACKEND 只能为 cli 或 server")
     data=await audio.read(2_000_001)
     try:
         validate_asr_wav(data)
@@ -231,6 +273,12 @@ async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Hea
     if asr_lock.locked():
         raise HTTPException(status_code=429,detail="语音模型繁忙；当前音频片段已跳过")
     async with asr_lock:
+        if ASR_BACKEND=="server":
+            try:
+                text=await transcribe_server(data)
+            except (httpx.HTTPError,RuntimeError,ValueError) as exc:
+                raise HTTPException(status_code=503,detail="本机 Whisper server 无法识别该语音片段，请检查独立模型服务") from exc
+            return {"text":text}
         with tempfile.TemporaryDirectory(prefix="pit-asr-") as temp:
             work=pathlib.Path(temp)
             input_file=work/"segment.wav"

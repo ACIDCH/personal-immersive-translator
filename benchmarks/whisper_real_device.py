@@ -42,6 +42,32 @@ def summarize(samples, failures, duration):
             "model_loading_included":True}
 
 
+async def run_persistent(filename, count, port=8080):
+    """Real repeated requests against a preloaded local whisper-server.
+
+    This measures *model inference endpoint* time, not capture/network-to-
+    translation end-to-end. Does not print or retain transcription text.
+    """
+    from services.whisper_server import transcribe_server,configured_server_port
+    configured_server_port(port)
+    seconds=wav_duration(filename)
+    data=pathlib.Path(filename).read_bytes()
+    durations=[]
+    failures=0
+    for _ in range(count):
+        start=time.perf_counter()
+        try:
+            await transcribe_server(data,port=port)
+            durations.append(time.perf_counter()-start)
+        except Exception:
+            failures+=1
+        if failures>=4:
+            break
+    result=summarize(durations,failures,seconds)
+    result["mode"]="persistent-server"
+    return result
+
+
 def run(cli, model, filename, count, timeout):
     if not pathlib.Path(model).is_file():
         raise ValueError("请指定真实存在的 multilingual whisper.cpp 模型")
@@ -69,7 +95,9 @@ def run(cli, model, filename, count, timeout):
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser(description="Whisper real-device inference measurements")
-    parser.add_argument("--model",required=True,type=pathlib.Path)
+    parser.add_argument("--model",type=pathlib.Path)
+    parser.add_argument("--backend",choices=("cli","server"),default="cli")
+    parser.add_argument("--port",type=int,default=8080)
     parser.add_argument("--input",required=True,type=pathlib.Path)
     parser.add_argument("--cli",default="whisper-cli")
     parser.add_argument("--count",type=int,default=10)
@@ -77,5 +105,12 @@ if __name__=="__main__":
     args=parser.parse_args()
     if not 1 <= args.count <= 600 or not 5 <= args.timeout <= 180:
         parser.error("count 必须为 1–600，timeout 为 5–180 秒")
-    print(json.dumps(run(args.cli,args.model,args.input,args.count,args.timeout),
-                     ensure_ascii=False,indent=2))
+    if args.backend=="cli":
+        if not args.model:
+            parser.error("--model is required for cli mode")
+        result=run(args.cli,args.model,args.input,args.count,args.timeout)
+        result["mode"]="per-chunk-cli"
+    else:
+        import asyncio
+        result=asyncio.run(run_persistent(args.input,args.count,args.port))
+    print(json.dumps(result,ensure_ascii=False,indent=2))
