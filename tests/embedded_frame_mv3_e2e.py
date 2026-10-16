@@ -49,6 +49,24 @@ async def main():
         popup=await context.new_page()
         await popup.goto(f"chrome-extension://{extension_id}/src/popup.html")
         await popup.locator("#captionsStart").wait_for(state="attached")
+        # Opening popup.html as a standalone tab does NOT grant activeTab for
+        # the LMS tab as clicking the actual toolbar icon would. Grant only
+        # the synthetic LMS origin via a real user click before enumerating it.
+        await popup.evaluate("""() => {
+          window.coursePermission='pending';
+          const button=document.createElement('button');
+          button.id='grantTestCourse';button.textContent='Allow fixture LMS';
+          button.addEventListener('click',async()=>{
+            try{window.coursePermission=await chrome.permissions.request({
+              origins:['https://lms.example.edu/*']});
+            }catch(error){window.coursePermission=String(error);}
+          });
+          document.body.append(button);
+        }""")
+        await popup.locator("#grantTestCourse").click()
+        await popup.wait_for_function("window.coursePermission!=='pending'",timeout=10000)
+        assert await popup.evaluate("window.coursePermission") is True
+
         state=await popup.evaluate("""async()=> {
           const tabs=await chrome.tabs.query({});
           const target=tabs.find(t=>t.url?.startsWith('https://lms.example.edu/course/lesson'));
