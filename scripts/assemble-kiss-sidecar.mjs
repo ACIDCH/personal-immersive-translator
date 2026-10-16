@@ -45,6 +45,9 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
  manifest.optional_host_permissions=[...new Set([...(manifest.optional_host_permissions||[]),'http://127.0.0.1/*'])];
  writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
  copyFileSync(join(root,'LICENSE'),join(build,'pit/PIT-LICENSE-MIT.txt'));
+ const upstreamLicense=resolve(build,'../../LICENSE');
+ must(existsSync(upstreamLicense),'Upstream GPL license missing from source checkout');
+ copyFileSync(upstreamLicense,join(build,'pit/KISS-LICENSE-GPL3.txt'));
  const report={host:'KISS Translator v2.1.1',hostLicense:'GPL-3.0',originalCorePreserved:true,
   entry:'pit/tools.html',settings:'pit/options.html',pdfEngine:'Mozilla PDF.js 6.4.299 Apache-2.0',
   sidecarLicense:'MIT',distribution:'POC_ONLY_NO_RELEASE'};
