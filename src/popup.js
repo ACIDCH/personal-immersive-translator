@@ -45,9 +45,13 @@ $('restore').onclick=()=>send('PIT_RESTORE');
 async function embeddedFrame(tabId){
   const found=await chrome.scripting.executeScript({
     target:{tabId},func:()=>[...document.querySelectorAll('iframe[src]')]
-      .filter(el=>el.getClientRects().length &&
-        getComputedStyle(el).visibility!=='hidden' &&
-        getComputedStyle(el).display!=='none')
+      .filter(el=>{
+        const style=getComputedStyle(el),box=el.getBoundingClientRect();
+        return style.display!=='none' && style.visibility==='visible' &&
+          Number(style.opacity)>0 && box.width>=120 && box.height>=60 &&
+          box.bottom>0 && box.right>0 &&
+          box.left<innerWidth && box.top<innerHeight;
+      })
       .slice(0,20).map(el=>el.src)
   });
   const visible=found?.[0]?.result||[];
