@@ -56,6 +56,32 @@ async def main():
           }""")
           assert injected.get("value")=="content",injected
           print("PASS: genuine KISS upstream translation content script injected",flush=True)
+          # The personal controller must resolve a real source tab and use
+          # the imported namespaced KISS/PIT speech router.
+          fixture_id=injected["tabId"]
+          control=await browser.new_page()
+          control.on("pageerror",lambda e:errors.append(str(e)))
+          await control.goto(origin+"/pit/control.html?tabId="+str(fixture_id))
+          await control.locator("#target").get_by_text(
+            "pit-upstream-fixture.example",exact=False).wait_for(timeout=10000)
+          state=await control.evaluate("""async()=>
+            chrome.runtime.sendMessage({type:'PIT_ASR_STATUS'})""")
+          assert state.get("ok")==True and state.get("active")==False,state
+          await control.locator("#asrStart").click()
+          await control.locator("#status").get_by_text(
+            "至少 16 字符",exact=False).wait_for(timeout=5000)
+          print("PASS: personal Whisper controller routed to original KISS MV3 worker",flush=True)
+          # Captions script is injected on owner click, not globally.
+          await control.locator("#captionStart").click()
+          await control.wait_for_timeout(350)
+          captions=await worker.evaluate("""async id=>{
+            const results=await chrome.scripting.executeScript({
+              target:{tabId:id},func:()=>globalThis.__PIT_CAPTION_V1__===true
+            });
+            return results?.[0]?.result||false;
+          }""",fixture_id)
+          assert captions,"Owner-started advanced caption code did not inject"
+          print("PASS: opt-in advanced captions content script injected on selected page",flush=True)
           await fixture.close()
           tools=await browser.new_page()
           tools.on("pageerror",lambda e:errors.append(str(e)))

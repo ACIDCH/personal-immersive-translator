@@ -1,13 +1,14 @@
-name: POC - KISS PDF OCR sidecar real browser
+name: POC - KISS Whisper subtitles and PDF sidecar
 on:
   push:
     branches:
-      - spike/kiss-v211-multimodal-sidecar-v045
+      - feat/kiss-whisper-captions-sidecar-v046
   pull_request:
     paths:
       - 'scripts/assemble-kiss-sidecar.mjs'
       - 'tests/kiss-sidecar.test.js'
       - 'tests/kiss_sidecar_mv3_e2e.py'
+      - 'src/kiss/**'
       - '.github/workflows/kiss-sidecar-integration.yml'
 permissions:
   contents: read
@@ -49,6 +50,9 @@ jobs:
         run: |
           node scripts/assemble-kiss-sidecar.mjs /tmp/pit-kiss-upstream/build/chrome
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/options.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/asr-controller.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/control.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/offscreen.js
           node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream
       - name: Install Playwright Chromium (unbranded, MV3 test capable)
         run: |

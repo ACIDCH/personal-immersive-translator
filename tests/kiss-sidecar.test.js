@@ -14,6 +14,21 @@ function setup(version='2.1.1'){
  file('src/tools.html','<h1>文件与图片翻译</h1>');
  file('src/options.html','<h1>Personal Immersive Translator</h1>');
  file('src/pdf-preview.js',"const url=chrome.runtime.getURL('src/vendor/pdf.worker.mjs');");
+ const additional=['kiss/background-entry.js','kiss/asr-controller.js',
+ 'kiss/control.html','kiss/control.js','kiss/popup-entry.js',
+ 'offscreen.html','offscreen.js','audio-capture-worklet.js',
+ 'live-captions.js','subtitles.js','content.css',
+ 'lib/live-pipeline.js','lib/wav.js','lib/caption-core.js',
+ 'lib/platform-captions.js','lib/subtitle-import.js','lib/frame-route.js'];
+ for(const name of additional)file('src/'+name,'fixture');
+ file('src/kiss/background-entry.js',"import '../background.js';");
+ file('src/kiss/asr-controller.js',
+   "import {translateBatch} from '../lib/providers.js';\n"+
+   "import {normalizeSettings} from '../lib/settings.js';");
+ file('src/kiss/control.js',"import {chooseEmbeddedFrame} from '../lib/frame-route.js';");
+ file('src/offscreen.js',"const path=chrome.runtime.getURL('src/audio-capture-worklet.js');");
+ file('src/live-captions.js',"const message={type:'TRANSLATE_BATCH'};");
+ file('src/subtitles.js',"const message={type:'TRANSLATE_BATCH'};");
  file('src/tools.js',"const a=chrome.permissions.request({}); const b=chrome.permissions.request({}); const c=chrome.permissions.request({});");
  const tick=String.fromCharCode(96),dollar=String.fromCharCode(36);
  file('src/options.js',"import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';\n"+
@@ -36,7 +51,19 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
   const report=assembleKissSidecar(f.build,f.src);
   assert.equal(report.distribution,'POC_ONLY_NO_RELEASE');
   const m=JSON.parse(readFileSync(join(f.build,'manifest.json'),'utf8'));
-  assert.equal(m.background.service_worker,'background.js');
+  assert.equal(m.background.service_worker,'pit/background-entry.js');
+  assert.ok(m.permissions.includes('tabCapture'));
+  assert.ok(m.permissions.includes('offscreen'));
+  assert.ok(m.permissions.includes('activeTab'));
+  assert.ok(m.permissions.includes('webNavigation'));
+  assert.ok(readFileSync(join(f.build,'pit/background-entry.js'),'utf8')
+    .includes("import '../background.js'"));
+  assert.ok(readFileSync(join(f.build,'pit/offscreen.js'),'utf8')
+    .includes("chrome.runtime.getURL('pit/audio-capture-worklet.js')"));
+  assert.ok(readFileSync(join(f.build,'pit/live-captions.js'),'utf8')
+    .includes("type:'PIT_SIDECAR_TRANSLATE'"));
+  assert.ok(readFileSync(join(f.build,'pit/subtitles.js'),'utf8')
+    .includes("type:'PIT_SIDECAR_TRANSLATE'"));
   assert.ok(m.permissions.includes('storage'));
   assert.ok(!m.permissions.includes('permissions'));
   assert.ok(!(m.optional_host_permissions||[]).includes('http://127.0.0.1/*'));
