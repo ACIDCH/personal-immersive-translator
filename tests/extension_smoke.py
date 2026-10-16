@@ -92,9 +92,24 @@ async def main():
                     info=await tools.locator('#pdfPreviewStatus').inner_text()
                     raise AssertionError(f"PDF.js preview did not render. Status={info!r}; JS errors={errors!r}") from exc
                 info=await tools.locator('#pdfPreviewStatus').inner_text()
-                assert "首页可读取文字" in info,info
+                assert "已抽查 1 页" in info,info
                 assert await tools.locator('#pdfPreview canvas').evaluate("(el)=>el.width>100 && el.height>100")
                 print("PASS: actual PDF.js worker renders PDF in installed extension")
+                # A born-digital introduction can hide later scanned pages.
+                # Mixed source files should prompt an OCR warning based on
+                # sampled pages, not just the first page.
+                mixed=fitz.open()
+                p=mixed.new_page()
+                p.insert_text((40,70),"Long searchable introductory text to a lecture handout.")
+                mixed.new_page()
+                await tools.locator('#pdf').set_input_files({
+                    "name":"mixed.pdf","mimeType":"application/pdf","buffer":mixed.tobytes()
+                })
+                mixed.close()
+                await tools.wait_for_function("""()=>
+                    document.querySelector('#pdfPreviewStatus')?.textContent.includes('第 2 页')
+                """,timeout=18000)
+                print("PASS: actual PDF.js identifies possible scanned appendix past page one")
 
                 assert not errors,errors
             finally:
