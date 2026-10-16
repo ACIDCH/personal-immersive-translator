@@ -78,7 +78,8 @@ async function startEmbeddedCaptions(tabId,mode){
   // The frame may navigate while Chrome presents a permission prompt.
   // Re-resolve against the still-visible iframe URL before any injection.
   const before=await embeddedFrame(tabId);
-  if(!before || before.frameId!==frame.frameId || before.origin!==frame.origin)
+  if(!before || before.frameId!==frame.frameId || before.origin!==frame.origin ||
+     before.identity!==frame.identity)
     return {ok:false,reason:'播放器在授权过程中发生跳转，请重新点击开始。'};
   const target={tabId,frameIds:[frame.frameId]};
   await chrome.scripting.insertCSS({target,files:['src/content.css']});
@@ -88,10 +89,11 @@ async function startEmbeddedCaptions(tabId,mode){
   // Recheck after asynchronous script injection: do not start reading
   // captions in a different recording that reused this same frame ID.
   const after=await embeddedFrame(tabId);
-  if(!after || after.frameId!==frame.frameId || after.origin!==frame.origin)
+  if(!after || after.frameId!==frame.frameId || after.origin!==frame.origin ||
+     after.identity!==frame.identity)
     return {ok:false,reason:'播放器在启动前切换了录制内容，请重试。'};
   const started=await chrome.tabs.sendMessage(tabId,{
-    type:'PIT_CAPTIONS_START',mode
+    type:'PIT_CAPTIONS_START',mode,expectedUrl:frame.identity
   },{frameId:frame.frameId});
   if(started?.ok){
     await chrome.storage.session.set({['pit_caption_frame_'+tabId]:frame.frameId});

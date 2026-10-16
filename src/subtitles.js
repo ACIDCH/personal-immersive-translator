@@ -5,7 +5,7 @@
   const core = globalThis.PITCaptionCore;
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -23,7 +23,12 @@
     const tracks=[...video.textTracks].filter(t=>t.kind==='subtitles'||t.kind==='captions');
     return tracks.find(t=>t.mode==='showing') || tracks.find(t=>t.mode==='hidden') || tracks[0] || null;
   }
+  function currentRecordingUrl(){
+    try {const url=new URL(location.href);url.hash='';return url.href;}
+    catch {return '';}
+  }
   function render(text, cueText='') {
+    if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){stop();return;}
     if(!state.overlay) return;
     if(state.overlay.parentNode!== (document.fullscreenElement || document.documentElement)) {
       (document.fullscreenElement || document.documentElement).append(state.overlay);
@@ -48,11 +53,17 @@
   async function fetchBatch(texts, generation) {
     const response=await chrome.runtime.sendMessage({type:'TRANSLATE_BATCH',texts,mode:state.mode,userInitiated:state.mode==='ai',context:''});
     if(!response?.ok) throw new Error(response?.error || '字幕翻译失败');
+    if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){
+      stop();throw new Error('播放器录像地址发生变化，字幕会话已停止');
+    }
     if(generation!==state.generation || !state.active) return response.translations;
     return response.translations;
   }
   async function tick() {
     if (!state.active) return;
+    // A same-frame SPA change can silently switch Panopto recordings without
+    // changing frameId or origin. Fail closed before reading any new caption.
+    if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){stop();return;}
     // Prefer actual timed cues when available. Some sites advertise a native
     // TextTrack but never populate it, while rendering visible CC in the DOM.
     // Switch to the user's already-visible CC without reading private player
@@ -142,7 +153,7 @@
     clearInterval(state.timer);state.timer=null;
     if(state.track && state.originalMode!==null && state.track.mode==='hidden') state.track.mode=state.originalMode;
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;
   }
   function embeddedPlayerHint(){
     for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
@@ -159,7 +170,18 @@
     }
     return '';
   }
-  function start(mode, suppliedCues=[]) {
+  function start(mode, suppliedCues=[], expectedUrl=null) {
+    if(expectedUrl!==null && expectedUrl!==undefined){
+      let matches=false;
+      if(typeof expectedUrl==='string' && expectedUrl.length<=4096){
+        try{
+          const url=new URL(expectedUrl);
+          matches=url.protocol==='https:' && !url.username && !url.password &&
+            !url.hash && url.href===currentRecordingUrl();
+        }catch{}
+      }
+      if(!matches)return {ok:false,reason:'播放器录像已切换或身份校验失败，请重新开始字幕翻译。'};
+    }
     stop();
     const video=pickVideo();
     const adapter=platform?.identify(location.hostname);
@@ -177,6 +199,7 @@
     const track=validImport ? null : video ? chooseTrack(video) : null;
     if(!track && !validImport && !visible?.text) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
+    state.boundUrl=expectedUrl;
     state.originalMode=track?.mode ?? null;
     state.domMode=!track && !validImport;
     state.importedCues=validImport ? imported : null;
@@ -188,7 +211,7 @@
     return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察。请打开播放器原文字幕；适配器可能随网站更新而失效。':'原生字幕翻译已启动。'};
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
-    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues));
+    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues,msg.expectedUrl));
     else if(msg?.type==='PIT_CAPTIONS_STOP'){stop();respond({ok:true});}
   });
 })();

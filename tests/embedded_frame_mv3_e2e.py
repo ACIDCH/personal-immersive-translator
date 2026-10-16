@@ -96,21 +96,36 @@ async def main():
 
         tab_id=state["tabId"]
         frame_id=state["selected"]["frameId"]
-        result=await popup.evaluate("""async({tab,frame})=>{
+        rejected=await popup.evaluate("""async({tab,frame,wrong})=>{
           const target={tabId:tab,frameIds:[frame]};
           await chrome.scripting.insertCSS({target,files:['src/content.css']});
           await chrome.scripting.executeScript({target,files:[
             'src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js'
           ]});
           return chrome.tabs.sendMessage(tab,{
-            type:'PIT_CAPTIONS_START',mode:'standard'
+            type:'PIT_CAPTIONS_START',mode:'standard',expectedUrl:wrong
           },{frameId:frame});
-        }""",{"tab":tab_id,"frame":frame_id})
+        }""",{"tab":tab_id,"frame":frame_id,"wrong":WRONG})
+        assert not rejected["ok"],rejected
+        assert await course.frame_locator("#visible").locator(".pit-caption-overlay").count()==0
+        print("PASS: exact recording mismatch rejected before starting translation")
+
+        result=await popup.evaluate("""({tab,frame,expected})=>
+          chrome.tabs.sendMessage(tab,{
+            type:'PIT_CAPTIONS_START',mode:'standard',expectedUrl:expected
+          },{frameId:frame})
+        """,{"tab":tab_id,"frame":frame_id,"expected":VISIBLE})
         assert result["ok"],result
         await course.frame_locator("#visible").locator(".pit-caption-overlay").wait_for(timeout=8000)
         assert await course.frame_locator("#private").locator(".pit-caption-overlay").count()==0
         assert await course.locator(".pit-caption-overlay").count()==0
         print("PASS: real MV3 injected only the authorized chosen child frame")
+        await course.frame_locator("#visible").locator("body").evaluate(
+          "() => history.replaceState({}, '', '?id=switched-recording')")
+        await course.frame_locator("#visible").locator(".pit-caption-overlay").wait_for(
+          state="detached",timeout=5000)
+        assert await course.frame_locator("#private").locator(".pit-caption-overlay").count()==0
+        print("PASS: same-origin SPA recording switch stops bound subtitle session")
 
         stopped=await popup.evaluate("""({tab,frame})=>
           chrome.tabs.sendMessage(tab,{type:'PIT_CAPTIONS_STOP'},{frameId:frame})

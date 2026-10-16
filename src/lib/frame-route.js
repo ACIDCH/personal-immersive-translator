@@ -28,5 +28,8 @@ export function chooseEmbeddedFrame(visibleEmbeds,navigationFrames){
     visible.has(approvedFrameUrl(frame.url)));
   // Ambiguous iframe identity is not permission to read a random recording.
   if(matches.length!==1)return null;
-  return {frameId:matches[0].frameId,origin:approvedOrigin(matches[0].url)};
+  // Keep the exact approved recording URL in extension memory only. Never
+  // persist/log/display private query parameters or reduce identity to origin.
+  return {frameId:matches[0].frameId,origin:approvedOrigin(matches[0].url),
+    identity:approvedFrameUrl(matches[0].url)};
 }

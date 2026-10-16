@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.4.0 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.4.1 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -151,3 +151,10 @@ No UI/brand redesign, intermediate installer or main merge. Final real-model tes
 - [v0.4.0 engineering evidence and remaining requirements](docs/EMBEDDED_CAPTION_FRAME_ACCEPTANCE_040_zh-CN.md).
 
 Per user preference, this stage does **not** deliver an interim installer ZIP and does **not** initiate the later combined UI/project naming/visual redesign. Main stays unchanged pending real-device UAT and final independent Codex audit.
+
+## v0.4.1 — bind embedded captions to the exact recording
+
+- Subtitle permission routing now compares full canonical HTTPS recording URLs (including query parameters, excluding the fragment), not only a reused `frameId` and origin.
+- The selected URL is kept in extension memory only, never logged, displayed or persisted. The target frame validates that URL before starting, and stops its translation session if SPA history changes to another recording.
+- Browser MV3 fixture coverage rejects wrong-recording start and validates same-origin route changes; **this does not claim authenticated real Panopto/Netflix testing**.
+- See [recording-bound acceptance](docs/RECORDING_BOUND_SESSION_041_zh-CN.md). All stacked PRs remain drafts. No interim installer or main-branch merge.
