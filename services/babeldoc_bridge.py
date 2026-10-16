@@ -16,7 +16,10 @@ import struct
 import io
 import csv
 import httpx
-from whisper_server import configured_server_port, transcribe_server
+try:
+    from services.whisper_server import configured_server_port, transcribe_server
+except ModuleNotFoundError:  # Running python services/babeldoc_bridge.py directly
+    from whisper_server import configured_server_port, transcribe_server
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
