@@ -28,7 +28,25 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
    "    status.textContent='测试成功：'+translations[0];");
  txt=replaceOne(txt,"  const res=await chrome.runtime.sendMessage({type:'CLEAR_CACHE'});\n  status.textContent=res.ok?'缓存已清空':'清理失败：'+res.error;",
    "  try{await clearTranslations(chrome.storage.local);status.textContent='文件工具缓存已清空';}\n  catch(e){status.textContent='清理失败：'+String(e.message||e);}");
- writeFileSync(opt,txt);
+ writeFileSync(opt,txt.replaceAll('chrome.permissions.request(', 'chrome.permissions.contains('));
+ // The upstream required <all_urls> host grant already covers localhost.
+ // Do not redundantly declare an overlapping optional host permission.
+ // Check the existing user's grant rather than requesting a duplicate one.
+ const toolFile=join(build,'pit/tools.js');
+ let tools=readFileSync(toolFile,'utf8');
+ must(tools.split("chrome.permissions.request(").length===4,
+   'Expected three current PIT localhost permission requests to adapt');
+ tools=tools.replaceAll('chrome.permissions.request(', 'chrome.permissions.contains(');
+ writeFileSync(toolFile,tools);
+ // The original PDF.js page worker lived under src/vendor; the merged
+ // extension places this module under pit/vendor instead.
+ const pdfFile=join(build,'pit/pdf-preview.js');
+ const originalPdf=readFileSync(pdfFile,'utf8');
+ must(originalPdf.includes("chrome.runtime.getURL('src/vendor/pdf.worker.mjs')"),
+    'Unexpected PDF.js Worker URL in PIT original');
+ writeFileSync(pdfFile,originalPdf.replace(
+    "chrome.runtime.getURL('src/vendor/pdf.worker.mjs')",
+    "chrome.runtime.getURL('pit/vendor/pdf.worker.mjs')"));
  const optionHtml=join(build,'pit/options.html');
  writeFileSync(optionHtml,readFileSync(optionHtml,'utf8').replace('<h1>Personal Immersive Translator</h1>','<h1>个人文件工具配置</h1>'));
  const toolHtml=join(build,'pit/tools.html');
@@ -41,8 +59,11 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
   '<a href="pit/tools.html" target="_blank" rel="noopener noreferrer">PDF / 图片 OCR</a>'+
   '<a href="pit/options.html" target="_blank" rel="noopener noreferrer">文件工具设置</a></nav>';
  writeFileSync(popupFile,popup.replace('</body>',links+'</body>'));
- manifest.permissions=[...new Set([...(manifest.permissions||[]),'permissions'])];
- manifest.optional_host_permissions=[...new Set([...(manifest.optional_host_permissions||[]),'http://127.0.0.1/*'])];
+ // Preserve the original, valid KISS manifest permissions verbatim.
+ // "permissions" is not a Chrome API permission name; adding it is an
+ // unnecessary unknown permission warning. Required <all_urls> already
+ // includes localhost, so duplicating it in optional_host_permissions
+ // creates Chromium's optional/required overlap warning.
  writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
  copyFileSync(join(root,'LICENSE'),join(build,'pit/PIT-LICENSE-MIT.txt'));
  const upstreamLicense=resolve(build,'../../LICENSE');

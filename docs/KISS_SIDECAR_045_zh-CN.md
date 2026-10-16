@@ -25,3 +25,11 @@
 - 生产安装包、名称和最终前端可视化设计。
 
 保持 Draft PR；不修改 main，不宣称上游浏览器运行成功即代表本项目全部功能通过。
+
+## v0.4.5 组合版运行修复（2026-10-16）
+
+已发现 Google 正式品牌版 Chrome 自 137 起移除命令行 `--load-extension` 支持，先前用它在 GitHub Actions 加载临时扩展无法正确证明代码兼容性。使用 Playwright 自带的非品牌 Chromium 执行自动化，普通用户仍可通过 Chrome 扩展管理界面“加载已解压的扩展”安装。
+
+修复装配器：删除在 KISS `manifest.json` 中新增的无效 `permissions` API 权限以及与其已必需 `<all_urls>` 重叠的 localhost 可选权限；本机工具的权限检查改为 `chrome.permissions.contains`，不再对必需权限重复申请；PDF.js Worker 引用从原独立项目 `src/vendor/pdf.worker.mjs` 调整为组合包实际路径 `pit/vendor/pdf.worker.mjs`。新增 Node 回归断言以避免此类迁移路径和权限错误。
+
+上述更改以重新运行真实 Chromium MV3 测试为准，不把修复代码提交当作已完成浏览器验收。

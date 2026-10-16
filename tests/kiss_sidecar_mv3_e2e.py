@@ -2,8 +2,6 @@
 plus PIT PDF.js + OCR tools. No paid API keys, private media or real OCR model.
 """
 import asyncio
-import hashlib
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -17,37 +15,18 @@ async def main():
     with tempfile.TemporaryDirectory(prefix="kiss-sidecar-") as profile:
       async with async_playwright() as p:
         browser=await p.chromium.launch_persistent_context(
-          profile,channel="chrome",headless=False,args=[
+          profile,channel="chromium",headless=True,args=[
             "--no-sandbox",f"--disable-extensions-except={ext}",
             f"--load-extension={ext}"])
         try:
-          # Headful Chrome's actual extension manager is authoritative:
-          # do not guess an extension ID from paths if the package failed
-          # installation or the service worker did not start.
-          manager=await browser.new_page()
-          await manager.goto("chrome://extensions",wait_until="domcontentloaded")
-          print("Chrome manager URL:",manager.url,
-                "title:",await manager.title(),flush=True)
-          print("Chrome manager HTML:",(await manager.content())[:2400],flush=True)
-          await manager.wait_for_function("""() =>
-            document.querySelector('extensions-manager')?.shadowRoot
-              ?.querySelector('#items-list')?.shadowRoot !== undefined
-          """,timeout=12000)
-          installed=await manager.evaluate("""() => {
-            const list=document.querySelector('extensions-manager').shadowRoot
-              .querySelector('#items-list').shadowRoot;
-            return [...list.querySelectorAll('extensions-item')].map(e=>({
-              id:e.data?.id||e.id,
-              name:e.data?.name||e.shadowRoot?.querySelector('#name')?.textContent||'',
-              errors:e.data?.manifestErrors?.map(x=>x.message)||[]
-            }));
-          }""")
-          print("Chrome installed extension state:",installed,flush=True)
-          assert installed,"No unpacked KISS extension found in Chrome manager"
-          ids=[item["id"] for item in installed if
-               item.get("id") and len(item["id"])==32]
-          assert ids,installed
-          origin="chrome-extension://"+ids[0]
+          # Playwright bundled Chromium supports the --load-extension flag.
+          # Google-branded Chrome >=137 ignores that flag (Chrome policy),
+          # so waiting on its extension manager was not a valid install test.
+          worker=browser.service_workers[0] if browser.service_workers else await browser.wait_for_event(
+              "serviceworker",timeout=20000)
+          origin=worker.url.split("/background.js")[0]
+          assert origin.startswith("chrome-extension://"),worker.url
+          print("PASS: KISS MV3 background worker is active",origin,flush=True)
           errors=[]
           popup=await browser.new_page()
           popup.on("pageerror",lambda e:errors.append(str(e)))

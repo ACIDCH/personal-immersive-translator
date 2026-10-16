@@ -50,15 +50,11 @@ jobs:
           node scripts/assemble-kiss-sidecar.mjs /tmp/pit-kiss-upstream/build/chrome
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/options.js
           node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream
-      - name: Install Playwright client and use preinstalled Google Chrome
+      - name: Install Playwright Chromium (unbranded, MV3 test capable)
         run: |
           python -m pip install 'playwright==1.55.0' 'PyMuPDF>=1.24,<2'
-          google-chrome --version
-      - name: Verify browser popup, tools, settings, real PDF.js page
-        env:
-          DEBUG: 'pw:browser'
-        run: |
-          command -v xvfb-run
-          xvfb-run -a python tests/kiss_sidecar_mv3_e2e.py
+          python -m playwright install --with-deps chromium
+      - name: Verify live Chromium MV3 KISS popup, file tools and PDF.js
+        run: python tests/kiss_sidecar_mv3_e2e.py
       # GPL combined build exists only inside disposable CI runner.
       # Deliberately NO packaging/upload-artifact/release steps.
