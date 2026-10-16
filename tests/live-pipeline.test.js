@@ -39,3 +39,12 @@ test('AudioContext uses requested 16k if supported',()=>{
   class FakeAudioContext {constructor(options){this.sampleRate=options?.sampleRate||48000;}}
   assert.equal(makeAudioContext(FakeAudioContext).sampleRate,16000);
 });
+
+test('recognition safety cap uses dispatched request count',async()=>{
+ const {MAX_ASR_REQUESTS,asrLimitReached}=await import('../src/lib/live-pipeline.js');
+ assert.equal(MAX_ASR_REQUESTS,1440);
+ assert.equal(asrLimitReached(1439),false);
+ assert.equal(asrLimitReached(1440),true);
+ assert.equal(asrLimitReached(1441),true);
+ assert.equal(asrLimitReached(NaN),false);
+});
