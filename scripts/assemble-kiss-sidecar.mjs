@@ -76,6 +76,8 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
  const extra={
    'kiss/background-entry.js':'background-entry.js',
    'kiss/asr-controller.js':'asr-controller.js',
+   'kiss/bridge-client.js':'bridge-client.js',
+   'kiss/view-client.js':'view-client.js',
    'kiss/control.html':'control.html',
    'kiss/control.js':'control.js',
    'kiss/popup-entry.js':'popup-entry.js',
@@ -105,7 +107,13 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
    ['offscreen.js',"chrome.runtime.getURL('src/audio-capture-worklet.js')",
     "chrome.runtime.getURL('pit/audio-capture-worklet.js')"],
    ['live-captions.js',"type:'TRANSLATE_BATCH'","type:'PIT_SIDECAR_TRANSLATE'"],
-   ['subtitles.js',"type:'TRANSLATE_BATCH'","type:'PIT_SIDECAR_TRANSLATE'"]
+   ['subtitles.js',"type:'TRANSLATE_BATCH'","type:'PIT_SIDECAR_TRANSLATE'"],
+   ['live-captions.js','chrome.runtime.sendMessage({','globalThis.PITSidecar.send({'],
+   ['subtitles.js','chrome.runtime.sendMessage({','globalThis.PITSidecar.send({'],
+   ['live-captions.js','chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{',
+    'globalThis.PITSidecar.onViewMessage.addListener((msg,_sender,respond)=>{'],
+   ['subtitles.js','chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{',
+    'globalThis.PITSidecar.onViewMessage.addListener((msg,_sender,respond)=>{']
  ];
  for(const [target,old,replacement] of patches){
    const file=join(build,'pit',target);
@@ -113,6 +121,42 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
    must(text.split(old).length===2,'Unexpected PIT upstream module version: '+target);
    writeFileSync(file,text.replace(old,replacement));
  }
+
+ // The original offscreen audio engine is unchanged; only its messaging
+ // interface is adapted to a dedicated Port so KISS's onMessage polyfill
+ // never intercepts our capture start, stop, or recognition results.
+ const offscreenFile=join(build,'pit/offscreen.js');
+ let offscreen=readFileSync(offscreenFile,'utf8');
+ const notifyOriginal="async function notify(type,payload){\n  try{await chrome.runtime.sendMessage({type,...payload});}catch{}\n}";
+ must(offscreen.split(notifyOriginal).length===2,
+   'Unexpected upstream Whisper notification transport');
+ offscreen=offscreen.replace(notifyOriginal,
+   "let sidecarPort=null;\nasync function notify(type,payload){\n"+
+   "  try{sidecarPort?.postMessage({kind:'event',type,...payload});}catch{}\n}");
+ offscreen += `
+// Isolated, persistent offscreen-to-worker Port. KISS's original background
+// remains unaware of this communication channel.
+sidecarPort=chrome.runtime.connect({name:'pit-offscreen-v046'});
+sidecarPort.onMessage.addListener(msg=>{
+  if(msg?.kind!=='command')return;
+  const operation=msg.type==='PIT_OFFSCREEN_START'
+    ?start(msg):msg.type==='PIT_OFFSCREEN_STOP'
+      ?stop().then(()=>({ok:true}))
+      :Promise.resolve({ok:false,error:'Unsupported offscreen command'});
+  Promise.resolve(operation).then(result=>{
+    try{sidecarPort?.postMessage({kind:'reply',seq:msg.seq,...result});}catch{}
+  }).catch(e=>{
+    try{sidecarPort?.postMessage({kind:'reply',seq:msg.seq,
+      ok:false,error:String(e.message||e).slice(0,300)});}catch{}
+  });
+});
+sidecarPort.onDisconnect.addListener(()=>{
+  sidecarPort=null;
+  void stop();
+});
+`;
+ writeFileSync(offscreenFile,offscreen);
+
  const background=readFileSync(join(build,'pit/background-entry.js'),'utf8');
  must(background.includes("import '../background.js'"),
    'Cannot prove KISS original worker is imported into wrapper');
