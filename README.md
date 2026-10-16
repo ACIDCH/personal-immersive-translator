@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.7 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.8 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -124,3 +124,12 @@ The repository remains in stacked Draft PRs. No intermediate user-facing ZIP; de
 - [v0.3.7 runtime and release-gate audit](docs/CORE_RUNTIME_HARDENING_037_zh-CN.md).
 
 As requested, do not distribute an intermediate installer, merge Draft PRs or redesign the UI until the remaining real-device and document quality gates are satisfied.
+
+## v0.3.8 — authenticated in-process persistent ASR option
+
+- Add third optional `PIT_ASR_BACKEND=faster` using the actual **SYSTRAN/faster-whisper (MIT)** API inside the existing authenticated Python local bridge. A single CTranslate2 model is loaded from a user-provided local directory and reused across audio chunks; no extra unauthenticated HTTP listening endpoint. This does **not** download models or send raw audio to a cloud service.
+- The optional dependency is separate in `services/requirements-faster-whisper.txt`, preserving lightweight default `whisper-cli` and the disabled-by-default experimental `whisper-server` path. Requires real local `model.bin`, `config.json` and `tokenizer.json` and strictly `local_files_only=True`.
+- Unit/integration tests use real NumPy WAV PCM decoding and the **real installed upstream Python API signatures**; a test fake model validates one-time loading and authorized FastAPI request routing. No real downloaded model is inferred in CI; no 30-minute real-device p95 is claimed.
+- [Security, Windows preparation, exact config and remaining real acceptance](docs/INPROCESS_ASR_SECURITY_038_zh-CN.md).
+
+As requested, no intermediate user-facing installer, main merge or overall UI/brand redesign until all core tests and final independent Codex review.
