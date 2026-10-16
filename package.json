@@ -1,7 +1,7 @@
 {
   "name": "personal-immersive-translator",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.4.3",
   "type": "module",
   "description": "Personal privacy-first bilingual translation extension for Chromium browsers.",
   "scripts": {

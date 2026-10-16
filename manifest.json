@@ -3,7 +3,7 @@
   "name": "Personal Immersive Translator",
   "short_name": "PIT Translate",
   "description": "Immersive bilingual web, video captions, image OCR, and optional BabelDOC PDF translation.",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "minimum_chrome_version": "125",
   "permissions": [
     "activeTab",

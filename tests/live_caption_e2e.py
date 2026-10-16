@@ -21,7 +21,7 @@ async def main():
           onMessage:{addListener:cb=>window.callbacks.push(cb)},
           sendMessage:async msg=>{
             window.requests.push(msg);
-            await new Promise(r=>setTimeout(r,600));
+            await new Promise(r=>setTimeout(r,msg.texts?.[0]==='Slow previous session'?2200:600));
             return {ok:true,translations:msg.texts.map(t=>'译文:'+t)};
           }
         }};
@@ -31,34 +31,63 @@ async def main():
         });
       }""")
       await page.add_script_tag(path=str(ROOT))
-      await page.evaluate("()=>window.simulate({type:'PIT_ASR_VIEW_START'})")
+      sid_a="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      sid_b="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_START',sessionId:sid})",sid_a)
       now=await page.evaluate("Date.now()")
       await page.evaluate("""now=>window.simulate({
-        type:'PIT_ASR_TEXT_VIEW',text:'First sentence',
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',text:'First sentence',
         capturedAt:now,segmentMs:3000
       })""",now)
       for i in range(1,12):
         await page.evaluate("""({now,i})=>window.simulate({
-          type:'PIT_ASR_TEXT_VIEW',text:'Latest sentence '+i,
+          type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',text:'Latest sentence '+i,
           capturedAt:now,segmentMs:3000
         })""",{"now":now,"i":i})
       await page.locator(".pit-caption-translated").get_by_text("译文:Latest sentence 11").wait_for(timeout=5000)
       count=await page.evaluate("window.requests.length")
       assert count<=2,("translation requests not backpressure-limited",count)
       assert await page.evaluate("window.requests.every(r=>r.transient===true && r.mode==='standard')")
-      await page.evaluate("()=>window.simulate({type:'PIT_ASR_METRICS_VIEW',metrics:{requests:15,dropped:4,errors:1,p50Ms:850,p95Ms:3300}})")
+      await page.evaluate("()=>window.simulate({type:'PIT_ASR_METRICS_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',metrics:{requests:15,dropped:4,errors:1,p50Ms:850,p95Ms:3300}})")
       await page.evaluate("""now=>window.simulate({
-        type:'PIT_ASR_TEXT_VIEW',text:'Final sentence',capturedAt:now,segmentMs:3000
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',text:'Final sentence',capturedAt:now,segmentMs:3000
       })""",now)
       await page.locator(".pit-caption-translated").get_by_text("译文:Final sentence").wait_for(timeout=5000)
       footer=await page.locator(".pit-live-meta").inner_text()
       assert "p95" in footer and "丢弃 4" in footer and "识别错误 1" in footer,footer
-      await page.evaluate("()=>window.simulate({type:'PIT_ASR_VIEW_STOP'})")
+      # Old response must never hold the new session's translation queue.
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        text:'Slow previous session',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.wait_for_function("""()=>
+        window.requests.some(r=>r.texts?.[0]==='Slow previous session')
+      """)
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_a)
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_START',sessionId:sid})",sid_b)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        text:'Fresh session subtitle',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Fresh session subtitle").wait_for(timeout=1700)
+      # Replayed OLD stop and old recognized text must not affect new content.
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_a)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        text:'STALE should not show'
+      })""")
+      assert await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Fresh session subtitle").count()==1
+      await asyncio.sleep(2.1)
+      assert await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Fresh session subtitle").count()==1
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_b)
       assert await page.locator(".pit-asr-overlay").count()==0
       # Previously in-flight translation cannot reintroduce overlay after STOP.
       await asyncio.sleep(.9)
       assert await page.locator(".pit-asr-overlay").count()==0
-      await page.evaluate("()=>window.simulate({type:'PIT_ASR_INTERRUPTED_VIEW'})")
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_INTERRUPTED_VIEW',sessionId:sid})",sid_b)
       alert=await page.locator(".pit-asr-interrupted").inner_text()
       assert '已中断' in alert and '已停止' in alert,alert
       assert await page.locator(".pit-asr-overlay").count()==0

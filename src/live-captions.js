@@ -4,7 +4,8 @@
 (() => {
   if(window.__PIT_LIVE_CAPTIONS__)return;
   window.__PIT_LIVE_CAPTIONS__=true;
-  let enabled=false,seq=0,overlay=null,queued=null,busy=false;
+  let enabled=false,seq=0,overlay=null,queued=null;
+  let activeSession=null,lastStoppedSession=null,epoch=0,busyEpoch=null;
   let stats={requests:0,dropped:0,errors:0,p50Ms:0,p95Ms:0};
   const observed=[]; // timing only, no transcript retention.
   function ensure(){
@@ -34,19 +35,21 @@
     overlay.append(meta);
   }
   async function drain(){
-    if(busy||!enabled)return;
-    busy=true;
+    const generation=epoch;
+    if(!enabled || busyEpoch===generation || !queued)return;
+    busyEpoch=generation;
     try{
-      while(enabled&&queued){
+      while(enabled && epoch===generation && queued){
         const item=queued;queued=null;
         let translation='翻译服务不可用';
         try{
           const result=await chrome.runtime.sendMessage({
-            type:'TRANSLATE_BATCH',texts:[item.text],mode:'standard',transient:true,context:''
+            type:'TRANSLATE_BATCH',texts:[item.text],mode:'standard',transient:true,
+            sessionId:item.sessionId,context:''
           });
           translation=result?.ok ? String(result.translations?.[0]||''):'翻译服务不可用';
         }catch{translation='翻译连接失败';}
-        if(!enabled)break;
+        if(!enabled || epoch!==generation || activeSession!==item.sessionId)break;
         // Do not display a completed old translation after a newer cue arrived.
         if(item.sequence===seq){
           const capturedAt=Number(item.capturedAt);
@@ -58,16 +61,26 @@
           draw(item.text,translation,estimated);
         }
       }
-    }finally{busy=false;}
+    }finally{
+      if(busyEpoch===generation){
+        busyEpoch=null;
+        if(enabled && queued)void drain();
+      }
+    }
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
     if(msg?.type==='PIT_ASR_VIEW_START'){
-      enabled=true;seq++;queued=null;observed.length=0;
+      if(typeof msg.sessionId!=='string' || !/^[0-9a-f-]{36}$/i.test(msg.sessionId)){
+        respond({ok:false});return;
+      }
+      enabled=true;activeSession=msg.sessionId;lastStoppedSession=null;
+      epoch++;seq++;queued=null;observed.length=0;
       stats={requests:0,dropped:0,errors:0,p50Ms:0,p95Ms:0};
       draw('本机正在识别当前标签页音频…','');
       respond({ok:true});return;
     }
     if(msg?.type==='PIT_ASR_INTERRUPTED_VIEW'){
+      if(enabled || !lastStoppedSession || msg.sessionId!==lastStoppedSession)return;
       // A visible but temporary failure notice independent of the subtitle
       // overlay; never leave the UI suggesting audio is still being captured.
       const old=document.querySelector('.pit-asr-interrupted');
@@ -80,10 +93,14 @@
       return;
     }
     if(msg?.type==='PIT_ASR_VIEW_STOP'){
-      enabled=false;seq++;queued=null;observed.length=0;
+      if(!enabled || msg.sessionId!==activeSession){
+        respond({ok:true,ignored:true});return;
+      }
+      lastStoppedSession=activeSession;activeSession=null;
+      enabled=false;epoch++;seq++;queued=null;observed.length=0;
       overlay?.remove();overlay=null;respond({ok:true});return;
     }
-    if(!enabled)return;
+    if(!enabled || msg?.sessionId!==activeSession)return;
     if(msg?.type==='PIT_ASR_METRICS_VIEW'){
       const m=msg.metrics||{};
       stats={requests:Number(m.requests)||0,dropped:Number(m.dropped)||0,
@@ -98,7 +115,8 @@
     const text=String(msg.text||'').trim().slice(0,5000);
     if(!text)return;
     seq++;
-    queued={text,sequence:seq,capturedAt:msg.capturedAt,segmentMs:msg.segmentMs};
+    queued={text,sequence:seq,capturedAt:msg.capturedAt,segmentMs:msg.segmentMs,
+      sessionId:activeSession};
     draw(text,'正在翻译…');
     void drain();
   });

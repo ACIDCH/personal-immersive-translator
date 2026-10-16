@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.4.2 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.4.3 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -165,3 +165,11 @@ Per user preference, this stage does **not** deliver an interim installer ZIP an
 - Session identity is registered before starting audio and invalidated before teardown; an early stream end cannot leave a false recording state.
 - At the 1,440-request safety ceiling, capture now emits the same completion notification as an unexpectedly ended track. This counts dispatched requests, **not a guaranteed 72-minute clock timer**.
 - See [v0.4.2 acceptance](docs/ASR_SESSION_LIFECYCLE_042_zh-CN.md). Real multilingual Windows/Whisper soak testing remains open. No main merge or intermediate installer.
+
+## v0.4.3 — serialized capture control and session-aware overlay
+
+- Serializes START/STOP/stream-ended/tab-navigation actions in the MV3 worker. A second user click can no longer concurrently tear down a newer audio capture.
+- Forwards ASR session IDs all the way to the page overlay and requires exact matching for START/STOP, text, errors and metrics; a stale end banner is ignored for a new capture.
+- A freshly started session can translate immediately even if the previous session's standard-provider call is still pending. Old in-flight results cannot repaint the new session.
+- Before transient ASR-caption translation, background validates the current tab and session ID; past recordings cannot initiate a new external translation request after stop.
+- Added independent worker race tests and real Chromium delayed-response UI regression. See [v0.4.3 acceptance](docs/ASR_RACE_CONTROL_043_zh-CN.md). No authenticated player or live Whisper hardware certification, no main merge, no interim installer.

@@ -18,6 +18,14 @@ function ensureSource(sender, type) {
   if (sender.id !== chrome.runtime.id) throw new TranslationError('无效的消息来源');
   if (type === 'TRANSLATE_BATCH' && !sender.tab) throw new TranslationError('网页翻译请求必须来自当前网页');
 }
+// Serialize user START/STOP, automatic track-end and tab lifecycle actions.
+// Without this lock, concurrent extension popups can close a newer capture.
+let asrTransition=Promise.resolve();
+function withAsrTransition(operation){
+  const result=asrTransition.then(operation,operation);
+  asrTransition=result.catch(()=>{});
+  return result;
+}
 async function stopLiveAsr() {
   const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
   // Invalidate before teardown, so old offscreen callbacks are ignored.
@@ -27,7 +35,7 @@ async function stopLiveAsr() {
     await chrome.offscreen.closeDocument();
   }}catch {}
   if(session.pit_live_asr_tab) {
-    await chrome.tabs.sendMessage(session.pit_live_asr_tab,{type:'PIT_ASR_VIEW_STOP'}).catch(()=>{});
+    await chrome.tabs.sendMessage(session.pit_live_asr_tab,{type:'PIT_ASR_VIEW_STOP',sessionId:session.pit_live_asr_session}).catch(()=>{});
   }
 }
 async function startLiveAsr(message){
@@ -49,7 +57,7 @@ async function startLiveAsr(message){
     const still=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
     if(still.pit_live_asr_tab!==tab.id || still.pit_live_asr_session!==sessionId)
       throw Error('音频会话已提前结束，无法标记为录制中');
-    await chrome.tabs.sendMessage(tab.id,{type:'PIT_ASR_VIEW_START'});
+    await chrome.tabs.sendMessage(tab.id,{type:'PIT_ASR_VIEW_START',sessionId});
     return {started:true};
   }catch(error) {
     await stopLiveAsr();
@@ -62,11 +70,11 @@ async function handle(message, sender) {
   ensureSource(sender, message.type);
   if(message.type==='PIT_ASR_START'){
     if(sender.tab)throw new TranslationError('只能从插件控制面板启动实时音频');
-    return await startLiveAsr(message);
+    return await withAsrTransition(()=>startLiveAsr(message));
   }
   if(message.type==='PIT_ASR_STOP'){
     if(sender.tab)throw new TranslationError('只能从插件控制面板停止录音');
-    await stopLiveAsr();return {stopped:true};
+    return await withAsrTransition(async()=>{await stopLiveAsr();return {stopped:true};});
   }
   if(['PIT_ASR_RESULT','PIT_ASR_ERROR','PIT_ASR_METRICS','PIT_ASR_STREAM_ENDED'].includes(message.type)){
     if(sender.url!==chrome.runtime.getURL('src/offscreen.html'))throw new TranslationError('无效的本机 ASR 来源');
@@ -75,17 +83,25 @@ async function handle(message, sender) {
        !session.pit_live_asr_session || session.pit_live_asr_session!==message.sessionId)
       return {ignored:true};
     if(message.type==='PIT_ASR_STREAM_ENDED'){
-      const tabId=session.pit_live_asr_tab;
-      await stopLiveAsr();
-      // Do not put an old disconnection banner on a newly started session.
-      const replacement=await chrome.storage.session.get('pit_live_asr_session');
-      if(!replacement.pit_live_asr_session)
-        await chrome.tabs.sendMessage(tabId,{type:'PIT_ASR_INTERRUPTED_VIEW'}).catch(()=>{});
-      return {stopped:true,reason:'capture-ended'};
+      return await withAsrTransition(async()=>{
+        // A queued end notification must check the session again after
+        // another user action has completed.
+        const active=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+        if(active.pit_live_asr_tab!==message.tabId ||
+           active.pit_live_asr_session!==message.sessionId) return {ignored:true};
+        const tabId=active.pit_live_asr_tab;
+        await stopLiveAsr();
+        const replacement=await chrome.storage.session.get('pit_live_asr_session');
+        if(!replacement.pit_live_asr_session)
+          await chrome.tabs.sendMessage(tabId,{
+            type:'PIT_ASR_INTERRUPTED_VIEW',sessionId:message.sessionId
+          }).catch(()=>{});
+        return {stopped:true,reason:'capture-ended'};
+      });
     }
     const type=message.type==='PIT_ASR_RESULT'?'PIT_ASR_TEXT_VIEW'
       :message.type==='PIT_ASR_ERROR'?'PIT_ASR_ERROR_VIEW':'PIT_ASR_METRICS_VIEW';
-    const payload={type};
+    const payload={type,sessionId:message.sessionId};
     if(type==='PIT_ASR_TEXT_VIEW'){
       payload.text=String(message.text||'').slice(0,5000);
       payload.capturedAt=Number(message.capturedAt)||Date.now();
@@ -140,6 +156,10 @@ async function handle(message, sender) {
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
   if(message.transient===true) {
     if(message.mode!=='standard' || !sender.tab) throw new TranslationError('临时字幕只允许网页内标准翻译');
+    const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+    if(session.pit_live_asr_tab!==sender.tab.id ||
+       !session.pit_live_asr_session || message.sessionId!==session.pit_live_asr_session)
+      throw new TranslationError('语音字幕会话已经结束，请重新启动。');
     const translations=await translateBatch(texts,{...settings,provider,source,target,context});
     return {translations,provider,cached:false,transient:true};
   }
@@ -167,14 +187,19 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse) => {
   return true;
 });
 
-chrome.tabs.onRemoved.addListener(async(tabId)=>{
- const session=await chrome.storage.session.get('pit_live_asr_tab');
- if(session.pit_live_asr_tab===tabId)await stopLiveAsr();
+async function stopTabCaptureIfUnchanged(tabId){
+  const observed=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+  if(observed.pit_live_asr_tab!==tabId || !observed.pit_live_asr_session)return;
+  await withAsrTransition(async()=>{
+    const latest=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+    if(latest.pit_live_asr_tab===tabId &&
+       latest.pit_live_asr_session===observed.pit_live_asr_session)await stopLiveAsr();
+  });
+}
+chrome.tabs.onRemoved.addListener(tabId=>{
+  void stopTabCaptureIfUnchanged(tabId).catch(()=>{});
 });
 chrome.tabs.onUpdated.addListener((tabId,changeInfo)=>{
- if(changeInfo.status==='loading') {
-   chrome.storage.session.get('pit_live_asr_tab').then(session=>{
-     if(session.pit_live_asr_tab===tabId)return stopLiveAsr();
-   }).catch(()=>{});
- }
+  if(changeInfo.status==='loading')
+    void stopTabCaptureIfUnchanged(tabId).catch(()=>{});
 });
