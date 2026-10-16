@@ -5,7 +5,7 @@
   const core = globalThis.PITCaptionCore;
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -22,6 +22,40 @@
   function chooseTrack(video) {
     const tracks=[...video.textTracks].filter(t=>t.kind==='subtitles'||t.kind==='captions');
     return tracks.find(t=>t.mode==='showing') || tracks.find(t=>t.mode==='hidden') || tracks[0] || null;
+  }
+  function releaseTrack(track, originalMode) {
+    // Only undo a mode change that this extension made. A user's new
+    // language choice must never be reverted by restoring an old track.
+    if(track && originalMode==='disabled' && track.mode==='hidden')
+      track.mode='disabled';
+  }
+  function refreshPlaybackSource() {
+    if(state.video && !state.video.isConnected) {
+      // A player can replace <video> without navigating. Never keep showing
+      // subtitles from the removed player or silently attach to another video.
+      stop();return false;
+    }
+    if(state.video && state.mediaUrl &&
+       (state.video.currentSrc || state.video.src || '')!==state.mediaUrl) {
+      // A source swap within the same video element is a new recording.
+      stop();return false;
+    }
+    if(!state.video || state.importedCues) return true;
+    const next=chooseTrack(state.video);
+    if(next===state.track) return true;
+    // Track switching must invalidate both previously cached subtitles and
+    // any provider response that was started for the old language.
+    releaseTrack(state.track,state.originalMode);
+    state.track=next;
+    state.originalMode=next?.mode ?? null;
+    if(next?.mode==='disabled')next.mode='hidden';
+    state.generation++;
+    state.cache=new core.CaptionCache(350);
+    state.busy=false;state.domPending=false;state.failedAt=0;
+    state.seenAny=false;state.latestDomText='';
+    state.domMode=!next;
+    render('');
+    return true;
   }
   function currentRecordingUrl(){
     try {const url=new URL(location.href);url.hash='';return url.href;}
@@ -64,6 +98,7 @@
     // A same-frame SPA change can silently switch Panopto recordings without
     // changing frameId or origin. Fail closed before reading any new caption.
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){stop();return;}
+    if(!refreshPlaybackSource())return;
     // Prefer actual timed cues when available. Some sites advertise a native
     // TextTrack but never populate it, while rendering visible CC in the DOM.
     // Switch to the user's already-visible CC without reading private player
@@ -119,7 +154,11 @@
     try { raw=track?.cues ? [...track.cues] : []; } catch {}
     const cues=core.normalizeCues(state.importedCues || raw,video.currentTime);
     if(!cues.length) {
-      if(!state.seenAny) render('正在等待原生字幕轨加载；若网站使用自绘字幕或无字幕，则此模块无法抓取。');
+      // Players clear their cues on CC disable and during track reload.
+      // Do not leave a translation from the preceding track visible.
+      if(!state.seenAny)
+        render('正在等待原生字幕轨加载；若网站使用自绘字幕或无字幕，则此模块无法抓取。');
+      else render('');
       return;
     }
     state.seenAny=true;
@@ -151,9 +190,9 @@
   function stop() {
     state.active=false;state.generation++;
     clearInterval(state.timer);state.timer=null;
-    if(state.track && state.originalMode!==null && state.track.mode==='hidden') state.track.mode=state.originalMode;
+    releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;
   }
   function embeddedPlayerHint(){
     for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
@@ -199,7 +238,11 @@
     const track=validImport ? null : video ? chooseTrack(video) : null;
     if(!track && !validImport && !visible?.text) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
-    state.boundUrl=expectedUrl;
+    // Full-page SPA navigation also changes recording identity; only the
+    // document fragment is ignored. An embedded player remains exactly bound
+    // to the URL independently confirmed by its parent popup.
+    state.boundUrl=expectedUrl ?? currentRecordingUrl();
+    state.mediaUrl=video ? (video.currentSrc || video.src || '') : null;
     state.originalMode=track?.mode ?? null;
     state.domMode=!track && !validImport;
     state.importedCues=validImport ? imported : null;

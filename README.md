@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.4.3 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.4.4 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -173,3 +173,11 @@ Per user preference, this stage does **not** deliver an interim installer ZIP an
 - A freshly started session can translate immediately even if the previous session's standard-provider call is still pending. Old in-flight results cannot repaint the new session.
 - Before transient ASR-caption translation, background validates the current tab and session ID; past recordings cannot initiate a new external translation request after stop.
 - Added independent worker race tests and real Chromium delayed-response UI regression. See [v0.4.3 acceptance](docs/ASR_RACE_CONTROL_043_zh-CN.md). No authenticated player or live Whisper hardware certification, no main merge, no interim installer.
+
+## v0.4.4 — native caption track switching and player replacement
+
+- Observe changes in a video's preferred native TextTrack so users can switch language while subtitles are already active.
+- Invalidate old cue cache and outstanding translations upon track changes; only restore a track mode if the extension changed it.
+- Hide translations when cues disappear, and stop caption sessions when the original <video> is disconnected or its nonempty media source is replaced.
+- Bind standalone player sessions to their initial fragment-free document URL, so a same-tab YouTube/Panopto SPA recording change cannot reuse older captions.
+- Added Chrome fixture tests for delayed cross-language responses, player DOM replacement and top-level SPA changes. See [acceptance notes](docs/PLAYER_TRACK_SWITCH_044_zh-CN.md). Real authenticated platforms remain unverified.
