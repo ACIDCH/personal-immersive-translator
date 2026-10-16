@@ -3,7 +3,7 @@
  * browser UI and unit tests. No credentials, private player endpoints or DRM.
  */
 const allowed=(host)=>/(^|\.)(youtube\.com|youtube-nocookie\.com)$/.test(host) ||
-  /(^|\.)panopto\.[a-z0-9.-]+$/.test(host);
+  /(^|\.)(panopto\.com|panopto\.eu)$/.test(host);
 export function approvedOrigin(input){
   try {
     const url=new URL(input);
