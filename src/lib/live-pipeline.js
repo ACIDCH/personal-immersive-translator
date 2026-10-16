@@ -35,3 +35,19 @@ export class BoundedAudioQueue {
   }
   clear(){this.chunks.length=0;this.length=0;}
 }
+
+/** Browsers and audio drivers need not support requested 16kHz AudioContext.
+ * Fall back to the device rate; resampleChunks() converts before WAV output.
+ */
+export function makeAudioContext(AudioContextClass){
+  try {return new AudioContextClass({sampleRate:16000});}
+  catch {
+    const device=new AudioContextClass();
+    if(!Number.isFinite(device.sampleRate)||device.sampleRate<8000||
+       device.sampleRate>192000) {
+      void device.close?.();
+      throw new Error('设备音频采样率不支持');
+    }
+    return device;
+  }
+}
