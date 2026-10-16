@@ -102,10 +102,16 @@ async function handle(message, sender) {
   if (message.type === 'TEST_PROVIDER' && sender.tab) throw new TranslationError('仅设置界面可测试 API');
   const settings = await getSettings();
   if (sender.tab) {
-    const url = sender.tab.url || '';
-    try {
-      if (hostIsBlocked(new URL(url).hostname, settings.blockedHosts)) throw new TranslationError('当前网站已加入禁止翻译列表');
-    } catch (e) { if (e instanceof TranslationError) throw e; }
+    // In a cross-origin video iframe, sender.tab.url is the LMS parent, while
+    // sender.url is the real embedded player. Respect the denylist for BOTH.
+    for(const pageUrl of [sender.tab.url,sender.url]){
+      if(!pageUrl)continue;
+      try{
+        const host=new URL(pageUrl).hostname;
+        if(hostIsBlocked(host,settings.blockedHosts))
+          throw new TranslationError('当前页面或嵌入播放器已加入禁止翻译列表');
+      }catch(e){if(e instanceof TranslationError)throw e;}
+    }
   }
   const isAI = message.mode === 'ai';
   if (message.mode !== 'standard' && message.mode !== 'ai') throw new TranslationError('翻译模式无效');
