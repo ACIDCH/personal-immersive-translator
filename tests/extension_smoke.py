@@ -103,6 +103,23 @@ async def main():
                 assert await tools.locator("#translatedImage").count()==1
                 assert await tools.locator("#checkLocalEngines").count()==1
                 print("PASS: image OCR and PDF tools render")
+                # Load the real local AudioWorklet module without recording
+                # any microphone/tab audio. Requires Chrome's audio renderer,
+                # not a simulated AudioWorklet class.
+                worklet_status=await tools.evaluate("""async()=>{
+                    const audio=new AudioContext();
+                    try{
+                      await audio.audioWorklet.addModule(
+                        chrome.runtime.getURL('src/audio-capture-worklet.js'));
+                      const node=new AudioWorkletNode(audio,'pit-capture');
+                      node.disconnect();
+                      return {ok:true,rate:audio.sampleRate};
+                    }catch(error){return {ok:false,error:String(error.message||error)};}
+                    finally{await audio.close();}
+                }""")
+                assert worklet_status["ok"],worklet_status
+                print("PASS: actual browser AudioWorklet processor loads from MV3 extension")
+
 
                 # Render an actual born-digital PDF through the vendored PDF.js
                 # renderer/worker. No cloud OCR, keys or network access.
