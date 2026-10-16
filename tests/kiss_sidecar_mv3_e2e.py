@@ -24,7 +24,7 @@ async def main():
           # so waiting on its extension manager was not a valid install test.
           worker=browser.service_workers[0] if browser.service_workers else await browser.wait_for_event(
               "serviceworker",timeout=20000)
-          origin=worker.url.split("/background.js")[0]
+          origin="/".join(worker.url.split("/")[:3])
           assert origin.startswith("chrome-extension://"),worker.url
           print("PASS: KISS MV3 background worker is active",origin,flush=True)
           errors=[]
