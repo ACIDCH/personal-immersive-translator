@@ -9,6 +9,7 @@ on:
       - 'tests/kiss-sidecar.test.js'
       - 'tests/kiss_sidecar_mv3_e2e.py'
       - 'src/kiss/**'
+      - 'tests/kiss-whisper-readiness.test.js'
       - '.github/workflows/kiss-sidecar-integration.yml'
 permissions:
   contents: read
@@ -24,8 +25,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify PIT integration assembly contract
-        run: node --test tests/kiss-sidecar.test.js
+      - name: Verify PIT integration assembly and local Whisper readiness
+        run: node --test tests/kiss-sidecar.test.js tests/kiss-whisper-readiness.test.js
       - name: Checkout fixed GPL KISS source outside our project
         run: |
           git clone --no-checkout --filter=blob:none https://github.com/fishjar/kiss-translator.git /tmp/pit-kiss-upstream
@@ -51,6 +52,7 @@ jobs:
           node scripts/assemble-kiss-sidecar.mjs /tmp/pit-kiss-upstream/build/chrome
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/options.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/asr-controller.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/whisper-readiness.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/bridge-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/view-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/control.js

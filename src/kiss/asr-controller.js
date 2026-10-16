@@ -6,6 +6,7 @@
 import {translateBatch} from '../lib/providers.js';
 import {normalizeSettings,SETTINGS_KEY} from '../lib/settings.js';
 import {sendToView} from './view-client.js';
+import {checkWhisperReady} from './whisper-readiness.js';
 
 const KEYS=['pit_live_asr_tab','pit_live_asr_session'];
 const OFFSCREEN='pit/offscreen.html';
@@ -63,6 +64,9 @@ async function start(msg){
   must(/^https?:\/\//.test(tab?.url||''),'只能录制当前用户选择的网页');
   // Link from the KISS popup binds this window's selected recording URL.
   must(tab.url===msg.expectedUrl,'目标页面已经跳转，请重新打开控制面板');
+  // Fail before tearing down an already-running session if local Whisper
+  // is offline, the token is wrong or the model is unavailable.
+  await checkWhisperReady(msg.token);
   await stop();
   const permission=await chrome.permissions.contains({origins:['http://127.0.0.1/*']});
   must(permission,'未授予本机 Whisper 服务访问权限');
@@ -139,10 +143,11 @@ async function translate(msg,sender){
   return {translations:values,provider};
 }
 async function handle(msg,sender){
-  if(['PIT_ASR_START','PIT_ASR_STOP','PIT_ASR_STATUS'].includes(msg.type)){
+  if(['PIT_ASR_START','PIT_ASR_STOP','PIT_ASR_STATUS','PIT_ASR_PREFLIGHT'].includes(msg.type)){
     must(isController(sender),'只能从本人控制面板管理音频录制');
     if(msg.type==='PIT_ASR_START')return serial(()=>start(msg));
     if(msg.type==='PIT_ASR_STOP')return serial(stop);
+    if(msg.type==='PIT_ASR_PREFLIGHT')return checkWhisperReady(msg.token);
     const active=await session();
     return {active:!!active.pit_live_asr_session,tabId:active.pit_live_asr_tab||null};
   }

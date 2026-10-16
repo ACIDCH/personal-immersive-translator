@@ -16,7 +16,7 @@ function setup(version='2.1.1'){
  file('src/pdf-preview.js',"const url=chrome.runtime.getURL('src/vendor/pdf.worker.mjs');");
  const additional=['kiss/background-entry.js','kiss/asr-controller.js',
  'kiss/control.html','kiss/control.js','kiss/popup-entry.js',
- 'kiss/bridge-client.js','kiss/view-client.js',
+ 'kiss/bridge-client.js','kiss/view-client.js','kiss/whisper-readiness.js',
  'offscreen.html','offscreen.js','audio-capture-worklet.js',
  'live-captions.js','subtitles.js','content.css',
  'lib/live-pipeline.js','lib/wav.js','lib/caption-core.js',
@@ -73,6 +73,7 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
   assert.ok(live.includes('globalThis.PITSidecar.onViewMessage.addListener'));
   assert.ok(existsSync(join(f.build,'pit/bridge-client.js')));
   assert.ok(existsSync(join(f.build,'pit/view-client.js')));
+  assert.ok(existsSync(join(f.build,'pit/whisper-readiness.js')));
   const offscreen=readFileSync(join(f.build,'pit/offscreen.js'),'utf8');
   assert.ok(offscreen.includes("name:'pit-offscreen-v046'"));
   assert.ok(offscreen.includes("sidecarPort?.postMessage({kind:'event'"));
