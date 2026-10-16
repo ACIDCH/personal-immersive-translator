@@ -51,3 +51,9 @@ export function makeAudioContext(AudioContextClass){
     return device;
   }
 }
+
+/** Counts dispatched requests, not real-world elapsed recording time. */
+export const MAX_ASR_REQUESTS=1440;
+export function asrLimitReached(attempts){
+  return Number.isInteger(attempts) && attempts>=MAX_ASR_REQUESTS;
+}

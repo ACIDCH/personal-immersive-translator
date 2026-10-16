@@ -3,9 +3,8 @@
  * goes to the user's selected standard translation provider.
  */
 import {encodeMonoPcm16,averageEnergy,resampleChunks,ASR_SAMPLE_RATE} from './lib/wav.js';
-import {LiveStats,BoundedAudioQueue,makeAudioContext} from './lib/live-pipeline.js';
+import {LiveStats,BoundedAudioQueue,makeAudioContext,MAX_ASR_REQUESTS,asrLimitReached} from './lib/live-pipeline.js';
 const SEGMENT_MS=3000;
-const MAX_REQUESTS=1440; // explicit safety stop ~72 minutes of speech.
 let current=null;
 let epoch=0;
 async function notify(type,payload){
@@ -43,9 +42,12 @@ async function flush(c){
   }
   const samples=c.queue.take();
   if(!samples.length || averageEnergy(samples)<0.008)return;
-  if(c.attempts>=MAX_REQUESTS){
-    await notify('PIT_ASR_ERROR',{tabId:c.tabId,message:'已到本次语音识别安全时长上限，请停止并重新启动。'});
-    await stop();return;
+  if(asrLimitReached(c.attempts)){
+    await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
+      message:'已到本次识别请求上限（'+MAX_ASR_REQUESTS+' 次），音频捕获自动结束。'});
+    await stop();
+    await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId,sessionId:c.sessionId});
+    return;
   }
   c.attempts++;
   c.busy=true;
@@ -72,10 +74,10 @@ async function flush(c){
     const text=String(result.text||'').trim().slice(0,5000);
     if(asrMs>12000){
       c.stats.drop(1);
-      await notify('PIT_ASR_ERROR',{tabId:c.tabId,
+      await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
         message:'本机识别延迟超过 12 秒，已跳过过期字幕。请使用较小的 Whisper 模型。'});
     }else if(text){
-      await notify('PIT_ASR_RESULT',{tabId:c.tabId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
+      await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
     }
   }catch(e){
     if(current===c){
@@ -83,24 +85,26 @@ async function flush(c){
       c.failures++;
       c.retryAt=Date.now()+Math.min(30000,3000*Math.pow(2,Math.min(c.failures-1,4)));
       if(c.failures>=4 || /Whisper HTTP (401|403|503)/.test(String(e?.message||e))){
-        await notify('PIT_ASR_ERROR',{tabId:c.tabId,
+        await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
           message:'本机识别连续失败，音频已自动停止，请核查模型、令牌和服务配置。'});
         await stop();
         await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId});
-      }else await notify('PIT_ASR_ERROR',{tabId:c.tabId,
+      }else await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
         message:'本机识别失败，将在稍后重试，不会累积过期音频。'});
     }
   }finally{
     if(current===c){
-      await notify('PIT_ASR_METRICS',{tabId:c.tabId,metrics:c.stats.snapshot()});
+      await notify('PIT_ASR_METRICS',{tabId:c.tabId,sessionId:c.sessionId,metrics:c.stats.snapshot()});
       c.busy=false;c.abort=null;
     }
   }
 }
-async function start({streamId,tabId,token}){
+async function start({streamId,tabId,token,sessionId}){
   await stop();
   const generation=++epoch;
-  if(typeof token!=='string'||token.length<16||!Number.isInteger(tabId)||!streamId)throw Error('本地 ASR 会话参数不完整');
+  if(typeof token!=='string'||token.length<16||!Number.isInteger(tabId)||!streamId ||
+     typeof sessionId!=='string'||!/^[0-9a-f-]{36}$/i.test(sessionId))
+    throw Error('本地 ASR 会话参数不完整');
   let stream=null,context=null,c=null;
   try {
     stream=await navigator.mediaDevices.getUserMedia({audio:{mandatory:{
@@ -137,7 +141,7 @@ async function start({streamId,tabId,token}){
     source.connect(processor);
     processor.connect(mute);mute.connect(context.destination);
     // Tab playback already routed before the worklet is initialized.
-    c={context,source,processor,mute,stream,tabId,token,queue,busy:false,
+    c={context,source,processor,mute,stream,tabId,token,sessionId,queue,busy:false,
       timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0,failures:0,retryAt:0};
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
     current=c;

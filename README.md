@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.4.1 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.4.2 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -158,3 +158,10 @@ Per user preference, this stage does **not** deliver an interim installer ZIP an
 - The selected URL is kept in extension memory only, never logged, displayed or persisted. The target frame validates that URL before starting, and stops its translation session if SPA history changes to another recording.
 - Browser MV3 fixture coverage rejects wrong-recording start and validates same-origin route changes; **this does not claim authenticated real Panopto/Netflix testing**.
 - See [recording-bound acceptance](docs/RECORDING_BOUND_SESSION_041_zh-CN.md). All stacked PRs remain drafts. No interim installer or main-branch merge.
+
+## v0.4.2 — isolate opt-in ASR sessions and cleanly end capture
+
+- Every capture has a per-start UUID; background ignores delayed offscreen messages from previous sessions, including the same tab.
+- Session identity is registered before starting audio and invalidated before teardown; an early stream end cannot leave a false recording state.
+- At the 1,440-request safety ceiling, capture now emits the same completion notification as an unexpectedly ended track. This counts dispatched requests, **not a guaranteed 72-minute clock timer**.
+- See [v0.4.2 acceptance](docs/ASR_SESSION_LIFECYCLE_042_zh-CN.md). Real multilingual Windows/Whisper soak testing remains open. No main merge or intermediate installer.

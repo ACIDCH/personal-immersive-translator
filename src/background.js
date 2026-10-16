@@ -19,7 +19,9 @@ function ensureSource(sender, type) {
   if (type === 'TRANSLATE_BATCH' && !sender.tab) throw new TranslationError('网页翻译请求必须来自当前网页');
 }
 async function stopLiveAsr() {
-  const session=await chrome.storage.session.get('pit_live_asr_tab');
+  const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+  // Invalidate before teardown, so old offscreen callbacks are ignored.
+  await chrome.storage.session.remove(['pit_live_asr_tab','pit_live_asr_session']);
   try {if(await chrome.offscreen.hasDocument()){
     await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_STOP'});
     await chrome.offscreen.closeDocument();
@@ -27,7 +29,6 @@ async function stopLiveAsr() {
   if(session.pit_live_asr_tab) {
     await chrome.tabs.sendMessage(session.pit_live_asr_tab,{type:'PIT_ASR_VIEW_STOP'}).catch(()=>{});
   }
-  await chrome.storage.session.remove('pit_live_asr_tab');
 }
 async function startLiveAsr(message){
   const token=String(message.token||'');
@@ -39,9 +40,15 @@ async function startLiveAsr(message){
     justification:'用户明确启动的本机实时音频字幕识别'});
   try{
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
-    const started=await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_START',streamId,tabId:tab.id,token});
+    const sessionId=crypto.randomUUID();
+    await chrome.storage.session.set({pit_live_asr_tab:tab.id,pit_live_asr_session:sessionId});
+    const started=await chrome.runtime.sendMessage({
+      target:'offscreen',type:'PIT_OFFSCREEN_START',streamId,tabId:tab.id,token,sessionId
+    });
     if(!started?.ok)throw Error(started?.error||'音频捕获失败');
-    await chrome.storage.session.set({pit_live_asr_tab:tab.id});
+    const still=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+    if(still.pit_live_asr_tab!==tab.id || still.pit_live_asr_session!==sessionId)
+      throw Error('音频会话已提前结束，无法标记为录制中');
     await chrome.tabs.sendMessage(tab.id,{type:'PIT_ASR_VIEW_START'});
     return {started:true};
   }catch(error) {
@@ -63,12 +70,17 @@ async function handle(message, sender) {
   }
   if(['PIT_ASR_RESULT','PIT_ASR_ERROR','PIT_ASR_METRICS','PIT_ASR_STREAM_ENDED'].includes(message.type)){
     if(sender.url!==chrome.runtime.getURL('src/offscreen.html'))throw new TranslationError('无效的本机 ASR 来源');
-    const session=await chrome.storage.session.get('pit_live_asr_tab');
-    if(!session.pit_live_asr_tab || session.pit_live_asr_tab!==message.tabId)return {ignored:true};
+    const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+    if(!session.pit_live_asr_tab || session.pit_live_asr_tab!==message.tabId ||
+       !session.pit_live_asr_session || session.pit_live_asr_session!==message.sessionId)
+      return {ignored:true};
     if(message.type==='PIT_ASR_STREAM_ENDED'){
       const tabId=session.pit_live_asr_tab;
       await stopLiveAsr();
-      await chrome.tabs.sendMessage(tabId,{type:'PIT_ASR_INTERRUPTED_VIEW'}).catch(()=>{});
+      // Do not put an old disconnection banner on a newly started session.
+      const replacement=await chrome.storage.session.get('pit_live_asr_session');
+      if(!replacement.pit_live_asr_session)
+        await chrome.tabs.sendMessage(tabId,{type:'PIT_ASR_INTERRUPTED_VIEW'}).catch(()=>{});
       return {stopped:true,reason:'capture-ended'};
     }
     const type=message.type==='PIT_ASR_RESULT'?'PIT_ASR_TEXT_VIEW'
