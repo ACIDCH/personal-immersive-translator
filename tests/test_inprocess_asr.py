@@ -46,6 +46,19 @@ class FakeWhisperModel:
         return iter([FakeSegment()]),{}
 
 
+class UpstreamApiContract(unittest.TestCase):
+    def test_actual_faster_whisper_installation_exposes_required_local_api(self):
+        import inspect
+        from faster_whisper import WhisperModel
+        arguments=inspect.signature(WhisperModel).parameters
+        self.assertIn("local_files_only",arguments)
+        self.assertIn("device",arguments)
+        self.assertIn("compute_type",arguments)
+        infer=inspect.signature(WhisperModel.transcribe).parameters
+        for name in ("beam_size","condition_on_previous_text","without_timestamps","vad_filter"):
+            self.assertIn(name,infer)
+
+
 class LocalModelTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
