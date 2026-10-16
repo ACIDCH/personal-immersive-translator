@@ -64,8 +64,11 @@ async def main():
           document.body.append(button);
         }""")
         await popup.locator("#grantTestCourse").click()
-        await popup.wait_for_function("window.coursePermission!=='pending'",timeout=10000)
-        assert await popup.evaluate("window.coursePermission") is True
+        for _ in range(50):
+          decision=await popup.evaluate("window.coursePermission")
+          if decision!='pending':break
+          await asyncio.sleep(.15)
+        assert decision is True,decision
 
         state=await popup.evaluate("""async()=> {
           const tabs=await chrome.tabs.query({});
@@ -100,8 +103,10 @@ async def main():
           document.body.append(btn);
         }""")
         await popup.locator("#grantPanoptoForTest").click()
-        await popup.wait_for_function("window.permissionOutcome!=='pending'",timeout=12000)
-        granted=await popup.evaluate("window.permissionOutcome")
+        for _ in range(60):
+          granted=await popup.evaluate("window.permissionOutcome")
+          if granted!='pending':break
+          await asyncio.sleep(.15)
         assert granted is True,f"Explicit Panopto host permission denied: {granted}"
         tab_id=state["tabId"]
         frame_id=state["selected"]["frameId"]
