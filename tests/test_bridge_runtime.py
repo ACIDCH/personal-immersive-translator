@@ -64,6 +64,14 @@ class BridgeContractTests(unittest.TestCase):
         self.assertNotIn("fake-test-key-never-use",response.text)
         self.assertNotIn("test-local-secret-at-least-16",response.text)
 
+    def test_health_reports_only_installed_tesseract_language_packs(self):
+        with patch.object(bridge.shutil,"which",return_value="/usr/bin/tesseract"), \
+             patch.object(bridge.subprocess,"run",return_value=subprocess.CompletedProcess(
+                 ["tesseract","--list-langs"],0,stdout="eng\nfra\njpn\n",stderr="")):
+            languages=bridge.installed_ocr_languages()
+        self.assertEqual(languages,["en","fr","ja"])
+        self.assertNotIn("ko",languages)
+
     def test_pdf_magic_and_language_validation(self):
         self.assertEqual(self.submit(b"not a pdf").status_code,400)
         self.assertEqual(self.submit(pdf(),source="ru").status_code,400)
@@ -88,6 +96,36 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(calls,["babeldoc"])
         self.assertTrue(resp.content.startswith(b"%PDF-"))
         self.assertEqual(resp.headers["cache-control"],"no-store")
+
+    def test_real_ocrmypdf_converts_scanned_page_to_searchable_pdf(self):
+        import io
+        import tempfile
+        from PIL import Image, ImageDraw, ImageFont
+        if not shutil.which("ocrmypdf") or not shutil.which("tesseract"):
+            self.skipTest("OCRmyPDF and Tesseract are not installed")
+        image=Image.new("RGB",(1600,260),"white")
+        draw=ImageDraw.Draw(image)
+        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",76)
+        draw.text((80,75),"SEARCHABLE OCR PAGE",font=font,fill="black")
+        stream=io.BytesIO()
+        image.save(stream,format="PNG")
+        doc=fitz.open()
+        page=doc.new_page(width=612,height=792)
+        page.insert_image(fitz.Rect(40,70,570,165),stream=stream.getvalue())
+        with tempfile.TemporaryDirectory() as temp:
+            src=Path(temp)/"scanned.pdf"
+            dst=Path(temp)/"searchable.pdf"
+            src.write_bytes(doc.tobytes())
+            doc.close()
+            self.assertTrue(bridge.scanned_pdf(src))
+            subprocess.run([
+                "ocrmypdf","--skip-text","--jobs","1","--language","eng",
+                "--output-type","pdf",str(src),str(dst)
+            ],check=True,timeout=120,capture_output=True)
+            with fitz.open(dst) as processed:
+                extracted=processed[0].get_text().upper()
+                self.assertIn("SEARCHABLE",extracted)
+                self.assertIn("OCR",extracted)
 
     def test_mixed_document_detects_late_scanned_appendix(self):
         import tempfile

@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.3 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.4 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -84,3 +84,15 @@ This is **not** a guaranteed money-spending limit and does not imply real authen
 - Tests use Chrome with simulated platform DOM, a real Tesseract engine and actual PDF.js; **no actual streaming DRM services, real Whisper model or full BabelDOC reconstruction is certified**.
 
 [Module acceptance and remaining blockers](docs/MULTIMODAL_HARDENING_ACCEPTANCE_033_zh-CN.md).
+
+## v0.3.4 core integration (no UI redesign yet)
+
+- **Embedded course players:** when the top-level page lacks readable captions, a visible YouTube or Panopto iframe can be offered for exact-origin, opt-in host permission; script injection targets the selected frameId. Both the LMS domain and iframe domain remain subject to the user's translation denylist. No DRM or login bypass.
+- **Whisper capture:** prefer 250ms-batch AudioWorklet on an active audio render thread, but fall back after 3 seconds to legacy ScriptProcessor for browsers/drivers where the Worklet module cannot start. AudioContext itself can use native device sampling rates, followed by actual 16kHz resampling. Repeated local ASR failures back off, then automatically stop.
+- **PDF real OCR:** CI now creates a raster-only PDF and **actually runs OCRmyPDF/Tesseract/Ghostscript**, verifying searchable output. BabelDOC translation is still external and not yet validated with real user-owned API credentials or complex academic layouts.
+- **Multilingual OCR readiness:** the local diagnostic response identifies which of the seven Tesseract language packs are installed, instead of assuming every language is ready.
+- **Real hardware metrics:** a separate local whisper.cpp benchmark script records p50/p95/overdue clips, but no real-device measurements are included in CI. Headless Chrome may explicitly SKIP AudioWorklet loading if no active audio device is available; compatibility is preserved by the tested ScriptProcessor fallback.
+
+[Detailed implemented-versus-unverified scope](docs/CORE_IMPLEMENTATION_034_zh-CN.md).
+
+Per user request, this phase **does not finalize project naming, UI identity or dashboard design, and does not deliver interim ZIP packages**. Those are reserved for the complete system after runtime acceptance and final independent Codex review.

@@ -103,6 +103,38 @@ async def main():
                 assert await tools.locator("#translatedImage").count()==1
                 assert await tools.locator("#checkLocalEngines").count()==1
                 print("PASS: image OCR and PDF tools render")
+                # Load the real local AudioWorklet module without recording
+                # any microphone/tab audio. Requires Chrome's audio renderer,
+                # not a simulated AudioWorklet class.
+                worklet_status=await tools.evaluate("""async()=>{
+                    const audio=new AudioContext();
+                    try{
+                      await Promise.race([
+                        audio.audioWorklet.addModule(
+                          chrome.runtime.getURL('src/audio-capture-worklet.js')),
+                        new Promise((_,reject)=>setTimeout(()=>reject(
+                          new Error('AudioWorklet module load exceeded 8 seconds')),8000))
+                      ]);
+                      const node=new AudioWorkletNode(audio,'pit-capture');
+                      node.disconnect();
+                      return {ok:true,rate:audio.sampleRate};
+                    }catch(error){return {ok:false,error:String(error.message||error)};}
+                    finally{
+                      await Promise.race([
+                        audio.close(),
+                        new Promise(resolve=>setTimeout(resolve,2000))
+                      ]);
+                    }
+                }""")
+                if worklet_status["ok"]:
+                    print("PASS: real browser loaded AudioWorklet from MV3 extension")
+                else:
+                    # Headless Chrome can suspend AudioContext indefinitely
+                    # because no active audio output exists. This is a SKIP,
+                    # never reported as production AudioWorklet validation.
+                    assert "exceeded 8 seconds" in worklet_status["error"],worklet_status
+                    print("SKIP: AudioWorklet requires active audio device / real browser test")
+
 
                 # Render an actual born-digital PDF through the vendored PDF.js
                 # renderer/worker. No cloud OCR, keys or network access.

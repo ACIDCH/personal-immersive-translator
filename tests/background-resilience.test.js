@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 // Complete MV3 service-worker message path: a provider response must still
 // reach the webpage when optional local cache has hit Chrome storage quota.
 test('provider results survive cache quota and cache read errors',async()=>{
-  let receiver=null,networkCalls=0;
+  let receiver=null,networkCalls=0,blockedHosts='';
   globalThis.chrome={
     runtime:{
       id:'pit-test-extension',
@@ -16,7 +16,7 @@ test('provider results survive cache quota and cache read errors',async()=>{
         setAccessLevel:async()=>{},
         async get(key){
           if(key==='pit_settings_v1')return {
-            pit_settings_v1:{standardProvider:'microsoft',microsoftKey:'test-key',source:'en',target:'zh'}
+            pit_settings_v1:{standardProvider:'microsoft',microsoftKey:'test-key',source:'en',target:'zh',blockedHosts}
           };
           if(key===null)return {};
           if(typeof key==='string' && key.startsWith('pit_cache_')){
@@ -50,4 +50,17 @@ test('provider results survive cache quota and cache read errors',async()=>{
   assert.equal(result.ok,true,JSON.stringify(result));
   assert.deepEqual(result.translations,['你好，世界！']);
   assert.equal(result.cached,false);
+  // A Panopto frame does not inherit the LMS parent's trust decisions.
+  // Blocked hosts must be applied to the Chrome-provided actual frame URL.
+  blockedHosts='private.panopto.com';
+  const blocked=await new Promise(resolve=>receiver(
+    {type:'TRANSLATE_BATCH',mode:'standard',texts:['lecture']},
+    {id:'pit-test-extension',
+      tab:{url:'https://lms.example.edu/learning'},
+      url:'https://private.panopto.com/Panopto/Pages/Viewer.aspx'},
+    resolve
+  ));
+  assert.equal(blocked.ok,false);
+  assert.match(blocked.error,/禁止翻译列表/);
+  assert.equal(networkCalls,1,'no remote text transmission from a blocked iframe');
 });

@@ -179,6 +179,8 @@ $('checkLocalEngines').addEventListener('click',async()=>{
       '；扫描 PDF OCR：'+value('pdf_ocr')+
       '；图片 Tesseract：'+value('image_ocr')+
       '；本机 Whisper：'+value('speech_asr')+
+      '；可用的 OCR 语言包：'+(Array.isArray(capabilities.installed_ocr_languages)
+        ? capabilities.installed_ocr_languages.join('、')||'无' : '未知')+
       '。未就绪的模块需要依照安装文档补齐依赖和模型。';
   }catch(error){
     status.textContent='无法检测本机引擎：'+String(error.message||error)+

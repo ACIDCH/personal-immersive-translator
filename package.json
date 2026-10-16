@@ -1,12 +1,12 @@
 {
   "name": "personal-immersive-translator",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.3.4",
   "type": "module",
   "description": "Personal privacy-first bilingual translation extension for Chromium browsers.",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check src/background.js && node --check src/content.js && node --check src/popup.js && node --check src/options.js && node --check src/tools.js && node --check src/subtitles.js && node --check src/lib/vision.js && node --check src/lib/platform-captions.js && node --check src/lib/subtitle-import.js && node --check src/lib/providers.js && node --check src/lib/settings.js && node --check src/lib/caption-core.js && node --check src/lib/cache.js && node --check src/offscreen.js && node --check src/live-captions.js && node --check src/lib/wav.js && node --check src/lib/live-pipeline.js && node --check src/pdf-preview.js",
+    "check": "node --check src/background.js && node --check src/content.js && node --check src/popup.js && node --check src/options.js && node --check src/tools.js && node --check src/subtitles.js && node --check src/lib/vision.js && node --check src/lib/platform-captions.js && node --check src/lib/subtitle-import.js && node --check src/lib/providers.js && node --check src/lib/settings.js && node --check src/lib/caption-core.js && node --check src/lib/cache.js && node --check src/offscreen.js && node --check src/live-captions.js && node --check src/lib/wav.js && node --check src/lib/live-pipeline.js && node --check src/pdf-preview.js && node --check src/audio-capture-worklet.js",
     "verify": "npm run vendor:pdf && npm run check && npm test",
     "vendor:pdf": "node scripts/vendor-pdfjs.mjs"
   },

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {LiveStats,BoundedAudioQueue} from '../src/lib/live-pipeline.js';
+import {LiveStats,BoundedAudioQueue,makeAudioContext} from '../src/lib/live-pipeline.js';
 test('latency metrics calculate p50/p95 from bounded samples',()=>{
  const s=new LiveStats(10);
  for(let i=1;i<=10;i++)s.record(i*100);
@@ -20,4 +20,22 @@ test('silence and invalid timing cannot distort monitoring',()=>{
  assert.equal(s.snapshot().p50Ms,null);
  const q=new BoundedAudioQueue(48000,3);q.push(new Float32Array(4096));q.clear();
  assert.equal(q.length,0);
+});
+
+test('AudioContext falls back to 48 kHz device rate if 16k unsupported',()=>{
+  let attempts=0;
+  class FakeAudioContext {
+    constructor(options){
+      attempts++;
+      if(options?.sampleRate===16000)throw Error('NotSupportedError');
+      this.sampleRate=48000;
+    }
+  }
+  const ctx=makeAudioContext(FakeAudioContext);
+  assert.equal(ctx.sampleRate,48000);
+  assert.equal(attempts,2);
+});
+test('AudioContext uses requested 16k if supported',()=>{
+  class FakeAudioContext {constructor(options){this.sampleRate=options?.sampleRate||48000;}}
+  assert.equal(makeAudioContext(FakeAudioContext).sampleRate,16000);
 });

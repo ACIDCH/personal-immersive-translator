@@ -96,6 +96,17 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
         raise RuntimeError("BabelDOC 输出并非有效 PDF") from exc
     return winner.read_bytes()
 
+def installed_ocr_languages():
+    if not shutil.which("tesseract"):return []
+    try:
+        result=subprocess.run(["tesseract","--list-langs"],check=True,
+            capture_output=True,timeout=6,text=True)
+        names=set(result.stdout.splitlines()+result.stderr.splitlines())
+        return [language for language,pack in LANGS.items() if pack in names]
+    except (OSError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
+        return []
+
+
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
@@ -105,6 +116,7 @@ def health(x_pit_token: str|None=Header(None)):
         "image_ocr":bool(shutil.which("tesseract")),
         "speech_asr":bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN)),
         "languages":list(LANGS.keys()),
+        "installed_ocr_languages":installed_ocr_languages(),
         "engine":"local-only"
     }
 
