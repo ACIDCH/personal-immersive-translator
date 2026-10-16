@@ -10,7 +10,8 @@
     "scripting",
     "storage",
     "offscreen",
-    "tabCapture"
+    "tabCapture",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://api.cognitive.microsofttranslator.com/*",
