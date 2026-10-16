@@ -68,6 +68,38 @@ async def run_persistent(filename, count, port=8080):
     return result
 
 
+def run_inprocess(model_dir, filename, count):
+    """Benchmark user-supplied CTranslate2 model in authenticated-process code.
+
+    Actual inference only when explicitly invoked on the user's own machine.
+    Raw samples and transcripts are not written to disk.
+    """
+    import os
+    from services.faster_whisper_backend import model_directory,transcribe_local
+    previous=os.environ.get("PIT_FASTER_WHISPER_MODEL_DIR")
+    os.environ["PIT_FASTER_WHISPER_MODEL_DIR"]=str(model_dir)
+    try:
+        model_directory()
+        seconds=wav_duration(filename)
+        wav_bytes=pathlib.Path(filename).read_bytes()
+        durations=[]
+        failures=0
+        for _ in range(count):
+            start=time.perf_counter()
+            try:
+                transcribe_local(wav_bytes)
+                durations.append(time.perf_counter()-start)
+            except (OSError,ValueError,RuntimeError):
+                failures+=1
+            if failures>=4:break
+        result=summarize(durations,failures,seconds)
+        result["mode"]="inprocess-faster-whisper"
+        return result
+    finally:
+        if previous is None:os.environ.pop("PIT_FASTER_WHISPER_MODEL_DIR",None)
+        else:os.environ["PIT_FASTER_WHISPER_MODEL_DIR"]=previous
+
+
 def run(cli, model, filename, count, timeout):
     if not pathlib.Path(model).is_file():
         raise ValueError("请指定真实存在的 multilingual whisper.cpp 模型")
@@ -96,7 +128,7 @@ def run(cli, model, filename, count, timeout):
 if __name__=="__main__":
     parser=argparse.ArgumentParser(description="Whisper real-device inference measurements")
     parser.add_argument("--model",type=pathlib.Path)
-    parser.add_argument("--backend",choices=("cli","server"),default="cli")
+    parser.add_argument("--backend",choices=("cli","server","faster"),default="cli")
     parser.add_argument("--port",type=int,default=8080)
     parser.add_argument("--input",required=True,type=pathlib.Path)
     parser.add_argument("--cli",default="whisper-cli")
@@ -110,6 +142,10 @@ if __name__=="__main__":
             parser.error("--model is required for cli mode")
         result=run(args.cli,args.model,args.input,args.count,args.timeout)
         result["mode"]="per-chunk-cli"
+    elif args.backend=="faster":
+        if not args.model:
+            parser.error("--model must be the local CTranslate2 model DIRECTORY for faster")
+        result=run_inprocess(args.model,args.input,args.count)
     else:
         import asyncio
         result=asyncio.run(run_persistent(args.input,args.count,args.port))

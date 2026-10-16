@@ -1,0 +1,6 @@
+# OPTIONAL: only for PIT_ASR_BACKEND=faster.
+# Install separately in the local Python bridge environment:
+#   python -m pip install -r services/requirements-faster-whisper.txt
+# No model files bundled. Supply a CTranslate2 model directory you own.
+faster-whisper>=1.1,<2
+numpy>=1.26,<3
