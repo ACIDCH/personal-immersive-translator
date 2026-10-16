@@ -8,7 +8,7 @@ test('accepts only exact eligible HTTPS video player origins',()=>{
   'https://panopto.eu/Pages/Embed.aspx']) assert.ok(approvedOrigin(url),url);
  for(const url of [
   'http://www.youtube.com/embed/abc','https://youtube.com.evil.net/embed',
-  'https://panopto.com.evil.org/','https://evilpanopto.com',
+  'https://panopto.com.evil.org/','https://evilpanopto.com','https://university.panopto.evil.org/',
   'https://example.com/player','javascript:alert(1)', 'https://user:pass@panopto.com/'
  ]) assert.equal(approvedOrigin(url),null,url);
 });
