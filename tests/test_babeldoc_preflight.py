@@ -32,6 +32,26 @@ class BabeldocCliCompatibilityTest(unittest.TestCase):
         self.assertFalse(result["compatible"])
         self.assertIn("--config",result["missing"])
 
+    def test_similar_named_flags_do_not_satisfy_required_options(self):
+        # A broken executable may advertise only related --openai-* flags.
+        nearly=" ".join(flag for flag in FLAGS if flag!="--openai")
+        nearly += " --openai-v2 --openai-api-key-backup"
+        with patch("services.babeldoc_preflight.subprocess.run",
+                   return_value=subprocess.CompletedProcess(
+                       ["babeldoc","--help"],0,stdout=nearly,stderr="")):
+            result=inspect_babeldoc_cli("/usr/bin/babeldoc")
+        self.assertFalse(result["compatible"])
+        self.assertEqual(result["missing"],["--openai"])
+
+    def test_longer_suffix_does_not_count_as_exact_flag(self):
+        nearly=" ".join(flag for flag in FLAGS if flag!="--config")
+        nearly+=" --config-legacy"
+        with patch("services.babeldoc_preflight.subprocess.run",
+                   return_value=subprocess.CompletedProcess(
+                       ["babeldoc","--help"],0,stdout=nearly,stderr="")):
+            result=inspect_babeldoc_cli("/usr/bin/babeldoc")
+        self.assertIn("--config",result["missing"])
+
     def test_timeout_or_binary_missing_fails_closed(self):
         with patch("services.babeldoc_preflight.shutil.which",return_value=None):
             self.assertEqual(inspect_babeldoc_cli()["installed"],False)

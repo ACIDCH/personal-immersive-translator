@@ -32,7 +32,7 @@ class MultilingualOcrTest(unittest.TestCase):
         result=subprocess.run(["tesseract","--list-langs"],capture_output=True,
                                check=True,text=True,timeout=8)
         cls.installed=set(result.stdout.splitlines())
-        expected={"chi_sim","jpn","kor"}
+        expected={"chi_sim","jpn","kor","deu","spa"}
         if not expected.issubset(cls.installed):
             if os.environ.get("PIT_REQUIRE_CJK_OCR")=="1":
                 raise AssertionError("CI missing required CJK Tesseract language packs")
@@ -64,6 +64,12 @@ class MultilingualOcrTest(unittest.TestCase):
 
     def test_korean_real_engine(self):
         self.check_language("ko","안녕하세요세계")
+
+    def test_german_real_engine(self):
+        self.check_language("de","GUTEN TAG ÜBERSETZUNG")
+
+    def test_spanish_real_engine(self):
+        self.check_language("es","BUENOS DÍAS TRADUCCIÓN")
 
 
 class OcrMetricsTest(unittest.TestCase):

@@ -4,6 +4,7 @@ This validates *declared CLI compatibility*, not successful model download,
 valid credentials or layout-preserved translation on a real PDF.
 """
 import shutil
+import re
 import subprocess
 
 FLAGS=("--config","--files","--lang-in","--lang-out","--output",
@@ -22,5 +23,9 @@ def inspect_babeldoc_cli(path=None):
     except (OSError,UnicodeError,subprocess.SubprocessError):
         return {"installed":True,"compatible":False,
                 "missing":["CLI help unavailable"]}
-    missing=[flag for flag in FLAGS if flag not in help_text]
+    # Do not treat --openai-model as evidence of a --openai flag, nor
+    # --openai-api-key-v2 as the required --openai-api-key.
+    # CLI flags have explicit token boundaries in argparse's --help output.
+    missing=[flag for flag in FLAGS if not re.search(
+        r"(?<![\w-])"+re.escape(flag)+r"(?![\w-])",help_text)]
     return {"installed":True,"compatible":not missing,"missing":missing}

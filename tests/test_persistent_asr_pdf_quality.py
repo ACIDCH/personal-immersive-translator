@@ -87,6 +87,7 @@ class BridgeServerTest(unittest.TestCase):
 
     def test_server_backend_processes_valid_wav_without_loading_cli(self):
         with patch.object(bridge,"ASR_BACKEND","server"),\
+             patch.object(bridge,"ASR_SERVER_EXPERIMENTAL",True),\
              patch.object(bridge,"transcribe_server",new_callable=AsyncMock,
                           return_value="recognised French speech") as backend,\
              patch.object(bridge,"ASR_MODEL",""),\
@@ -98,8 +99,21 @@ class BridgeServerTest(unittest.TestCase):
         backend.assert_awaited_once()
         self.assertEqual(backend.call_args.args[0],pcm_sample())
 
+    def test_persistent_server_needs_explicit_risk_acknowledgement(self):
+        with patch.object(bridge,"ASR_BACKEND","server"),\
+             patch.object(bridge,"ASR_SERVER_EXPERIMENTAL",False):
+            response=TestClient(bridge.app).post("/asr",
+                headers=self.headers,
+                files={"audio":("sample.wav",pcm_sample(),"audio/wav")})
+            self.assertEqual(response.status_code,503)
+            health=TestClient(bridge.app).get("/health",headers=self.headers)
+            self.assertEqual(health.status_code,200)
+            self.assertFalse(health.json()["speech_asr"])
+            self.assertTrue(health.json()["speech_asr_requires_risk_ack"])
+
     def test_server_backend_rejects_invalid_wav_before_contact(self):
         with patch.object(bridge,"ASR_BACKEND","server"),\
+             patch.object(bridge,"ASR_SERVER_EXPERIMENTAL",True),\
              patch.object(bridge,"transcribe_server",new_callable=AsyncMock) as backend:
             result=self.client.post("/asr",headers=self.headers,
                 files={"audio":("bad.wav",b"oops","audio/wav")})
@@ -156,6 +170,7 @@ class RealLoopbackTransportTest(unittest.TestCase):
             transcript=asyncio.run(transcribe_server(pcm_sample(),port))
             self.assertEqual(transcript,"recognized speech from local server")
             with patch.object(bridge,"ASR_BACKEND","server"),\
+                 patch.object(bridge,"ASR_SERVER_EXPERIMENTAL",True),\
                  patch.dict(os.environ,{"PIT_WHISPER_SERVER_PORT":str(port)}):
                 reply=TestClient(bridge.app).post("/asr",
                     headers={"X-PIT-Token":"test-local-secret-at-least-16"},
@@ -169,6 +184,22 @@ class RealLoopbackTransportTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
             worker.join(timeout=2)
+
+
+class DirectServiceEntrypointTest(unittest.TestCase):
+    def test_python_bridge_direct_script_import_and_health_functions(self):
+        import sys
+        import subprocess
+        base=Path(__file__).resolve().parents[1]/"services"
+        code=(
+            "import runpy; ns=runpy.run_path('babeldoc_bridge.py',run_name='pit_probe');"
+            "assert callable(ns['server_is_ready']);"
+            "assert callable(ns['inspect_babeldoc_cli']);"
+            "assert callable(ns['transcribe_server'])"
+        )
+        output=subprocess.run([sys.executable,"-c",code],cwd=base,
+                              capture_output=True,text=True,timeout=15)
+        self.assertEqual(output.returncode,0,output.stderr[-1800:])
 
 
 class PdfQualityTest(unittest.TestCase):
