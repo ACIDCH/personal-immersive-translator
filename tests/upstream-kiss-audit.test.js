@@ -55,10 +55,13 @@ test('wrong upstream version / missing GPL provenance fails closed',()=>{
   assert.throws(()=>inspectKissUpstream(f.upstream,f.our),/GPL-3.0 provenance/);
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
-test('cannot silently broaden our own production host permissions',()=>{
+test('explicit personal-use policy accepts broad host grants as a configuration choice',()=>{
  const f=fixture();
  try{
   f.write(f.our,'manifest.json',{manifest_version:3,host_permissions:['<all_urls>']});
-  assert.throws(()=>inspectKissUpstream(f.upstream,f.our),/global permissions/);
+  const choice=inspectKissUpstream(f.upstream,f.our);
+  assert.equal(choice.pitProductionBroadHostPermission,true);
+  assert.equal(choice.broadHostPermissionAllowedWithOwnerConsent,true);
+  assert.equal(choice.websitePermissionPolicy,'personal-use-owner-approved');
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });

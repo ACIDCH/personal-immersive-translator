@@ -32,7 +32,9 @@ export function inspectKissUpstream(upstreamRoot,ourRoot=process.cwd()){
   const broadScripts=(manifest.content_scripts||[]).some(rule=>
     (rule.matches||[]).includes('<all_urls>'));
   const ourBroadHosts=(ours.host_permissions||[]).includes('<all_urls>');
-  must(!ourBroadHosts,'PIT production extension unexpectedly gained global permissions');
+  // Personal-use policy: broad website access is acceptable when the owner
+  // explicitly grants it in Chrome/Edge. Record it instead of blocking it.
+  // This does NOT authorize hidden uploads, paid APIs or login/DRM bypass.
   const built=existsSync(join(root,'build/chrome/manifest.json'));
   let chromeBuild=null;
   if(built){
@@ -60,6 +62,8 @@ export function inspectKissUpstream(upstreamRoot,ourRoot=process.cwd()){
     originalHostPermissionAllUrls:broadHosts,
     originalContentScriptAllUrls:broadScripts,
     pitProductionBroadHostPermission:ourBroadHosts,
+    broadHostPermissionAllowedWithOwnerConsent:true,
+    websitePermissionPolicy:'personal-use-owner-approved',
     upstreamChromeBuildObserved:built,
     chromeBuild,
     independentSourceCheckout:true,
@@ -67,7 +71,7 @@ export function inspectKissUpstream(upstreamRoot,ourRoot=process.cwd()){
     approval:'POC_ONLY_NOT_PRODUCTION_MIGRATION',
     migrationBlockers:[
       'GPL-3.0 obligations / license decision for a distributed derivative',
-      'replace broad host grants with per-origin opt-in where technically feasible',
+      'make broad or per-site access a documented user choice; rely on Chrome/Edge permission prompts',
       'keep ordinary translation default and paid AI separately user-confirmed',
       'preserve current ASR/PDF/OCR/recording-bound subtitle security gates',
       'real player, multi-site regression and resource benchmark before cutover'
