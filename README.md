@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.5 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.6 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -106,3 +106,11 @@ Per user request, this phase **does not finalize project naming, UI identity or 
 - [Runtime configuration, tests, security limits and release gates](docs/WHISPER_PDF_ACCEPTANCE_035_zh-CN.md).
 
 The entire project remains in stacked Draft PRs. UI/name redesign and the user-facing installer package are deferred until actual core-engine tests, final independent Codex review and release acceptance.
+
+## v0.3.6 — actual Chinese/Japanese/Korean OCR and BabelDOC CLI preflight
+
+- CI now installs **real Tesseract Chinese, Japanese and Korean packs** and open-source Noto CJK fonts; it invokes the local image OCR API with three actual raster images and records normalized character error rates. Each clean short-form synthetic fixture achieved 0% CER; real photographic and academic-layout accuracy is still **unverified**.
+- Device diagnostics execute installed BabelDOC `--help` within a 12s limit and reject versions that lack the required `--config`, `--files`, languages/output and API compatibility flags. The tools page reports missing flags; this is NOT proof of successful model downloading or real PDF translation.
+- `benchmarks/ocr_accuracy.py` supplies a Unicode-normalized Levenshtein CER metric for later permitted real-world fixtures. Read [development acceptance](docs/CJK_OCR_BABELDOC_PREFLIGHT_036_zh-CN.md).
+
+The repository remains in stacked Draft PRs. No intermediate user-facing ZIP; defer project naming, full control panel visual redesign and branding until all core functions and release blockers are resolved.

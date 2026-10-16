@@ -170,12 +170,16 @@ $('checkLocalEngines').addEventListener('click',async()=>{
     const permission=await chrome.permissions.request({origins:['http://127.0.0.1/*']});
     if(!permission)throw Error('未授权访问本机服务');
     const response=await fetch('http://127.0.0.1:8765/health',{
-      headers:{'X-PIT-Token':token},signal:AbortSignal.timeout(6000)
+      headers:{'X-PIT-Token':token},signal:AbortSignal.timeout(18000)
     });
     if(!response.ok)throw Error('服务返回 HTTP '+response.status);
     const capabilities=await response.json();
     const value=key=>capabilities[key]?'已就绪':'未就绪';
-    status.textContent='BabelDOC 翻译：'+value('ready')+
+    const cli=capabilities.babeldoc_cli||{};
+    const missing=Array.isArray(cli.missing)?cli.missing.filter(x=>typeof x==='string').slice(0,5):[];
+    const babeldocHint=cli.installed && !cli.compatible
+      ? '（本机 CLI 缺少：'+missing.join('、')+'）' : '';
+    status.textContent='BabelDOC 翻译：'+value('ready')+babeldocHint+
       '；扫描 PDF OCR：'+value('pdf_ocr')+
       '；图片 Tesseract：'+value('image_ocr')+
       '；本机 Whisper：'+value('speech_asr')+

@@ -76,11 +76,13 @@ jobs:
       - name: Install local Tesseract and test fonts
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra ocrmypdf ghostscript fonts-dejavu-core
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-chi-sim tesseract-ocr-jpn tesseract-ocr-kor ocrmypdf ghostscript fonts-dejavu-core fonts-noto-cjk
       - name: Install local bridge test dependencies
         run: |
           python -m pip install -r services/requirements.txt httpx Pillow
-      - name: Check PDF/OCR local bridge integration without paid API calls
+      - name: Check PDF/OCR local bridge integration, including real CJK OCR
+        env:
+          PIT_REQUIRE_CJK_OCR: '1'
         run: python -m unittest discover -s tests -p 'test_*.py' -v
   extension-smoke:
     runs-on: ubuntu-latest
