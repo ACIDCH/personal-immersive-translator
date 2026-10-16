@@ -24,8 +24,8 @@ export function inspectKissUpstream(upstreamRoot,ourRoot=process.cwd()){
        'GPL-3.0 provenance could not be verified');
   must(manifest.manifest_version===3,'Upstream Chrome extension is not Manifest V3');
   must(ours.manifest_version===3,'Current PIT extension must remain MV3');
-  for(const file of ['src/content.js','src/providers/background.js',
-     'src/libs/fileTranslate.js','src/config/defaultServices.js','pnpm-lock.yaml']){
+  for(const file of ['src/content.js','src/background.js',
+     'src/apis/trans.js','src/config/api.js','src/libs/batchQueue.js','pnpm-lock.yaml']){
     must(existsSync(join(root,file)),'Missing KISS source component: '+file);
   }
   const broadHosts=(manifest.host_permissions||[]).includes('<all_urls>');

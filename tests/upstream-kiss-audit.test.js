@@ -21,8 +21,8 @@ function fixture(){
   host_permissions:['<all_urls>'],
   content_scripts:[{matches:['<all_urls>'],js:['content.js']}]
  });
- for(const path of ['src/content.js','src/providers/background.js',
- 'src/libs/fileTranslate.js','src/config/defaultServices.js','pnpm-lock.yaml']){
+ for(const path of ['src/content.js','src/background.js',
+ 'src/apis/trans.js','src/config/api.js','src/libs/batchQueue.js','pnpm-lock.yaml']){
   write(upstream,path,'fixture');
  }
  return {root,our,upstream,write};
