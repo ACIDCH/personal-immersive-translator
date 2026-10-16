@@ -1,4 +1,4 @@
-import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';
+import {normalizeSettings, SETTINGS_KEY, hostIsBlocked} from './lib/settings.js';
 import {chooseEmbeddedFrame} from './lib/frame-route.js';
 const $=id=>document.getElementById(id);
 let mode='standard';
@@ -61,18 +61,35 @@ async function embeddedFrame(tabId){
 }
 async function startEmbeddedCaptions(tabId,mode){
   const frame=await embeddedFrame(tabId);
-  if(!frame)return {ok:false,reason:'无法找到可授权的 YouTube/Panopto 嵌入播放器，请打开原播放器页面。'};
+  if(!frame)return {ok:false,reason:'无法找到唯一匹配的 YouTube/Panopto 嵌入播放器；请检查播放画面是否可见，或打开原播放器页面。'};
+  const stored=await chrome.storage.local.get(SETTINGS_KEY);
+  const rule=normalizeSettings(stored[SETTINGS_KEY]).blockedHosts;
+  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+  if(tab?.id!==tabId || !tab.url) return {ok:false,reason:'活动标签页已切换，请重新开始。'};
+  if(hostIsBlocked(new URL(tab.url).hostname,rule) ||
+     hostIsBlocked(new URL(frame.origin).hostname,rule))
+    return {ok:false,reason:'课程页面或嵌入播放器已加入禁止翻译列表。'};
   if(!confirm('检测到独立嵌入的视频来源：'+frame.origin+
     '\\n是否只为该站点授予字幕读取权限？不会读取私人接口、下载媒体或绕过 DRM。')) {
     return {ok:false,reason:'未授予嵌入播放器访问权限'};
   }
   const allowed=await chrome.permissions.request({origins:[frame.origin+'/*']});
   if(!allowed)return {ok:false,reason:'未取得嵌入播放器站点权限'};
+  // The frame may navigate while Chrome presents a permission prompt.
+  // Re-resolve against the still-visible iframe URL before any injection.
+  const before=await embeddedFrame(tabId);
+  if(!before || before.frameId!==frame.frameId || before.origin!==frame.origin)
+    return {ok:false,reason:'播放器在授权过程中发生跳转，请重新点击开始。'};
   const target={tabId,frameIds:[frame.frameId]};
   await chrome.scripting.insertCSS({target,files:['src/content.css']});
   await chrome.scripting.executeScript({target,files:[
     'src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js'
   ]});
+  // Recheck after asynchronous script injection: do not start reading
+  // captions in a different recording that reused this same frame ID.
+  const after=await embeddedFrame(tabId);
+  if(!after || after.frameId!==frame.frameId || after.origin!==frame.origin)
+    return {ok:false,reason:'播放器在启动前切换了录制内容，请重试。'};
   const started=await chrome.tabs.sendMessage(tabId,{
     type:'PIT_CAPTIONS_START',mode
   },{frameId:frame.frameId});
@@ -90,6 +107,14 @@ async function subtitleAction(type){
     const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
     if(!tab?.id || !/^https?:\/\//.test(tab.url||'')) throw new Error('请在普通视频网站页面使用');
     if(type==='PIT_CAPTIONS_START'){
+      // A previous child frame can keep an active subtitle interval even if
+      // a new start request succeeds in the top document. Explicitly stop it.
+      const key='pit_caption_frame_'+tab.id;
+      const previous=(await chrome.storage.session.get(key))[key];
+      if(Number.isInteger(previous)&&previous>0)
+        await chrome.tabs.sendMessage(tab.id,{type:'PIT_CAPTIONS_STOP'},
+          {frameId:previous}).catch(()=>{});
+      await chrome.storage.session.remove(key);
       await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['src/content.css']});
       await chrome.scripting.executeScript({target:{tabId:tab.id},
         files:['src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js']});
