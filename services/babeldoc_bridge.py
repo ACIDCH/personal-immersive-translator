@@ -19,7 +19,7 @@ import httpx
 try:
     from services.whisper_server import configured_server_port, transcribe_server, server_is_ready
 except ModuleNotFoundError:  # Running python services/babeldoc_bridge.py directly
-    from whisper_server import configured_server_port, transcribe_server
+    from whisper_server import configured_server_port, transcribe_server, server_is_ready
 from PIL import Image, ImageOps, UnidentifiedImageError
 try:
     from services.babeldoc_preflight import inspect_babeldoc_cli
