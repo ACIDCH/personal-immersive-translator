@@ -155,7 +155,9 @@ $('pdf').addEventListener('change',async()=>{
   try{
     const {previewPdf}=await import('./pdf-preview.js');
     const result=await previewPdf(file,$('pdfPreview'));
-    status.textContent=result.needsOCR?'首页可能为扫描页，建议启用 OCR':'首页可读取文字；若包含扫描附件仍建议选择 OCR';
+    status.textContent=result.needsOCR
+      ? '抽查 '+result.sampledPages+' 页后发现缺少可提取文字的页面（如第 '+result.scannedCandidates.slice(0,5).join('、')+' 页），建议启用 OCR；也可能是空白页。'
+      : '已抽查 '+result.sampledPages+' 页，未发现明显扫描页；仍可手动启用 OCR。';
   }catch(error){status.textContent='预览失败：'+String(error.message||error);}
 });
 
