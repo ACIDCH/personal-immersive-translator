@@ -207,6 +207,28 @@ class BridgeContractTests(unittest.TestCase):
         self.assertTrue(value["lines"],value)
         self.assertIn("HELLO",value["lines"][0]["text"].upper())
 
+    def test_real_local_tesseract_french_ocr(self):
+        """French pack is installed in CI; use real raster recognition."""
+        import io
+        from PIL import Image,ImageDraw,ImageFont
+        if not shutil.which("tesseract"):
+            self.skipTest("Tesseract executable not installed")
+        result=subprocess.run(["tesseract","--list-langs"],capture_output=True,
+                              check=True,text=True,timeout=8)
+        if "fra" not in result.stdout.splitlines():
+            self.skipTest("French Tesseract data not installed")
+        image=Image.new("RGB",(1150,160),"white")
+        drawer=ImageDraw.Draw(image)
+        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",67)
+        drawer.text((36,33),"BONJOUR LE MONDE",fill="black",font=font)
+        buffer=io.BytesIO()
+        image.save(buffer,format="PNG")
+        response=self.client.post("/ocr-image",headers=self.headers,
+            files={"image":("bonjour.png",buffer.getvalue(),"image/png")},
+            data={"source":"fr"})
+        self.assertEqual(response.status_code,200,response.text[:180])
+        self.assertIn("BONJOUR",response.json()["original_text"].upper())
+
     def test_real_local_tesseract_english_ocr(self):
         import io
         from PIL import Image, ImageDraw, ImageFont
