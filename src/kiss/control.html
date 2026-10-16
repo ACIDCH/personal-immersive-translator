@@ -20,6 +20,23 @@ body{max-width:780px;margin:auto}.stack{display:grid;gap:14px}section{border:1px
 <button id="asrStart" type="button">开始识别当前指定标签页音频</button><button id="asrStop" type="button">停止语音识别</button>
 <p class="hint">音频只发送到本机 Whisper 服务；识别文本由文件工具设置的普通机器翻译服务处理。使用前需启动本机服务并安装 Whisper 模型。录音不会存入云端或历史记录。</p>
 </section>
+<section id="diagPanel"><h2>真实网站兼容性检查（不读取课程或字幕正文）</h2>
+<p class="hint">先在你自己的浏览器中登录并打开视频页面，再从 KISS 弹窗进入此控制台。检查仅读取播放器、字幕轨、嵌入框架的数量和可用状态，不抓取视频、账号、课程文字、字幕内容或网页链接。</p>
+<label>测试平台
+<select id="diagPlatform">
+<option value="O2B">O2B</option><option value="Panopto">Panopto</option>
+<option value="YouTube">YouTube</option><option value="Netflix">Netflix</option>
+<option value="Other" selected>其他平台</option></select></label>
+<p class="hint">手动测试结果（不记录文字描述）：</p>
+<label>视频能否播放 <select id="diagVideo"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>能否看到原文字幕 <select id="diagSource"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>能否显示双语字幕 <select id="diagTranslate"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>全屏模式能否显示字幕 <select id="diagFullscreen"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>本机 Whisper 听译是否正常 <select id="diagAsr"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<div><button id="diagScan" type="button">检查当前网页播放器</button>
+<button id="diagExport" type="button" disabled>导出不含敏感内容的诊断 JSON</button></div>
+<p id="diagStatus" class="hint" role="status" aria-live="polite">只有点击检查才会采集播放器能力信息；不会自动上传任何诊断数据。</p>
+</section>
 <p class="hint"><a href="options.html">配置标准翻译服务与 Key</a> · <a href="tools.html">PDF 与图片 OCR</a></p>
 <div id="status" role="status" aria-live="polite"></div>
 </div></main>

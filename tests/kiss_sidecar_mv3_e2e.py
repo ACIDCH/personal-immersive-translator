@@ -2,6 +2,7 @@
 plus PIT PDF.js + OCR tools. No paid API keys, private media or real OCR model.
 """
 import asyncio
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -137,6 +138,37 @@ async def main():
             "已停止",exact=False).wait_for(timeout=6000)
           assert await fixture.locator(".pit-caption-overlay").count()==0
           print("PASS: stopped subtitles remove translated overlay",flush=True)
+
+          # Real Chrome site diagnostics, but never exfiltrate account URLs,
+          # query strings or protected course/caption content.
+          await fixture.evaluate("""()=>{
+            const iframe=document.createElement('iframe');
+            iframe.src='about:blank';iframe.width='400';iframe.height='200';
+            document.body.append(iframe);
+            const secret=document.createElement('p');
+            secret.textContent='PRIVATE COURSE CONTENT MUST NEVER LEAVE THE TAB';
+            document.body.append(secret);
+          }""")
+          await control.locator("#diagPlatform").select_option("O2B")
+          await control.locator("#diagVideo").select_option("pass")
+          await control.locator("#diagSource").select_option("fail")
+          await control.locator("#diagScan").click()
+          await control.locator("#diagExport").wait_for(state="visible")
+          assert await control.locator("#diagExport").is_enabled()
+          async with control.expect_download() as downloaded:
+            await control.locator("#diagExport").click()
+          dl=await downloaded.value
+          report=json.loads(Path(await dl.path()).read_text(encoding="utf-8"))
+          assert report["schema"]=="pit-real-site-check-v1"
+          assert report["platform"]=="O2B"
+          assert report["counts"]["videoElements"]>=1,report
+          assert report["checks"]["video"]=="pass"
+          assert report["checks"]["sourceCaptions"]=="fail"
+          serialized=json.dumps(report)
+          for sensitive in ("PRIVATE COURSE","pit-upstream-fixture.example",
+                             "Owned subtitle fixture","local-test-token"):
+            assert sensitive not in serialized,sensitive
+          print("PASS: opt-in real-site diagnostic report has no URL, captions or credentials",flush=True)
           await fixture.close()
           tools=await browser.new_page()
           tools.on("pageerror",lambda e:errors.append(str(e)))

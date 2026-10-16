@@ -26,10 +26,8 @@ export function initSiteDiagnostics(verified){
  platform.addEventListener('change',reset);
  for(const id of Object.values(fields))get(id).addEventListener('change',()=>{
    if(!report)return;
-   report=buildSiteReport({platform:platform.value,frameResults:report._internalFrames||[],
-     knownFrameCount:report.knownFrames,scanMode:report.scanMode,feedback:answers()});
-   // The stored report never contains raw frame data, and _internalFrames
-   // is intentionally absent. Rescan for fresh capabilities before export.
+   // Scan again after changing manual assessments so exported data always
+   // corresponds to the visible state and the user's latest selections.
    reset();info('人工测试结果已修改，请重新执行检查后导出。');
  });
  scanButton.addEventListener('click',async()=>{
