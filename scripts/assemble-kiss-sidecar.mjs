@@ -8,10 +8,10 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
  const root=resolve(sourceRoot),build=resolve(buildDirectory),manifestFile=join(build,'manifest.json');
  must(existsSync(manifestFile),'KISS build manifest missing');
  const manifest=JSON.parse(readFileSync(manifestFile,'utf8'));
+ must(!existsSync(join(build,'pit')),'Sidecar already exists');
  must(manifest.manifest_version===3&&manifest.version==='2.1.1','Expected pinned KISS v2.1.1 MV3 release');
  must(manifest.background?.service_worker==='background.js','Unexpected upstream KISS background');
  must((manifest.host_permissions||[]).includes('<all_urls>'),'Unexpected KISS host permission policy');
- must(!existsSync(join(build,'pit')),'Sidecar already exists');
  for(const path of SOURCES)must(existsSync(join(root,'src',path)),'Missing PIT file: '+path);
  for(const path of SOURCES){const dest=join(build,'pit',path);mkdirSync(dirname(dest),{recursive:true});copyFileSync(join(root,'src',path),dest);}
  const opt=join(build,'pit/options.js');
