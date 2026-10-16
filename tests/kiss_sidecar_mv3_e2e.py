@@ -2,6 +2,7 @@
 plus PIT PDF.js + OCR tools. No paid API keys, private media or real OCR model.
 """
 import asyncio
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -19,29 +20,22 @@ async def main():
             "--no-sandbox",f"--disable-extensions-except={ext}",
             f"--load-extension={ext}"])
         try:
-          # KISS has a large webpack-built MV3 worker. Chromium may not
-          # surface an idle background worker until the popup is opened.
-          # Resolve the installed extension from Chrome's own extensions UI.
-          manager=await browser.new_page()
-          await manager.goto("chrome://extensions/")
-          try:
-            await manager.wait_for_function("""()=>
-              document.querySelector('extensions-manager')?.shadowRoot
-                ?.querySelector('#items-list')?.shadowRoot
-                ?.querySelectorAll('extensions-item').length>0
-            """,timeout=10000)
-            installed=await manager.evaluate("""()=>
-              [...document.querySelector('extensions-manager').shadowRoot
-                .querySelector('#items-list').shadowRoot.querySelectorAll('extensions-item')]
-                .map(el=>({id:el.id,name:el.shadowRoot?.querySelector('#name')?.textContent}))
-            """)
-          except Exception as exc:
-            installed=[]
-            print("Chrome extensions manager lookup failed:",str(exc),flush=True)
-          print("Chrome installed extensions:",installed,flush=True)
-          assert installed, "KISS extension did not appear in chrome://extensions"
-          extension_id=installed[0]["id"]
-          assert len(extension_id)==32,installed
+          # Headless Chromium may not expose chrome://extensions or start an
+          # idle MV3 worker immediately. Resolve targets first; for unpacked
+          # extensions without a manifest key, Chrome derives the ID from
+          # the canonical absolute unpacked directory path.
+          probe=await browser.new_page()
+          session=await browser.new_cdp_session(probe)
+          targets=(await session.send("Target.getTargets"))["targetInfos"]
+          urls=[t["url"] for t in targets if
+            t.get("url","").startswith("chrome-extension://")]
+          if urls:
+            extension_id=urls[0].split("/")[2]
+          else:
+            digest=hashlib.sha256(str(ext).encode("utf-8")).digest()[:16]
+            extension_id="".join(chr(97+(b>>4))+chr(97+(b&15)) for b in digest)
+          print("Chrome extension targets:",urls,
+                "candidate ID:",extension_id,flush=True)
           origin="chrome-extension://"+extension_id
           errors=[]
           popup=await browser.new_page()
