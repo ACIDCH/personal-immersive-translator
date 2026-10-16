@@ -64,6 +64,14 @@ class BridgeContractTests(unittest.TestCase):
         self.assertNotIn("fake-test-key-never-use",response.text)
         self.assertNotIn("test-local-secret-at-least-16",response.text)
 
+    def test_health_reports_only_installed_tesseract_language_packs(self):
+        with patch.object(bridge.shutil,"which",return_value="/usr/bin/tesseract"), \
+             patch.object(bridge.subprocess,"run",return_value=subprocess.CompletedProcess(
+                 ["tesseract","--list-langs"],0,stdout="eng\\nfra\\njpn\\n",stderr="")):
+            languages=bridge.installed_ocr_languages()
+        self.assertEqual(languages,["en","fr","ja"])
+        self.assertNotIn("ko",languages)
+
     def test_pdf_magic_and_language_validation(self):
         self.assertEqual(self.submit(b"not a pdf").status_code,400)
         self.assertEqual(self.submit(pdf(),source="ru").status_code,400)
