@@ -44,11 +44,27 @@ async def main():
                 await popup.locator("#standard").click()
                 assert "selected" in (await popup.locator("#standard").get_attribute("class") or "")
                 print("PASS: popup controls and mode switching")
+                assert await popup.locator("#webGroup").get_attribute("open") is not None
+                assert not await popup.locator("#videoGroup").evaluate("(el)=>el.open")
+                assert not await popup.locator("#speechGroup").evaluate("(el)=>el.open")
+                await popup.locator("#videoGroup summary").click()
+                assert await popup.locator("#captionsStart").is_visible()
+                await popup.locator("#fileGroup summary").click()
+                assert await popup.locator("#fileTools").is_visible()
+                await popup.locator("#speechGroup summary").click()
+                assert await popup.locator("#asrStart").is_visible()
+                warning=await popup.locator("#setupStatus").inner_text()
+                assert "尚未配置" in warning,warning
+                print("PASS: popup module groups, accessible controls and truthful provider readiness")
+
 
                 options=await context.new_page()
                 options.on("pageerror",lambda e: errors.append("options: "+str(e)))
                 await options.goto(f"chrome-extension://{extension_id}/src/options.html")
                 await options.locator('form[data-ready="1"]').wait_for(timeout=10000)
+                assert await options.locator('.options-nav a[href="#baseSettings"]').count()==1
+                assert await options.locator('.options-nav a[href="#privacySettings"]').count()==1
+                assert await options.locator("#saveActions").count()==1
                 await options.locator('[name="target"]').wait_for(timeout=10000)
                 await options.locator('[name="target"]').select_option("fr")
                 await options.locator('[name="standardProvider"]').select_option("deepl")
