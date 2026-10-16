@@ -68,11 +68,21 @@ async function startEmbeddedCaptions(tabId,mode){
   }
   const allowed=await chrome.permissions.request({origins:[frame.origin+'/*']});
   if(!allowed)return {ok:false,reason:'未取得嵌入播放器站点权限'};
+  // The frame may navigate while Chrome presents a permission prompt.
+  // Re-resolve against the still-visible iframe URL before any injection.
+  const before=await embeddedFrame(tabId);
+  if(!before || before.frameId!==frame.frameId || before.origin!==frame.origin)
+    return {ok:false,reason:'播放器在授权过程中发生跳转，请重新点击开始。'};
   const target={tabId,frameIds:[frame.frameId]};
   await chrome.scripting.insertCSS({target,files:['src/content.css']});
   await chrome.scripting.executeScript({target,files:[
     'src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js'
   ]});
+  // Recheck after asynchronous script injection: do not start reading
+  // captions in a different recording that reused this same frame ID.
+  const after=await embeddedFrame(tabId);
+  if(!after || after.frameId!==frame.frameId || after.origin!==frame.origin)
+    return {ok:false,reason:'播放器在启动前切换了录制内容，请重试。'};
   const started=await chrome.tabs.sendMessage(tabId,{
     type:'PIT_CAPTIONS_START',mode
   },{frameId:frame.frameId});
