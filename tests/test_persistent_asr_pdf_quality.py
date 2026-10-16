@@ -12,7 +12,7 @@ import fitz
 import httpx
 from fastapi.testclient import TestClient
 from services.pdf_quality import inspect_pair
-from services.whisper_server import configured_server_port,transcribe_server
+from services.whisper_server import configured_server_port,transcribe_server,server_is_ready
 
 os.environ.setdefault("PIT_BRIDGE_TOKEN","test-local-secret-at-least-16")
 os.environ.setdefault("DEEPSEEK_API_KEY","fake-test-key-never-use")
@@ -64,6 +64,14 @@ class ServerAdapterTest(unittest.IsolatedAsyncioTestCase):
         broken=httpx.MockTransport(lambda r:httpx.Response(200,json={"segments":[]}))
         with self.assertRaises(RuntimeError):
             await transcribe_server(pcm_sample(),port=8080,transport=broken)
+
+    async def test_health_distinguishes_running_server_from_open_port_only(self):
+        valid=httpx.MockTransport(lambda request:httpx.Response(200,
+            headers={"server":"whisper.cpp"},text="whisper local server"))
+        wrong=httpx.MockTransport(lambda request:httpx.Response(200,
+            headers={"server":"unrelated"},text="unrelated local process"))
+        self.assertTrue(server_is_ready(port=8080,transport=valid))
+        self.assertFalse(server_is_ready(port=8080,transport=wrong))
 
     async def test_invalid_ports_rejected(self):
         for value in ("0","80","65536","-1","1000x","8080/../../remote",
