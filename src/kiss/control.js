@@ -12,6 +12,16 @@ async function loadTarget(){
   const tab=await chrome.tabs.get(selected);
   if(!ACTIVE.test(tab?.url||''))throw Error('只能针对 HTTP(S) 网页执行字幕和语音操作');
   bound={id:tab.id,url:tab.url};
+  // The platform label is derived locally from the hostname only.
+  // The exact hostname/path never leaves this extension in a report.
+  const host=new URL(bound.url).hostname.toLowerCase();
+  const automatic=
+    /(^|\.)youtube\.com$/.test(host)||host==='youtu.be'?'YouTube':
+    /(^|\.)bilibili\.com$/.test(host)||host==='b23.tv'?'Bilibili':
+    /^missav\./.test(host)||/(^|\.)missav\.com$/.test(host)?'Miss AV':
+    /(^|\.)netflix\.com$/.test(host)?'Netflix':
+    host.includes('panopto.')?'Panopto':'Other';
+  el('diagPlatform').value=automatic;
   el('target').textContent='已绑定网页：'+new URL(bound.url).hostname+
     ' · 关闭或重新导航页面后，需要重新从 KISS 弹窗打开控制台。';
   const check=await globalThis.PITSidecar.send({type:'PIT_ASR_STATUS'});

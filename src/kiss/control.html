@@ -25,7 +25,8 @@ body{max-width:780px;margin:auto}.stack{display:grid;gap:14px}section{border:1px
 <label>测试平台
 <select id="diagPlatform">
 <option value="O2B">O2B</option><option value="Panopto">Panopto</option>
-<option value="YouTube">YouTube</option><option value="Netflix">Netflix</option>
+<option value="YouTube">YouTube</option><option value="Bilibili">Bilibili</option>
+<option value="Miss AV">Miss AV</option><option value="Netflix">Netflix</option>
 <option value="Other" selected>其他平台</option></select></label>
 <p class="hint">手动测试结果（不记录文字描述）：</p>
 <label>视频能否播放 <select id="diagVideo"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
@@ -33,9 +34,25 @@ body{max-width:780px;margin:auto}.stack{display:grid;gap:14px}section{border:1px
 <label>能否显示双语字幕 <select id="diagTranslate"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
 <label>全屏模式能否显示字幕 <select id="diagFullscreen"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
 <label>本机 Whisper 听译是否正常 <select id="diagAsr"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>整个网页的双语翻译是否正常 <select id="diagWebTranslation"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>图片 OCR 是否正常 <select id="diagImageOcr"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>PDF 预览是否正常 <select id="diagPdfPreview"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
+<label>PDF 布局保留翻译是否正常 <select id="diagPdfLayout"><option value="not-tested">未测试</option><option value="pass">正常</option><option value="fail">异常</option></select></label>
 <div><button id="diagScan" type="button">检查当前网页播放器</button>
-<button id="diagExport" type="button" disabled>导出不含敏感内容的诊断 JSON</button></div>
-<p id="diagStatus" class="hint" role="status" aria-live="polite">只有点击检查才会采集播放器能力信息；不会自动上传任何诊断数据。</p>
+<button id="diagExport" type="button" disabled>导出诊断 JSON</button></div>
+<div style="border-top:1px solid #bbc9dc;padding-top:12px;margin-top:14px">
+<p class="hint">**GitHub 自动报告：** 第一次输入限定在 ACIDCH/personal-immersive-translator 仓库、Issues 具有 Read and write 权限的 Fine-grained Token，并保存到本浏览器。以后只需点击下面的“诊断并上传 GitHub”即可自动创建 Issue。该仓库是公开的，Issue 内容同样公开；上传的只有上面的白名单字段，不含网页地址、正文和字幕。</p>
+<label>GitHub Issues 专用 Token
+<input id="diagGithubToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…（已配置时留空）"></label>
+<div>
+<button id="diagGithubSave" type="button">保存 GitHub 授权</button>
+<button id="diagGithubClear" type="button">清除此设备中的授权</button>
+</div>
+<p id="diagGithubStatus" class="hint" role="status">尚未检查 GitHub 授权状态</p>
+<button id="diagUpload" type="button">一键诊断当前网页并上传 GitHub</button>
+<p><a id="diagIssueLink" hidden target="_blank" rel="noopener noreferrer"></a></p>
+</div>
+<p id="diagStatus" class="hint" role="status" aria-live="polite">只有点击检查或一键上传才会读取网页能力数量。点击上传才会创建 GitHub Issue；不会自动上传字幕和账号信息。</p>
 </section>
 <p class="hint"><a href="options.html">配置标准翻译服务与 Key</a> · <a href="tools.html">PDF 与图片 OCR</a></p>
 <div id="status" role="status" aria-live="polite"></div>
