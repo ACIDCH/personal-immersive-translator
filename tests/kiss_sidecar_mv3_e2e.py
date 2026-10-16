@@ -17,7 +17,7 @@ async def main():
     with tempfile.TemporaryDirectory(prefix="kiss-sidecar-") as profile:
       async with async_playwright() as p:
         browser=await p.chromium.launch_persistent_context(
-          profile,channel="chrome",headless=True,args=[
+          profile,channel="chrome",headless=False,args=[
             "--no-sandbox",f"--disable-extensions-except={ext}",
             f"--load-extension={ext}"])
         try:
