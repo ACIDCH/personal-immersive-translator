@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.4 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.5 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -96,3 +96,13 @@ This is **not** a guaranteed money-spending limit and does not imply real authen
 [Detailed implemented-versus-unverified scope](docs/CORE_IMPLEMENTATION_034_zh-CN.md).
 
 Per user request, this phase **does not finalize project naming, UI identity or dashboard design, and does not deliver interim ZIP packages**. Those are reserved for the complete system after runtime acceptance and final independent Codex review.
+
+## v0.3.5 — persistent local ASR and PDF quality validation
+
+- Optional **persistent official whisper.cpp server** inference via authorized local Python bridge, fixed IPv4 loopback and response-format checking, with `whisper-cli` retained as the default. Model is loaded once in the separately started server instead of per audio chunk. This may reduce startup overhead but **has not been benchmarked on the user's Windows hardware**.
+- Health check distinguishes a real responding local Whisper server from an unverified port configuration. **Caution:** upstream example whisper-server has permissive CORS and no equivalent token authentication; leave this experimental option disabled on untrusted browser sessions and never expose it to a public interface.
+- **BabelDOC translated PDF post-check** now rejects dropped pages or a completely unsearchable output. Offline CLI reports pages and text outside page edges without including document content. This is structural screening, not full visual layout or translation-quality acceptance.
+- CI additionally executes **real French Tesseract OCR** beside existing English OCR and OCRmyPDF scanned-PDF tests; no Korean/Japanese/CJK CER benchmark yet.
+- [Runtime configuration, tests, security limits and release gates](docs/WHISPER_PDF_ACCEPTANCE_035_zh-CN.md).
+
+The entire project remains in stacked Draft PRs. UI/name redesign and the user-facing installer package are deferred until actual core-engine tests, final independent Codex review and release acceptance.
