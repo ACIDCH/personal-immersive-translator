@@ -46,7 +46,7 @@ async function flush(c){
     await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
       message:'已到本次识别请求上限（'+MAX_ASR_REQUESTS+' 次），音频捕获自动结束。'});
     await stop();
-    await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId,sessionId:c.sessionId});
+    await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId});
     return;
   }
   c.attempts++;
@@ -88,7 +88,7 @@ async function flush(c){
         await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
           message:'本机识别连续失败，音频已自动停止，请核查模型、令牌和服务配置。'});
         await stop();
-        await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId});
+        await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId});
       }else await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
         message:'本机识别失败，将在稍后重试，不会累积过期音频。'});
     }
@@ -162,7 +162,7 @@ async function start({streamId,tabId,token,sessionId}){
         // The audio track may end due to a player's device/permission change,
         // tab closure or Chrome revoking capture. Clear the service worker's
         // session too, rather than leaving a fake "recording" UI behind.
-        await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId});
+        await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId});
       })();
     },{once:true}));
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
