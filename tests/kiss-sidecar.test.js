@@ -5,9 +5,9 @@ import {join,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
 import {assembleKissSidecar} from '../scripts/assemble-kiss-sidecar.mjs';
 function setup(version='2.1.1'){
- const dir=mkdtempSync(join(tmpdir(),'pit-kiss-')),src=join(dir,'source'),build=join(dir,'kiss');
- mkdirSync(src);mkdirSync(build);
- writeFileSync(join(dir,'LICENSE'),'GNU GENERAL PUBLIC LICENSE Version 3');
+ const dir=mkdtempSync(join(tmpdir(),'pit-kiss-')),src=join(dir,'source'),build=join(dir,'kiss','build','chrome');
+ mkdirSync(src);mkdirSync(build,{recursive:true});
+ writeFileSync(join(dir,'kiss','LICENSE'),'GNU GENERAL PUBLIC LICENSE Version 3');
  const file=(path,body)=>{const full=join(src,path);mkdirSync(dirname(full),{recursive:true});writeFileSync(full,body);};
  file('LICENSE','MIT License');
  for(const p of ['tools.html','tools.js','options.html','options.js','ui.css','pdf-preview.js','lib/settings.js','lib/cache.js','lib/providers.js','lib/vision.js','vendor/pdf.mjs','vendor/pdf.worker.mjs','vendor/PDFJS-LICENSE.txt','vendor/SOURCE.json'])file('src/'+p,'mock');
