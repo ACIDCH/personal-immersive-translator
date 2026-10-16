@@ -88,6 +88,15 @@ async function captionAction(start){
   if(!result?.ok)throw Error(result?.reason||'当前视频没有可读取的字幕');
   say(result.reason||'增强字幕翻译已经开始');
 }
+async function whisperCheck(){
+  await verified();
+  const token=el('token').value;
+  const response=await globalThis.PITSidecar.send({
+    type:'PIT_ASR_PREFLIGHT',token
+  });
+  if(!response?.ok)throw Error(response?.error||'本机 Whisper 检测失败');
+  say(response.message||'本机 Whisper 服务可用');
+}
 async function asrAction(start){
   if(!start){
     const result=await globalThis.PITSidecar.send({type:'PIT_ASR_STOP'});
@@ -106,6 +115,7 @@ async function asrAction(start){
 }
 for(const [id,fn] of [
  ['captionStart',()=>captionAction(true)],['captionStop',()=>captionAction(false)],
+ ['asrCheck',whisperCheck],
  ['asrStart',()=>asrAction(true)],['asrStop',()=>asrAction(false)]
 ]){
  el(id).addEventListener('click',async()=>{

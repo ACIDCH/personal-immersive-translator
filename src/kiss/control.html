@@ -16,6 +16,7 @@ body{max-width:780px;margin:auto}.stack{display:grid;gap:14px}section{border:1px
 </section>
 <section><h2>实时音频听译</h2>
 <label>本机 Whisper 服务令牌<input id="token" type="password" autocomplete="off" placeholder="PIT_BRIDGE_TOKEN"></label>
+<button id="asrCheck" type="button">检查本机 Whisper 服务与模型</button>
 <button id="asrStart" type="button">开始识别当前指定标签页音频</button><button id="asrStop" type="button">停止语音识别</button>
 <p class="hint">音频只发送到本机 Whisper 服务；识别文本由文件工具设置的普通机器翻译服务处理。使用前需启动本机服务并安装 Whisper 模型。录音不会存入云端或历史记录。</p>
 </section>
