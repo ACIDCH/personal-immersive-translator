@@ -57,6 +57,8 @@ jobs:
       - name: Verify browser popup, tools, settings, real PDF.js page
         env:
           DEBUG: 'pw:browser'
-        run: python tests/kiss_sidecar_mv3_e2e.py
+        run: |
+          command -v xvfb-run
+          xvfb-run -a python tests/kiss_sidecar_mv3_e2e.py
       # GPL combined build exists only inside disposable CI runner.
       # Deliberately NO packaging/upload-artifact/release steps.
