@@ -69,7 +69,7 @@ def scanned_pdf(path):
                 # get_images(full=True), which only lists XObject references.
                 for img in page.get_image_info():
                     rect=fitz.Rect(img.get("bbox",(0,0,0,0))) & page.rect
-                    if not rect.is_empty and rect.get_area()/page_area >= 0.10:
+                    if not rect.is_empty and rect.get_area()/page_area >= 0.07:
                         return True
             return False
     except (ImportError,ValueError):
