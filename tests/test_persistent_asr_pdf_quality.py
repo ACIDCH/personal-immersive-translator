@@ -171,6 +171,22 @@ class RealLoopbackTransportTest(unittest.TestCase):
             worker.join(timeout=2)
 
 
+class DirectServiceEntrypointTest(unittest.TestCase):
+    def test_python_bridge_direct_script_import_and_health_functions(self):
+        import sys
+        import subprocess
+        base=Path(__file__).resolve().parents[1]/"services"
+        code=(
+            "import runpy; ns=runpy.run_path('babeldoc_bridge.py',run_name='pit_probe');"
+            "assert callable(ns['server_is_ready']);"
+            "assert callable(ns['inspect_babeldoc_cli']);"
+            "assert callable(ns['transcribe_server'])"
+        )
+        output=subprocess.run([sys.executable,"-c",code],cwd=base,
+                              capture_output=True,text=True,timeout=15)
+        self.assertEqual(output.returncode,0,output.stderr[-1800:])
+
+
 class PdfQualityTest(unittest.TestCase):
     def test_structural_pass_and_page_retention(self):
         with tempfile.TemporaryDirectory() as root:
