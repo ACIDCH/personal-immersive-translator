@@ -119,7 +119,12 @@ async def main():
                       node.disconnect();
                       return {ok:true,rate:audio.sampleRate};
                     }catch(error){return {ok:false,error:String(error.message||error)};}
-                    finally{await audio.close();}
+                    finally{
+                      await Promise.race([
+                        audio.close(),
+                        new Promise(resolve=>setTimeout(resolve,2000))
+                      ]);
+                    }
                 }""")
                 assert worklet_status["ok"],worklet_status
                 print("PASS: actual browser AudioWorklet processor loads from MV3 extension")
