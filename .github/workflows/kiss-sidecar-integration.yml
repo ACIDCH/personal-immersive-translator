@@ -1,0 +1,60 @@
+name: POC - KISS PDF OCR sidecar real browser
+on:
+  push:
+    branches:
+      - spike/kiss-v211-multimodal-sidecar-v045
+  pull_request:
+    paths:
+      - 'scripts/assemble-kiss-sidecar.mjs'
+      - 'tests/kiss-sidecar.test.js'
+      - 'tests/kiss_sidecar_mv3_e2e.py'
+      - '.github/workflows/kiss-sidecar-integration.yml'
+permissions:
+  contents: read
+jobs:
+  kiss-mv3-sidecar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify PIT integration assembly contract
+        run: node --test tests/kiss-sidecar.test.js
+      - name: Checkout fixed GPL KISS source outside our project
+        run: |
+          git clone --no-checkout --filter=blob:none https://github.com/fishjar/kiss-translator.git /tmp/pit-kiss-upstream
+          git -C /tmp/pit-kiss-upstream checkout --detach a1279f2517bd478ef1dd93b941f9177094486cd4
+          test "$(git -C /tmp/pit-kiss-upstream rev-parse HEAD)" = "a1279f2517bd478ef1dd93b941f9177094486cd4"
+          node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream
+      - name: Build actual original KISS Chrome extension
+        working-directory: /tmp/pit-kiss-upstream
+        env:
+          CI: 'true'
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          GENERATE_SOURCEMAP: 'false'
+        run: |
+          npm install --global --no-audit --no-fund pnpm@9.15.9
+          pnpm install --frozen-lockfile --ignore-scripts --reporter=append-only
+          pnpm build:chrome
+      - name: Copy official pinned PDF.js vendor assets
+        run: |
+          npm install --no-audit --no-fund --ignore-scripts --omit=optional
+          npm run vendor:pdf
+      - name: Assemble PIT sidecar into disposable KISS Chrome build
+        run: |
+          node scripts/assemble-kiss-sidecar.mjs /tmp/pit-kiss-upstream/build/chrome
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/options.js
+          node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream
+      - name: Install Playwright Chromium (unbranded, MV3 test capable)
+        run: |
+          python -m pip install 'playwright==1.55.0' 'PyMuPDF>=1.24,<2'
+          python -m playwright install --with-deps chromium
+      - name: Verify live Chromium MV3 KISS popup, file tools and PDF.js
+        run: python tests/kiss_sidecar_mv3_e2e.py
+      # GPL combined build exists only inside disposable CI runner.
+      # Deliberately NO packaging/upload-artifact/release steps.
