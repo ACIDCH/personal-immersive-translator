@@ -21,6 +21,10 @@ try:
 except ModuleNotFoundError:  # Running python services/babeldoc_bridge.py directly
     from whisper_server import configured_server_port, transcribe_server
 from PIL import Image, ImageOps, UnidentifiedImageError
+try:
+    from services.babeldoc_preflight import inspect_babeldoc_cli
+except ModuleNotFoundError:
+    from babeldoc_preflight import inspect_babeldoc_cli
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.responses import Response
@@ -141,8 +145,10 @@ def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
     asr_ready=(bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN))
                if ASR_BACKEND=="cli" else ASR_BACKEND=="server" and server_is_ready())
+    babeldoc_cli=inspect_babeldoc_cli()
     return {
-        "ready":bool(KEY and shutil.which("babeldoc")),
+        "ready":bool(KEY and babeldoc_cli["compatible"]),
+        "babeldoc_cli":babeldoc_cli,
         "pdf_ocr":bool(shutil.which("ocrmypdf") and shutil.which("tesseract")),
         "image_ocr":bool(shutil.which("tesseract")),
         "speech_asr":asr_ready,
