@@ -1,4 +1,5 @@
 import {chooseEmbeddedFrame} from '../lib/frame-route.js';
+import {sendToView} from './view-client.js';
 const el=id=>document.getElementById(id);
 const selected=Number(new URLSearchParams(location.search).get('tabId'));
 let bound=null;
@@ -12,7 +13,7 @@ async function loadTarget(){
   bound={id:tab.id,url:tab.url};
   el('target').textContent='已绑定网页：'+new URL(bound.url).hostname+
     ' · 关闭或重新导航页面后，需要重新从 KISS 弹窗打开控制台。';
-  const check=await chrome.runtime.sendMessage({type:'PIT_ASR_STATUS'});
+  const check=await globalThis.PITSidecar.send({type:'PIT_ASR_STATUS'});
   if(check?.ok && check.active)
     say(check.tabId===bound.id?'当前目标正在进行语音识别。':'其他网页正在进行语音识别。');
 }
@@ -24,7 +25,7 @@ async function verified(){
 }
 async function inject(target){
   await chrome.scripting.insertCSS({target,files:['pit/content.css']});
-  await chrome.scripting.executeScript({target,files:CAPTION_FILES.map(p=>'pit/'+p)});
+  await chrome.scripting.executeScript({target,files:['pit/bridge-client.js',...CAPTION_FILES.map(p=>'pit/'+p)]});
 }
 async function visibleFrames(id){
   const result=await chrome.scripting.executeScript({target:{tabId:id},func:()=>
@@ -45,9 +46,9 @@ async function captionAction(start){
   await verified();
   if(!start){
     const prev=(await chrome.storage.session.get('pit_caption_frame_'+bound.id))['pit_caption_frame_'+bound.id];
-    await chrome.tabs.sendMessage(bound.id,{type:'PIT_CAPTIONS_STOP'},{frameId:0}).catch(()=>{});
+    await sendToView(bound.id,{type:'PIT_CAPTIONS_STOP'},0).catch(()=>{});
     if(Number.isInteger(prev)&&prev>0)
-      await chrome.tabs.sendMessage(bound.id,{type:'PIT_CAPTIONS_STOP'},{frameId:prev}).catch(()=>{});
+      await sendToView(bound.id,{type:'PIT_CAPTIONS_STOP'},prev).catch(()=>{});
     await chrome.storage.session.remove('pit_caption_frame_'+bound.id);
     say('增强视频字幕已停止');return;
   }
@@ -63,11 +64,11 @@ async function captionAction(start){
   const key='pit_caption_frame_'+bound.id;
   const prev=(await chrome.storage.session.get(key))[key];
   if(Number.isInteger(prev)&&prev>0)
-    await chrome.tabs.sendMessage(bound.id,{type:'PIT_CAPTIONS_STOP'},{frameId:prev}).catch(()=>{});
+    await sendToView(bound.id,{type:'PIT_CAPTIONS_STOP'},prev).catch(()=>{});
   await chrome.storage.session.remove(key);
   await inject({tabId:bound.id});
-  let result=await chrome.tabs.sendMessage(bound.id,{type:'PIT_CAPTIONS_START',
-    mode,cues,userInitiated:mode==='ai'},{frameId:0});
+  let result=await sendToView(bound.id,{type:'PIT_CAPTIONS_START',
+    mode,cues,userInitiated:mode==='ai'},0);
   if(!result?.ok&&!cues?.length){
     const frame=await resolveEmbed(bound.id);
     if(frame){
@@ -77,10 +78,10 @@ async function captionAction(start){
         throw Error('嵌入播放器身份发生变化，请重试');
       const frameTarget={tabId:bound.id,frameIds:[frame.frameId]};
       await inject(frameTarget);
-      result=await chrome.tabs.sendMessage(bound.id,{
+      result=await sendToView(bound.id,{
         type:'PIT_CAPTIONS_START',mode,expectedUrl:frame.identity,
         userInitiated:mode==='ai'
-      },{frameId:frame.frameId});
+      },frame.frameId);
       if(result?.ok)await chrome.storage.session.set({[key]:frame.frameId});
     }
   }
@@ -89,7 +90,7 @@ async function captionAction(start){
 }
 async function asrAction(start){
   if(!start){
-    const result=await chrome.runtime.sendMessage({type:'PIT_ASR_STOP'});
+    const result=await globalThis.PITSidecar.send({type:'PIT_ASR_STOP'});
     if(!result?.ok)throw Error(result?.error||'停止失败');
     say('音频捕获已停止');return;
   }
@@ -97,7 +98,7 @@ async function asrAction(start){
   const token=el('token').value;
   if(token.length<16)throw Error('请填写本机 Whisper 服务令牌（至少 16 字符）');
   if(!confirm('开始捕获该网页标签页的声音并使用本机 Whisper 进行识别？识别文字将按普通翻译配置处理。'))return;
-  const result=await chrome.runtime.sendMessage({
+  const result=await globalThis.PITSidecar.send({
     type:'PIT_ASR_START',tabId:bound.id,expectedUrl:bound.url,token
   });
   if(!result?.ok)throw Error(result?.error||'本机音频捕获失败');
