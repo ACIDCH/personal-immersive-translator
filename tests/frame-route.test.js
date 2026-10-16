@@ -20,7 +20,7 @@ test('frame IDs are chosen only when an explicitly visible embed origin matches'
   {frameId:11,url:'https://school.hosted.panopto.com/Panopto/Pages/Embed.aspx?course=private'}
  ];
  assert.deepEqual(chooseEmbeddedFrame(visible,frame),
-  {frameId:11,origin:'https://school.hosted.panopto.com'});
+  {frameId:11,origin:'https://school.hosted.panopto.com',identity:visible[0]});
  assert.equal(chooseEmbeddedFrame(['https://www.google.com/'],frame),null);
  assert.equal(chooseEmbeddedFrame([],frame),null);
  assert.equal(chooseEmbeddedFrame(visible,[frame[0],frame[1]]),null);
@@ -34,7 +34,7 @@ test('strict video URL matching never selects unrelated recording on same Panopt
   const chosen=chooseEmbeddedFrame([
     'https://school.panopto.com/Panopto/Pages/Embed.aspx?id=visible-recording'
   ],frame);
-  assert.deepEqual(chosen,{frameId:23,origin:'https://school.panopto.com'});
+  assert.deepEqual(chosen,{frameId:23,origin:'https://school.panopto.com',identity:'https://school.panopto.com/Panopto/Pages/Embed.aspx?id=visible-recording'});
   assert.equal(chooseEmbeddedFrame([
     'https://school.panopto.com/Panopto/Pages/Embed.aspx?id=missing'
   ],frame),null);
@@ -48,7 +48,16 @@ test('ambiguous identical player frames fail closed rather than selecting arbitr
   assert.equal(chooseEmbeddedFrame([target],duplicate),null);
   // A fragment is not sent to the HTTP server: strip it when identifying frames.
   assert.deepEqual(chooseEmbeddedFrame([target+'#t=4'],[duplicate[0]]),
-    {frameId:3,origin:'https://www.youtube.com'});
+    {frameId:3,origin:'https://www.youtube.com',identity:target});
+});
+test('same frameId and origin must still carry exact recording identity',()=>{
+ const a='https://school.panopto.com/Panopto/Pages/Embed.aspx?id=recording-a';
+ const b='https://school.panopto.com/Panopto/Pages/Embed.aspx?id=recording-b';
+ const before=chooseEmbeddedFrame([a],[{frameId:7,url:a}]);
+ const after=chooseEmbeddedFrame([b],[{frameId:7,url:b}]);
+ assert.equal(before.frameId,after.frameId);
+ assert.equal(before.origin,after.origin);
+ assert.notEqual(before.identity,after.identity);
 });
 test('unapproved or downgraded URL origins are never selected',()=>{
  const candidates=[
