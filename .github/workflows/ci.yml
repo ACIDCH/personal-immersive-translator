@@ -76,7 +76,7 @@ jobs:
       - name: Install local Tesseract and test fonts
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng fonts-dejavu-core
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra ocrmypdf ghostscript fonts-dejavu-core
       - name: Install local bridge test dependencies
         run: |
           python -m pip install -r services/requirements.txt httpx Pillow
