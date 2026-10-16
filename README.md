@@ -22,6 +22,10 @@ Open-source browser extension project for bilingual webpages, site-visible video
 
 Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.md).
 
+## Source-base status and upstream reuse gate
+
+**Upstream verification (2026-10-16):** Our browser extension is **not a fork of a highly starred browser translator**. Mature upstream engines are integrated for PDF rendering, optional ASR, OCR, document processing and CI, but the page translation and caption controller are primarily project-authored code. We must not mislabel them as transplanted KISS / Read Frog / Immersive Translate source. A license-screened fork-versus-component comparison is required before claiming a high-star core base. See [audited repository evidence and decision gate](docs/UPSTREAM_BASELINE_DECISION_zh-CN.md).
+
 ## Modes
 
 | Mode | Current behavior | Requirements |
