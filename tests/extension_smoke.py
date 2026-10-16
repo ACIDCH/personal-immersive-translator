@@ -109,8 +109,12 @@ async def main():
                 worklet_status=await tools.evaluate("""async()=>{
                     const audio=new AudioContext();
                     try{
-                      await audio.audioWorklet.addModule(
-                        chrome.runtime.getURL('src/audio-capture-worklet.js'));
+                      await Promise.race([
+                        audio.audioWorklet.addModule(
+                          chrome.runtime.getURL('src/audio-capture-worklet.js')),
+                        new Promise((_,reject)=>setTimeout(()=>reject(
+                          new Error('AudioWorklet module load exceeded 8 seconds')),8000))
+                      ]);
                       const node=new AudioWorkletNode(audio,'pit-capture');
                       node.disconnect();
                       return {ok:true,rate:audio.sampleRate};
