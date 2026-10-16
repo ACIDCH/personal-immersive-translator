@@ -28,7 +28,7 @@ def sample_pdf():
     return data
 
 
-def fake_executable(directory,fail=False):
+def fake_executable(directory,fail=False,verify_ocr=False):
     path=Path(directory)/"babeldoc"
     script=f"""#!{sys.executable}
 import sys,tomllib,pathlib,os
@@ -43,6 +43,10 @@ assert options['openai-model']=='deepseek-chat'
 assert (path.stat().st_mode & 0o777)==0o600
 if {fail!r}: sys.exit(7)
 import fitz
+if {verify_ocr!r}:
+    with fitz.open(sys.argv[4]) as scanned:
+        assert 'SCANNED' in scanned[0].get_text().upper()
+
 doc=fitz.open()
 page=doc.new_page()
 page.insert_text((45,74),'Academic concept translated content for user review.')
@@ -52,6 +56,23 @@ doc.close()
     path.write_text(script,encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
     return path
+
+
+def scanned_sample_pdf():
+    from PIL import Image,ImageDraw,ImageFont
+    from io import BytesIO
+    picture=Image.new("RGB",(1550,240),"white")
+    painter=ImageDraw.Draw(picture)
+    font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",72)
+    painter.text((42,48),"SCANNED RESEARCH METHODS",font=font,fill="black")
+    data=BytesIO()
+    picture.save(data,format="PNG")
+    doc=fitz.open()
+    page=doc.new_page()
+    page.insert_image(fitz.Rect(38,86,560,210),stream=data.getvalue())
+    pdf=doc.tobytes()
+    doc.close()
+    return pdf
 
 
 class SubprocessLifecycleTest(unittest.TestCase):
@@ -70,6 +91,22 @@ class SubprocessLifecycleTest(unittest.TestCase):
                 self.assertIn("translated content",document[0].get_text())
             self.assertEqual(result.headers["cache-control"],"no-store")
             self.assertTrue(executable.exists())
+
+    def test_complete_request_runs_real_ocrmypdf_then_real_cli_fixture(self):
+        import shutil
+        if not shutil.which("ocrmypdf"):
+            self.skipTest("OCRmyPDF executable not installed")
+        with tempfile.TemporaryDirectory() as root:
+            fake_executable(root,verify_ocr=True)
+            with patch.dict(os.environ,{"PATH":root+os.pathsep+os.environ["PATH"]}),\
+                 patch.object(bridge,"KEY","fake-test-key-never-use"):
+                result=TestClient(bridge.app).post("/translate",
+                    headers={"X-PIT-Token":"test-local-secret-at-least-16"},
+                    data={"source":"en","target":"zh","ocr":"true"},
+                    files={"pdf":("scanned.pdf",scanned_sample_pdf(),"application/pdf")})
+            self.assertEqual(result.status_code,200,result.text[:200])
+            with fitz.open(stream=result.content,filetype="pdf") as output:
+                self.assertIn("translated content",output[0].get_text())
 
     def test_true_cli_failure_does_not_return_secret_or_document(self):
         with tempfile.TemporaryDirectory() as root:
