@@ -123,7 +123,7 @@ async def main():
           }""")
           await control.locator("#cues").set_input_files({
             "name":"offline-fixture.vtt","mimeType":"text/vtt",
-            "buffer":b"WEBVTT\\n\\n00:00:00.000 --> 00:00:08.000\\nOwned subtitle fixture\\n"
+            "buffer":b"WEBVTT\n\n00:00:00.000 --> 00:00:08.000\nOwned subtitle fixture\n"
           })
           await control.locator("#captionStart").click()
           await control.locator("#status").get_by_text(
