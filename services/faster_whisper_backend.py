@@ -19,7 +19,10 @@ def model_directory(raw=None):
     value=os.environ.get("PIT_FASTER_WHISPER_MODEL_DIR","") if raw is None else raw
     if not isinstance(value,str) or not value.strip():
         raise ValueError("未指定本机 CTranslate2 Whisper 模型目录")
-    path=Path(value).expanduser().resolve(strict=True)
+    try:
+        path=Path(value).expanduser().resolve(strict=True)
+    except (OSError,RuntimeError) as exc:
+        raise ValueError("本机 CTranslate2 模型目录不存在或无法读取") from exc
     if not path.is_dir():
         raise ValueError("Whisper 模型路径必须是本地目录")
     if not all((path/name).is_file() for name in ("model.bin","config.json","tokenizer.json")):
