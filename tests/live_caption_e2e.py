@@ -58,6 +58,11 @@ async def main():
       # Previously in-flight translation cannot reintroduce overlay after STOP.
       await asyncio.sleep(.9)
       assert await page.locator(".pit-asr-overlay").count()==0
+      await page.evaluate("()=>window.simulate({type:'PIT_ASR_INTERRUPTED_VIEW'})")
+      alert=await page.locator(".pit-asr-interrupted").inner_text()
+      assert '已中断' in alert and '已停止' in alert,alert
+      assert await page.locator(".pit-asr-overlay").count()==0
+      print("PASS: unexpected track-end notification without stale recording overlay")
       assert not errors,errors
       print("PASS: rapid ASR captions coalesce, no stale results, latency metrics, stop cleanup")
     finally:await browser.close()

@@ -3,6 +3,7 @@
 <h1>文件与图片翻译</h1><p class="muted">图片可使用 Gemini OCR+翻译（主动上传到你的 Gemini API，可能计费）；PDF 高保真翻译需要在本机启动 BabelDOC 服务。</p>
 <div class="layout"><section class="panel"><h2>图片 OCR + 双语翻译</h2>
 <label>选择 PNG、JPEG、WebP 图片<input id="image" type="file" accept="image/png,image/jpeg,image/webp"></label><img id="imagePreview" class="preview" hidden alt="所选图片预览">
+<label class="inline"><input type="checkbox" id="imageLayout">按图片原位置预览译文（实验性，逐行翻译可能增加请求次数）</label><div id="translatedImage" class="result" hidden aria-label="图片译文位置预览"></div>
 <label>本地 OCR 源语言<select id="imageSource"><option value="en">英语</option><option value="zh">简体中文</option><option value="ja">日语</option><option value="ko">韩语</option><option value="fr">法语</option><option value="de">德语</option><option value="es">西班牙语</option></select></label><button class="primary" id="imageTranslate">Gemini 图片 OCR + 翻译</button><button id="localOCR">本机 Tesseract OCR + 默认机器翻译</button>
 <p class="muted">不会在未点击时发送图片。本机 Tesseract OCR 需要启动相同的本机服务并填写右侧令牌；识别后的文本通过你配置的默认翻译 API 翻译。PaddleOCR 尚未集成。</p>
 <h3>原文</h3><div id="original" class="result"></div><h3>译文</h3><div id="translated" class="result"></div><p id="imageStatus" role="status"></p>

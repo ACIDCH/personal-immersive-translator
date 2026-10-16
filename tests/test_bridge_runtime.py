@@ -132,6 +132,43 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(calls,["ocrmypdf","babeldoc"])
 
 
+    def test_tesseract_tsv_line_coordinates_are_bounded_and_safe(self):
+        header="level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext"
+        rows=[
+            "5\t1\t1\t1\t1\t1\t10\t20\t45\t20\t98\tHello",
+            "5\t1\t1\t1\t1\t2\t60\t20\t45\t20\t95\tworld",
+            "5\t1\t1\t1\t2\t1\t10\t70\t50\t20\t90\tBonjour",
+            "5\t1\t1\t1\t3\t1\t999999\t70\t50\t20\t90\tInvalid"
+        ]
+        result=bridge.parse_ocr_layout("\n".join([header,*rows]),500,200)
+        self.assertEqual(len(result),2)
+        self.assertEqual(result[0]["text"],"Hello world")
+        self.assertEqual(result[0]["x"],10)
+        self.assertEqual(result[0]["y"],20)
+        self.assertEqual(result[0]["w"],95)
+        self.assertEqual(result[1]["text"],"Bonjour")
+
+    def test_real_local_tesseract_layout_mode(self):
+        import io
+        from PIL import Image,ImageDraw,ImageFont
+        if not shutil.which("tesseract"):
+            self.skipTest("Tesseract unavailable")
+        image=Image.new("RGB",(900,180),"white")
+        draw=ImageDraw.Draw(image)
+        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",58)
+        draw.text((30,35),"HELLO IMAGE OCR",fill="black",font=font)
+        buffer=io.BytesIO()
+        image.save(buffer,format="PNG")
+        response=self.client.post("/ocr-image",headers=self.headers,
+            files={"image":("fixture.png",buffer.getvalue(),"image/png")},
+            data={"source":"en","layout":"true"})
+        self.assertEqual(response.status_code,200,response.text[:200])
+        value=response.json()
+        self.assertEqual(value["image_width"],900)
+        self.assertEqual(value["image_height"],180)
+        self.assertTrue(value["lines"],value)
+        self.assertIn("HELLO",value["lines"][0]["text"].upper())
+
     def test_real_local_tesseract_english_ocr(self):
         import io
         from PIL import Image, ImageDraw, ImageFont

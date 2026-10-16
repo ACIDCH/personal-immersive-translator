@@ -77,6 +77,7 @@ $('localOCR').addEventListener('click',async()=>{
   const granted=await chrome.permissions.request({origins:['http://127.0.0.1/*']});
   if(!granted)throw new Error('未授权本地 OCR 服务');
   const form=new FormData();form.append('image',file,file.name);form.append('source',$('imageSource').value);
+  form.append('layout',String($('imageLayout').checked));
   const response=await fetch('http://127.0.0.1:8765/ocr-image',
    {method:'POST',headers:{'X-PIT-Token':token},body:form,signal:AbortSignal.timeout(110000)});
   if(!response.ok)throw new Error('OCR 服务响应 HTTP '+response.status);
@@ -86,15 +87,47 @@ $('localOCR').addEventListener('click',async()=>{
   $('original').textContent=original;
   status.textContent='识别完成，正在调用常规翻译服务…';
   const settings=normalizeSettings((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
-  const fragments=original.match(/[\s\S]{1,950}/g)||[];
+  const requestedLayout=$('imageLayout').checked;
+  const lines=requestedLayout && Array.isArray(result.lines)
+    ? result.lines.slice(0,80).filter(x=>x && typeof x.text==='string' && x.text.trim()) : [];
+  const fragments=lines.length?lines.map(x=>x.text.trim()):original.match(/[\s\S]{1,950}/g)||[];
   const out=[];
   for(let i=0;i<fragments.length;i+=8){
    const translated=await translateBatch(fragments.slice(i,i+8),{
      ...settings,provider:settings.standardProvider,source:$('imageSource').value,target:settings.target});
    out.push(...translated);
   }
-  $('translated').textContent=out.join('');
-  status.textContent='已完成本地 OCR + 常规翻译。';
+  $('translated').textContent=lines.length?out.join('\n'):out.join('');
+  const layoutView=$('translatedImage');
+  layoutView.replaceChildren();layoutView.hidden=true;
+  if(lines.length && result.image_width>0 && result.image_height>0 && previewUrl){
+    const wrapper=document.createElement('div');
+    wrapper.style.cssText='position:relative;width:100%;display:block';
+    const image=document.createElement('img');
+    image.src=previewUrl;
+    image.alt='原图及其所在位置的译文';
+    image.style.cssText='width:100%;height:auto;display:block';
+    wrapper.append(image);
+    lines.forEach((line,i)=>{
+      const x=Math.max(0,Math.min(100,100*Number(line.x)/result.image_width));
+      const y=Math.max(0,Math.min(100,100*Number(line.y)/result.image_height));
+      const width=Math.max(1,Math.min(100-x,100*Number(line.w)/result.image_width));
+      if(![x,y,width].every(Number.isFinite))return;
+      const label=document.createElement('span');
+      label.textContent=out[i]||'';
+      label.title=line.text;
+      label.style.cssText='position:absolute;box-sizing:border-box;overflow-wrap:anywhere;'+
+        'background:rgba(255,255,255,.94);color:#17212e;font-size:clamp(9px,1.2vw,16px);'+
+        'line-height:1.15;padding:2px;border-radius:2px;max-height:18%;overflow:hidden';
+      label.style.left=x+'%';label.style.top=y+'%';
+      label.style.width=Math.max(8,width)+'%';
+      wrapper.append(label);
+    });
+    layoutView.append(wrapper);layoutView.hidden=false;
+  }
+  status.textContent=lines.length
+    ? '已生成按位置排列的实验性图片译文预览；复杂排版请核对原图与译文。'
+    : '已完成本地 OCR + 常规翻译。';
  }catch(error){status.textContent='本地 OCR 失败：'+String(error.message||error);}
  finally{$('localOCR').disabled=false;}
 });
@@ -122,7 +155,9 @@ $('pdf').addEventListener('change',async()=>{
   try{
     const {previewPdf}=await import('./pdf-preview.js');
     const result=await previewPdf(file,$('pdfPreview'));
-    status.textContent=result.needsOCR?'首页可能为扫描页，建议启用 OCR':'首页可读取文字；若包含扫描附件仍建议选择 OCR';
+    status.textContent=result.needsOCR
+      ? '抽查 '+result.sampledPages+' 页后发现缺少可提取文字的页面（如第 '+result.scannedCandidates.slice(0,5).join('、')+' 页），建议启用 OCR；也可能是空白页。'
+      : '已抽查 '+result.sampledPages+' 页，未发现明显扫描页；仍可手动启用 OCR。';
   }catch(error){status.textContent='预览失败：'+String(error.message||error);}
 });
 
