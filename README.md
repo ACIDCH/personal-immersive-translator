@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.2 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.3 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -74,3 +74,13 @@ Long-article continuation beyond 250 paragraphs; SPA and open Shadow DOM source 
 - Reproducible tests and evidence: [provider privacy and cache acceptance](docs/PROVIDER_PRIVACY_CACHE_ACCEPTANCE_zh-CN.md).
 
 This is **not** a guaranteed money-spending limit and does not imply real authenticated video services or real PDF/ASR model acceptance.
+
+## v0.3.3 development hardening
+
+- Native video captions can temporarily fall back to already-visible YouTube/Netflix/Panopto-style DOM captions when a text track exists but contains no usable cues. If the native timeline loads later it takes priority again; hidden captions and stale async responses no longer reappear.
+- Opt-in local audio recognition cleans the extension's capture session when Chrome unexpectedly ends the tab audio track, rather than showing a false recording state.
+- Local Tesseract image OCR optionally supplies **bounded line coordinates**. Users can enable experimental positional image translation preview. It is off by default because segmented machine translation can cost more API requests and may reduce text coherence.
+- Official Mozilla PDF.js viewer checks a bounded sample of pages (up to 20) so mixed scanned appendices are not missed by first-page-only inspection.
+- Tests use Chrome with simulated platform DOM, a real Tesseract engine and actual PDF.js; **no actual streaming DRM services, real Whisper model or full BabelDOC reconstruction is certified**.
+
+[Module acceptance and remaining blockers](docs/MULTIMODAL_HARDENING_ACCEPTANCE_033_zh-CN.md).
