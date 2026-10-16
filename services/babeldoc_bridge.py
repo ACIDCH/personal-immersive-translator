@@ -17,7 +17,7 @@ import io
 import csv
 import httpx
 try:
-    from services.whisper_server import configured_server_port, transcribe_server
+    from services.whisper_server import configured_server_port, transcribe_server, server_is_ready
 except ModuleNotFoundError:  # Running python services/babeldoc_bridge.py directly
     from whisper_server import configured_server_port, transcribe_server
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -139,14 +139,15 @@ def server_port_valid():
 @app.get("/health")
 def health(x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
+    asr_ready=(bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN))
+               if ASR_BACKEND=="cli" else ASR_BACKEND=="server" and server_is_ready())
     return {
         "ready":bool(KEY and shutil.which("babeldoc")),
         "pdf_ocr":bool(shutil.which("ocrmypdf") and shutil.which("tesseract")),
         "image_ocr":bool(shutil.which("tesseract")),
-        "speech_asr":(bool(ASR_MODEL and pathlib.Path(ASR_MODEL).is_file() and shutil.which(ASR_BIN))
-                      if ASR_BACKEND=="cli" else ASR_BACKEND=="server" and server_port_valid()),
+        "speech_asr":asr_ready,
         "speech_asr_backend":ASR_BACKEND,
-        "speech_asr_verified":False,
+        "speech_asr_verified":ASR_BACKEND=="server" and asr_ready,
         "languages":list(LANGS.keys()),
         "installed_ocr_languages":installed_ocr_languages(),
         "engine":"local-only"
