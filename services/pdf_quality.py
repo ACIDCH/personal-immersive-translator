@@ -3,12 +3,11 @@
 Metrics never contain original or translated text, API keys, page images,
 file paths, or third-party content. Layout heuristics are NOT quality scores.
 """
-from pathlib import Path
 import math
+import fitz
 
 
 def summarize_pdf(path):
-    import fitz
     with fitz.open(path) as doc:
         if doc.needs_pass:
             raise ValueError("密码保护的 PDF 无法直接验收")
@@ -25,7 +24,7 @@ def summarize_pdf(path):
                         if not span.get("text","").strip():continue
                         span_count+=1
                         try:
-                            rect=__import__("fitz").Rect(span["bbox"])
+                            rect=fitz.Rect(span["bbox"])
                             if any(not math.isfinite(n) for n in rect):
                                 out_of_bounds+=1
                             elif (rect.x0<page.rect.x0-3 or rect.y0<page.rect.y0-3 or
@@ -53,8 +52,8 @@ def inspect_pair(original,translated):
     # but should not lose physical pages.
     if target["pages"] < source["pages"]:
         raise ValueError("翻译后的 PDF 页数少于原文")
-    if source["text_pages"] and not target["text_pages"]:
-        raise ValueError("翻译后 PDF 没有可提取文字")
+    if not target["text_pages"]:
+        raise ValueError("翻译后 PDF 没有可提取文字；可能是 OCR 或字体渲染失败")
     if target["outside_spans"]:
         warnings.append("译文含页面边界之外的文字；需要人工检查裁切")
     if target["pages"] > source["pages"]*4:
