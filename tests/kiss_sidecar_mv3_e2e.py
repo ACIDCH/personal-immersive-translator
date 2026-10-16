@@ -26,6 +26,9 @@ async def main():
           # installation or the service worker did not start.
           manager=await browser.new_page()
           await manager.goto("chrome://extensions",wait_until="domcontentloaded")
+          print("Chrome manager URL:",manager.url,
+                "title:",await manager.title(),flush=True)
+          print("Chrome manager HTML:",(await manager.content())[:2400],flush=True)
           await manager.wait_for_function("""() =>
             document.querySelector('extensions-manager')?.shadowRoot
               ?.querySelector('#items-list')?.shadowRoot !== undefined
