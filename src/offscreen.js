@@ -15,7 +15,14 @@ async function dispose(c){
   if(!c)return;
   clearInterval(c.timer);
   c.abort?.abort();
-  if(c.processor){c.processor.onaudioprocess=null;try{c.processor.disconnect();}catch{}}
+  if(c.processor){
+    if(c.processor.port){
+      c.processor.port.onmessage=null;
+      try{c.processor.port.postMessage({type:'stop'});}catch{}
+    }
+    c.processor.onaudioprocess=null;
+    try{c.processor.disconnect();}catch{}
+  }
   if(c.source){try{c.source.disconnect();}catch{}}
   if(c.mute){try{c.mute.disconnect();}catch{}}
   c.queue?.clear();
@@ -54,7 +61,7 @@ async function flush(c){
     const body=new FormData();body.append('audio',wav,'chunk.wav');
     const response=await fetch('http://127.0.0.1:8765/asr',{
       method:'POST',headers:{'X-PIT-Token':c.token},body,
-      signal:AbortSignal.any([c.abort.signal,AbortSignal.timeout(45000)])
+      signal:AbortSignal.any([c.abort.signal,AbortSignal.timeout(15000)])
     });
     if(!response.ok)throw Error('Whisper HTTP '+response.status);
     const result=await response.json();
@@ -101,20 +108,40 @@ async function start({streamId,tabId,token}){
     if(generation!==epoch){stream.getTracks().forEach(t=>t.stop());return {ok:false,error:'捕获已取消'};}
     context=makeAudioContext(AudioContext);
     const source=context.createMediaStreamSource(stream);
-    const processor=context.createScriptProcessor(4096,1,1);
+    const queue=new BoundedAudioQueue(context.sampleRate,6);
+    let processor=null,modern=false;
+    if(context.audioWorklet && typeof AudioWorkletNode==='function'){
+      try{
+        await context.audioWorklet.addModule(chrome.runtime.getURL('src/audio-capture-worklet.js'));
+        processor=new AudioWorkletNode(context,'pit-capture',{
+          numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]
+        });
+        modern=true;
+      }catch{
+        // A restricted Chrome profile may disable AudioWorklets. Use the
+        // existing ScriptProcessor as a documented compatibility fallback.
+      }
+    }
+    if(!processor)processor=context.createScriptProcessor(4096,1,1);
     const mute=context.createGain();mute.gain.value=0;
     source.connect(processor);
     processor.connect(mute);mute.connect(context.destination);
-    source.connect(context.destination); // Preserve playback, per Chrome tabCapture docs.
-    const queue=new BoundedAudioQueue(context.sampleRate,6);
+    source.connect(context.destination); // Preserve playback of captured tab.
     c={context,source,processor,mute,stream,tabId,token,queue,busy:false,
       timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0,failures:0,retryAt:0};
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
     current=c;
-    processor.onaudioprocess=e=>{
-      if(current!==c)return;
-      c.queue.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-    };
+    if(modern){
+      processor.port.onmessage=e=>{
+        if(current!==c || !(e.data instanceof Float32Array))return;
+        c.queue.push(e.data);
+      };
+    }else{
+      processor.onaudioprocess=e=>{
+        if(current!==c)return;
+        c.queue.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+    }
     stream.getAudioTracks().forEach(t=>t.addEventListener('ended',()=>{
       if(current===c)void (async()=>{
         await stop();
