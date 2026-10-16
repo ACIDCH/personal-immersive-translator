@@ -22,6 +22,20 @@ def configured_server_port(raw=None):
     return port
 
 
+def server_is_ready(port: int | None = None, transport=None) -> bool:
+    """Probe only loopback; a configured port alone is NOT a running model."""
+    try:
+        selected=configured_server_port() if port is None else configured_server_port(port)
+        with httpx.Client(timeout=httpx.Timeout(1.2,connect=0.5),
+                          trust_env=False,follow_redirects=False,
+                          transport=transport) as client:
+            response=client.get(f"http://127.0.0.1:{selected}/")
+        return response.status_code==200 and (
+            response.headers.get("server","").lower()=="whisper.cpp")
+    except (ValueError,httpx.HTTPError):
+        return False
+
+
 async def transcribe_server(wav: bytes, port: int | None = None, transport=None) -> str:
     """Send one validated WAV to a preloaded local model; never upload online."""
     selected=configured_server_port() if port is None else configured_server_port(port)
