@@ -169,6 +169,52 @@ async def main():
                              "Owned subtitle fixture","local-test-token"):
             assert sensitive not in serialized,sensitive
           print("PASS: opt-in real-site diagnostic report has no URL, captions or credentials",flush=True)
+
+          # Verify ONE CLICK performs a fresh site scan and an actual
+          # issue-creation API call with only whitelist data. This mock is
+          # installed in the trusted extension page itself. There is no
+          # external GitHub request, login or paid API in this CI test.
+          await control.locator("#diagPlatform").select_option("Bilibili")
+          await control.locator("#diagWebTranslation").select_option("fail")
+          await control.locator("#diagImageOcr").select_option("pass")
+          await control.locator("#diagGithubToken").fill(
+            "github_pat_FAKE_ISSUES_ONLY_CI_1234567890")
+          await control.locator("#diagGithubSave").click()
+          await control.locator("#diagGithubStatus").get_by_text(
+            "已配置",exact=False).wait_for(timeout=5000)
+          assert await control.locator("#diagGithubToken").input_value()==""
+          await control.evaluate("""()=>{
+            globalThis.__githubIssuePost=null;
+            globalThis.fetch=async(url,opts)=>{
+              if(url!=='https://api.github.com/repos/ACIDCH/personal-immersive-translator/issues')
+                throw Error('Unexpected GitHub destination: '+url);
+              globalThis.__githubIssuePost={
+                url,method:opts.method,auth:opts.headers.Authorization,
+                payload:JSON.parse(opts.body)
+              };
+              return new Response(JSON.stringify({number:7421}),{
+                status:201,headers:{'Content-Type':'application/json'}
+              });
+            };
+          }""")
+          await control.locator("#diagUpload").click()
+          await control.locator("#diagIssueLink").get_by_text(
+            "Issue #7421",exact=False).wait_for(timeout=10000)
+          assert await control.locator("#diagIssueLink").get_attribute(
+            "href")=="https://github.com/ACIDCH/personal-immersive-translator/issues/7421"
+          issued=await control.evaluate("globalThis.__githubIssuePost")
+          assert issued["method"]=="POST"
+          assert issued["auth"]=="Bearer github_pat_FAKE_ISSUES_ONLY_CI_1234567890"
+          payload=issued["payload"]
+          assert "Bilibili" in payload["title"]
+          content=payload["body"]
+          assert '"webTranslation": "fail"' in content
+          assert '"imageOcr": "pass"' in content
+          for secret in ("PRIVATE COURSE","pit-upstream-fixture.example",
+            "Owned subtitle fixture","github_pat_FAKE","local-test-token",
+            "PRIVATE", "COOKIE"):
+            assert secret not in content,secret
+          print("PASS: one-click GitHub diagnostic creates safe issue via authenticated fake API",flush=True)
           await fixture.close()
           tools=await browser.new_page()
           tools.on("pageerror",lambda e:errors.append(str(e)))

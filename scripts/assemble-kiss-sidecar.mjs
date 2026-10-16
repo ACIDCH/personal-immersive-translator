@@ -81,6 +81,7 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
    'kiss/whisper-readiness.js':'whisper-readiness.js',
    'kiss/site-diagnostics.js':'site-diagnostics.js',
    'kiss/site-diagnostics-ui.js':'site-diagnostics-ui.js',
+   'kiss/github-diagnostics.js':'github-diagnostics.js',
    'kiss/control.html':'control.html',
    'kiss/control.js':'control.js',
    'kiss/popup-entry.js':'popup-entry.js',

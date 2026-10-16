@@ -2,7 +2,7 @@ name: POC - KISS Whisper subtitles and PDF sidecar
 on:
   push:
     branches:
-      - feat/kiss-real-site-diagnostics-v048
+      - feat/kiss-github-oneclick-diagnostics-v049
   pull_request:
     paths:
       - 'scripts/assemble-kiss-sidecar.mjs'
@@ -11,6 +11,7 @@ on:
       - 'src/kiss/**'
       - 'tests/kiss-whisper-readiness.test.js'
       - 'tests/kiss-site-diagnostics.test.js'
+      - 'tests/kiss-github-diagnostics.test.js'
       - '.github/workflows/kiss-sidecar-integration.yml'
 permissions:
   contents: read
@@ -27,7 +28,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify PIT integration assembly and local Whisper readiness
-        run: node --test tests/kiss-sidecar.test.js tests/kiss-whisper-readiness.test.js tests/kiss-site-diagnostics.test.js
+        run: node --test tests/kiss-sidecar.test.js tests/kiss-whisper-readiness.test.js tests/kiss-site-diagnostics.test.js tests/kiss-github-diagnostics.test.js
       - name: Check personal Windows PowerShell build script syntax without running it
         shell: pwsh
         run: |
@@ -65,6 +66,7 @@ jobs:
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/whisper-readiness.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/site-diagnostics.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/site-diagnostics-ui.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/github-diagnostics.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/bridge-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/view-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/control.js
