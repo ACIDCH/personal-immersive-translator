@@ -5,9 +5,34 @@
  */
 import {translateBatch} from '../lib/providers.js';
 import {normalizeSettings,SETTINGS_KEY} from '../lib/settings.js';
+import {sendToView} from './view-client.js';
 
 const KEYS=['pit_live_asr_tab','pit_live_asr_session'];
 const OFFSCREEN='pit/offscreen.html';
+const offscreenWaiters=new Set(),pendingOffscreen=new Map();
+let offscreenPort=null,sequence=0;
+async function waitOffscreen(){
+ if(offscreenPort)return offscreenPort;
+ return new Promise((resolve,reject)=>{
+   const done=p=>{clearTimeout(timer);offscreenWaiters.delete(done);resolve(p);};
+   const timer=setTimeout(()=>{
+     offscreenWaiters.delete(done);reject(Error('Whisper offscreen transport did not connect'));
+   },8000);
+   offscreenWaiters.add(done);
+ });
+}
+async function commandOffscreen(type,extra={}){
+ const port=await waitOffscreen();
+ return new Promise((resolve,reject)=>{
+   const id=++sequence;
+   const timer=setTimeout(()=>{
+     pendingOffscreen.delete(id);reject(Error('Whisper offscreen operation timed out'));
+   },15000);
+   pendingOffscreen.set(id,{resolve,reject,timer});
+   try{port.postMessage({kind:'command',seq:id,type,...extra});}
+   catch(e){clearTimeout(timer);pendingOffscreen.delete(id);reject(e);}
+ });
+}
 let transition=Promise.resolve();
 const serial=fn=>{const p=transition.then(fn,fn);transition=p.catch(()=>{});return p;};
 const ctrlUrl=chrome.runtime.getURL('pit/control.html');
@@ -20,12 +45,12 @@ async function stop(){
   await chrome.storage.session.remove(KEYS);
   try{
     if(await chrome.offscreen.hasDocument()){
-      await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_STOP'}).catch(()=>{});
+      if(offscreenPort)await commandOffscreen('PIT_OFFSCREEN_STOP').catch(()=>{});
       await chrome.offscreen.closeDocument();
     }
   }catch{}
   if(Number.isInteger(old.pit_live_asr_tab))
-    await chrome.tabs.sendMessage(old.pit_live_asr_tab,{
+    await sendToView(old.pit_live_asr_tab,{
       type:'PIT_ASR_VIEW_STOP',sessionId:old.pit_live_asr_session
     }).catch(()=>{});
   return {stopped:true};
@@ -42,7 +67,9 @@ async function start(msg){
   const permission=await chrome.permissions.contains({origins:['http://127.0.0.1/*']});
   must(permission,'未授予本机 Whisper 服务访问权限');
   await chrome.scripting.insertCSS({target:{tabId:id},files:['pit/content.css']});
-  await chrome.scripting.executeScript({target:{tabId:id},files:['pit/live-captions.js']});
+  await chrome.scripting.executeScript({target:{tabId:id},files:[
+    'pit/bridge-client.js','pit/live-captions.js'
+  ]});
   await chrome.offscreen.createDocument({url:OFFSCREEN,reasons:['USER_MEDIA'],
     justification:'用户明确启动的当前标签页本机 Whisper 实时语音字幕'});
   try{
@@ -50,13 +77,13 @@ async function start(msg){
     const sessionId=crypto.randomUUID();
     await chrome.storage.session.set({
       pit_live_asr_tab:id,pit_live_asr_session:sessionId});
-    const activated=await chrome.runtime.sendMessage({target:'offscreen',
-      type:'PIT_OFFSCREEN_START',streamId,tabId:id,token:msg.token,sessionId});
+    const activated=await commandOffscreen('PIT_OFFSCREEN_START',
+      {streamId,tabId:id,token:msg.token,sessionId});
     must(activated?.ok,'本机音频捕获失败：'+(activated?.error||'未知错误'));
     const now=await session();
     must(now.pit_live_asr_tab===id&&now.pit_live_asr_session===sessionId,
       '实时字幕会话已提前结束');
-    const view=await chrome.tabs.sendMessage(id,{type:'PIT_ASR_VIEW_START',sessionId});
+    const view=await sendToView(id,{type:'PIT_ASR_VIEW_START',sessionId});
     must(view?.ok===true,'网页实时字幕显示模块未就绪');
     return {started:true,sessionId};
   }catch(e){await stop();throw e;}
@@ -71,7 +98,7 @@ async function fromOffscreen(msg,sender){
       const latest=await session();
       if(latest.pit_live_asr_session!==msg.sessionId)return {ignored:true};
       await stop();
-      await chrome.tabs.sendMessage(msg.tabId,{type:'PIT_ASR_INTERRUPTED_VIEW',
+      await sendToView(msg.tabId,{type:'PIT_ASR_INTERRUPTED_VIEW',
         sessionId:msg.sessionId}).catch(()=>{});
       return {stopped:true};
     });
@@ -89,7 +116,7 @@ async function fromOffscreen(msg,sender){
     out.metrics=Object.fromEntries(['requests','dropped','errors','p50Ms','p95Ms']
       .map(k=>[k,Number(m[k])||0]));
   }
-  await chrome.tabs.sendMessage(msg.tabId,out).catch(()=>{});
+  await sendToView(msg.tabId,out).catch(()=>{});
   return {forwarded:true};
 }
 async function translate(msg,sender){
@@ -124,14 +151,40 @@ async function handle(msg,sender){
   if(msg.type==='PIT_SIDECAR_TRANSLATE')return translate(msg,sender);
   throw Error('Unsupported PIT command');
 }
-const ROUTES=new Set(['PIT_ASR_START','PIT_ASR_STOP','PIT_ASR_STATUS',
- 'PIT_ASR_RESULT','PIT_ASR_ERROR','PIT_ASR_METRICS','PIT_ASR_STREAM_ENDED',
- 'PIT_SIDECAR_TRANSLATE']);
-chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
-  if(!msg||!ROUTES.has(msg.type)||msg.target==='offscreen')return false;
-  handle(msg,sender).then(result=>reply({ok:true,...result}))
-    .catch(e=>reply({ok:false,error:String(e.message||e).slice(0,300)}));
-  return true;
+// KISS registers its own onMessage polyfill. A different Port transport
+// prevents it from intercepting our status/caption requests with an error.
+chrome.runtime.onConnect.addListener(port=>{
+ if(port.name==='pit-offscreen-v046'){
+   if(port.sender?.url!==chrome.runtime.getURL(OFFSCREEN)){
+     port.disconnect();return;
+   }
+   offscreenPort=port;
+   for(const waiter of offscreenWaiters)waiter(port);
+   port.onDisconnect.addListener(()=>{
+     if(offscreenPort===port)offscreenPort=null;
+     for(const pending of pendingOffscreen.values()){
+       clearTimeout(pending.timer);pending.reject(Error('Whisper offscreen disconnected'));
+     }
+     pendingOffscreen.clear();
+   });
+   port.onMessage.addListener(msg=>{
+     if(msg?.kind==='reply'){
+       const pending=pendingOffscreen.get(msg.seq);
+       if(!pending)return;
+       pendingOffscreen.delete(msg.seq);clearTimeout(pending.timer);
+       pending.resolve(msg);
+     }else if(msg?.kind==='event'){
+       void fromOffscreen(msg,port.sender).catch(()=>{});
+     }
+   });
+   return;
+ }
+ if(port.name!=='pit-v046')return;
+ port.onMessage.addListener(msg=>{
+   Promise.resolve().then(()=>handle(msg,port.sender))
+     .then(result=>{try{port.postMessage({ok:true,...result});}catch{}})
+     .catch(e=>{try{port.postMessage({ok:false,error:String(e.message||e).slice(0,300)});}catch{}});
+ });
 });
 async function stopIfMatching(id){
   const observed=await session();
