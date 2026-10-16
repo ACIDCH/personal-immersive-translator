@@ -79,6 +79,8 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
    'kiss/bridge-client.js':'bridge-client.js',
    'kiss/view-client.js':'view-client.js',
    'kiss/whisper-readiness.js':'whisper-readiness.js',
+   'kiss/site-diagnostics.js':'site-diagnostics.js',
+   'kiss/site-diagnostics-ui.js':'site-diagnostics-ui.js',
    'kiss/control.html':'control.html',
    'kiss/control.js':'control.js',
    'kiss/popup-entry.js':'popup-entry.js',

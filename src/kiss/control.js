@@ -1,5 +1,6 @@
 import {chooseEmbeddedFrame} from '../lib/frame-route.js';
 import {sendToView} from './view-client.js';
+import {initSiteDiagnostics} from './site-diagnostics-ui.js';
 const el=id=>document.getElementById(id);
 const selected=Number(new URLSearchParams(location.search).get('tabId'));
 let bound=null;
@@ -124,6 +125,7 @@ for(const [id,fn] of [
   finally{el(id).disabled=false;}
  });
 }
+initSiteDiagnostics(verified);
 loadTarget().catch(e=>{
  say('无法绑定网页：'+String(e.message||e));
  el('target').textContent='请从 KISS 原生弹窗打开本页。';

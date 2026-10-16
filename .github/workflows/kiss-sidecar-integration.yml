@@ -2,7 +2,7 @@ name: POC - KISS Whisper subtitles and PDF sidecar
 on:
   push:
     branches:
-      - feat/kiss-whisper-captions-sidecar-v046
+      - feat/kiss-real-site-diagnostics-v048
   pull_request:
     paths:
       - 'scripts/assemble-kiss-sidecar.mjs'
@@ -10,6 +10,7 @@ on:
       - 'tests/kiss_sidecar_mv3_e2e.py'
       - 'src/kiss/**'
       - 'tests/kiss-whisper-readiness.test.js'
+      - 'tests/kiss-site-diagnostics.test.js'
       - '.github/workflows/kiss-sidecar-integration.yml'
 permissions:
   contents: read
@@ -26,7 +27,16 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify PIT integration assembly and local Whisper readiness
-        run: node --test tests/kiss-sidecar.test.js tests/kiss-whisper-readiness.test.js
+        run: node --test tests/kiss-sidecar.test.js tests/kiss-whisper-readiness.test.js tests/kiss-site-diagnostics.test.js
+      - name: Check personal Windows PowerShell build script syntax without running it
+        shell: pwsh
+        run: |
+          $tokens=$null
+          $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            'scripts/build-kiss-personal-poc.ps1',[ref]$tokens,[ref]$errors
+          ) | Out-Null
+          if($errors.Count -gt 0){ $errors | Out-String | Write-Host; exit 1 }
       - name: Checkout fixed GPL KISS source outside our project
         run: |
           git clone --no-checkout --filter=blob:none https://github.com/fishjar/kiss-translator.git /tmp/pit-kiss-upstream
@@ -53,6 +63,8 @@ jobs:
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/options.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/asr-controller.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/whisper-readiness.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/site-diagnostics.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/site-diagnostics-ui.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/bridge-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/view-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/control.js

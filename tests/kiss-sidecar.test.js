@@ -17,6 +17,7 @@ function setup(version='2.1.1'){
  const additional=['kiss/background-entry.js','kiss/asr-controller.js',
  'kiss/control.html','kiss/control.js','kiss/popup-entry.js',
  'kiss/bridge-client.js','kiss/view-client.js','kiss/whisper-readiness.js',
+ 'kiss/site-diagnostics.js','kiss/site-diagnostics-ui.js',
  'offscreen.html','offscreen.js','audio-capture-worklet.js',
  'live-captions.js','subtitles.js','content.css',
  'lib/live-pipeline.js','lib/wav.js','lib/caption-core.js',
@@ -74,6 +75,8 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
   assert.ok(existsSync(join(f.build,'pit/bridge-client.js')));
   assert.ok(existsSync(join(f.build,'pit/view-client.js')));
   assert.ok(existsSync(join(f.build,'pit/whisper-readiness.js')));
+  assert.ok(existsSync(join(f.build,'pit/site-diagnostics.js')));
+  assert.ok(existsSync(join(f.build,'pit/site-diagnostics-ui.js')));
   const offscreen=readFileSync(join(f.build,'pit/offscreen.js'),'utf8');
   assert.ok(offscreen.includes("name:'pit-offscreen-v046'"));
   assert.ok(offscreen.includes("sidecarPort?.postMessage({kind:'event'"));
