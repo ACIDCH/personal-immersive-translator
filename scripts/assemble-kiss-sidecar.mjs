@@ -69,7 +69,67 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
  const upstreamLicense=resolve(build,'../../LICENSE');
  must(existsSync(upstreamLicense),'Upstream GPL license missing from source checkout');
  copyFileSync(upstreamLicense,join(build,'pit/KISS-LICENSE-GPL3.txt'));
- const report={host:'KISS Translator v2.1.1',hostLicense:'GPL-3.0',originalCorePreserved:true,
+
+ // Opt-in personal video/Whisper modules are copied from the existing PIT
+ // regression-tested implementation. KISS's original browser translator
+ // stays compiled and unchanged: its background is imported by a wrapper.
+ const extra={
+   'kiss/background-entry.js':'background-entry.js',
+   'kiss/asr-controller.js':'asr-controller.js',
+   'kiss/control.html':'control.html',
+   'kiss/control.js':'control.js',
+   'kiss/popup-entry.js':'popup-entry.js',
+   'offscreen.html':'offscreen.html',
+   'offscreen.js':'offscreen.js',
+   'audio-capture-worklet.js':'audio-capture-worklet.js',
+   'live-captions.js':'live-captions.js',
+   'subtitles.js':'subtitles.js',
+   'content.css':'content.css',
+   'lib/live-pipeline.js':'lib/live-pipeline.js',
+   'lib/wav.js':'lib/wav.js',
+   'lib/caption-core.js':'lib/caption-core.js',
+   'lib/platform-captions.js':'lib/platform-captions.js',
+   'lib/subtitle-import.js':'lib/subtitle-import.js',
+   'lib/frame-route.js':'lib/frame-route.js'
+ };
+ for(const [from,to] of Object.entries(extra)){
+   const input=join(root,'src',from);
+   must(existsSync(input),'Missing PIT video module: '+from);
+   const dest=join(build,'pit',to);
+   mkdirSync(dirname(dest),{recursive:true});copyFileSync(input,dest);
+ }
+ const patches=[
+   ['asr-controller.js',"from '../lib/providers.js'","from './lib/providers.js'"],
+   ['asr-controller.js',"from '../lib/settings.js'","from './lib/settings.js'"],
+   ['control.js',"from '../lib/frame-route.js'","from './lib/frame-route.js'"],
+   ['offscreen.js',"chrome.runtime.getURL('src/audio-capture-worklet.js')",
+    "chrome.runtime.getURL('pit/audio-capture-worklet.js')"],
+   ['live-captions.js',"type:'TRANSLATE_BATCH'","type:'PIT_SIDECAR_TRANSLATE'"],
+   ['subtitles.js',"type:'TRANSLATE_BATCH'","type:'PIT_SIDECAR_TRANSLATE'"]
+ ];
+ for(const [target,old,replacement] of patches){
+   const file=join(build,'pit',target);
+   const text=readFileSync(file,'utf8');
+   must(text.split(old).length===2,'Unexpected PIT upstream module version: '+target);
+   writeFileSync(file,text.replace(old,replacement));
+ }
+ const background=readFileSync(join(build,'pit/background-entry.js'),'utf8');
+ must(background.includes("import '../background.js'"),
+   'Cannot prove KISS original worker is imported into wrapper');
+ manifest.background={...manifest.background,service_worker:'pit/background-entry.js',type:'module'};
+ manifest.permissions=[...new Set([
+   ...(manifest.permissions||[]),'activeTab','offscreen','tabCapture','webNavigation'
+ ])];
+ writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
+ const popupExtra=readFileSync(popupFile,'utf8');
+ must(popupExtra.includes('pit-multimodal-links'),'Expected original PIT navigation');
+ const withVideo=popupExtra.replace('</nav>',
+   '<a id="pit-caption-control" href="pit/control.html">视频字幕 / Whisper</a></nav>');
+ must(withVideo!==popupExtra,'PIT popup navigation injection failed');
+ writeFileSync(popupFile,withVideo.replace('</body>',
+   '<script type="module" src="pit/popup-entry.js"></script></body>'));
+
+ const report={host:'KISS Translator v2.1.1',hostLicense:'GPL-3.0',originalCorePreserved:true,originalKissWorkerImported:true,whisperControl:'pit/control.html',
   entry:'pit/tools.html',settings:'pit/options.html',pdfEngine:'Mozilla PDF.js 6.4.299 Apache-2.0',
   sidecarLicense:'MIT',distribution:'POC_ONLY_NO_RELEASE'};
  writeFileSync(join(build,'pit/INTEGRATION-SOURCE.json'),JSON.stringify(report,null,2));
