@@ -1,4 +1,5 @@
 import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';
+import {chooseEmbeddedFrame} from './lib/frame-route.js';
 const $=id=>document.getElementById(id);
 let mode='standard';
 let settings=normalizeSettings();
@@ -39,6 +40,44 @@ $('translate').onclick=()=>send('PIT_START');
 $('continue').onclick=()=>send('PIT_CONTINUE');
 $('selection').onclick=()=>send('PIT_SELECTION');
 $('restore').onclick=()=>send('PIT_RESTORE');
+// Only inspect visible iframe URLs in the active tab, then request the
+// specific provider origin; never silently request global site permissions.
+async function embeddedFrame(tabId){
+  const found=await chrome.scripting.executeScript({
+    target:{tabId},func:()=>[...document.querySelectorAll('iframe[src]')]
+      .filter(el=>el.getClientRects().length &&
+        getComputedStyle(el).visibility!=='hidden' &&
+        getComputedStyle(el).display!=='none')
+      .slice(0,20).map(el=>el.src)
+  });
+  const visible=found?.[0]?.result||[];
+  if(!visible.length)return null;
+  const frames=await chrome.webNavigation.getAllFrames({tabId});
+  return chooseEmbeddedFrame(visible,frames||[]);
+}
+async function startEmbeddedCaptions(tabId,mode){
+  const frame=await embeddedFrame(tabId);
+  if(!frame)return {ok:false,reason:'无法找到可授权的 YouTube/Panopto 嵌入播放器，请打开原播放器页面。'};
+  if(!confirm('检测到独立嵌入的视频来源：'+frame.origin+
+    '\\n是否只为该站点授予字幕读取权限？不会读取私人接口、下载媒体或绕过 DRM。')) {
+    return {ok:false,reason:'未授予嵌入播放器访问权限'};
+  }
+  const allowed=await chrome.permissions.request({origins:[frame.origin+'/*']});
+  if(!allowed)return {ok:false,reason:'未取得嵌入播放器站点权限'};
+  const target={tabId,frameIds:[frame.frameId]};
+  await chrome.scripting.insertCSS({target,files:['src/content.css']});
+  await chrome.scripting.executeScript({target,files:[
+    'src/lib/caption-core.js','src/lib/platform-captions.js','src/subtitles.js'
+  ]});
+  const started=await chrome.tabs.sendMessage(tabId,{
+    type:'PIT_CAPTIONS_START',mode
+  },{frameId:frame.frameId});
+  if(started?.ok){
+    await chrome.storage.session.set({['pit_caption_frame_'+tabId]:frame.frameId});
+    return {...started,reason:'已在授权的嵌入播放器中启动字幕翻译。'+(started.reason||'')};
+  }
+  return {ok:false,reason:started?.reason||'嵌入播放器没有可读取的字幕轨'};
+}
 async function subtitleAction(type){
   if (type==='PIT_CAPTIONS_START' && mode==='ai' &&
       !confirm('即将持续为当前视频字幕请求 Gemini / DeepSeek，可能产生费用。确认开启，结束后请点击停止。')) return;
@@ -58,8 +97,23 @@ async function subtitleAction(type){
       cues=globalThis.PITSubtitleImport.parseSubtitles(await file.text());
       if(!cues.length)throw new Error('无法从字幕文件解析出有效时间轴');
     }
-    const res=await chrome.tabs.sendMessage(tab.id,{type,mode,cues});
-    if(!res?.ok) throw new Error(res?.reason||'字幕操作失败');
+    let res;
+    if(type==='PIT_CAPTIONS_STOP'){
+      // Main-frame and selected child player may both hold state.
+      await chrome.tabs.sendMessage(tab.id,{type}, {frameId:0}).catch(()=>{});
+      const key='pit_caption_frame_'+tab.id;
+      const saved=await chrome.storage.session.get(key);
+      const frameId=saved[key];
+      if(Number.isInteger(frameId)&&frameId>0)
+        await chrome.tabs.sendMessage(tab.id,{type},{frameId}).catch(()=>{});
+      await chrome.storage.session.remove(key);
+      res={ok:true,reason:'字幕翻译已停止'};
+    }else {
+      res=await chrome.tabs.sendMessage(tab.id,{type,mode,cues},{frameId:0});
+      if(!res?.ok && !cues?.length)
+        res=await startEmbeddedCaptions(tab.id,mode);
+    }
+    if(!res?.ok)throw new Error(res?.reason||'字幕操作失败');
     status(res.reason||(type==='PIT_CAPTIONS_START'?'字幕翻译已启动':'字幕翻译已停止'));
   } catch(e){status('字幕操作失败：'+String(e?.message||e));}
 }
