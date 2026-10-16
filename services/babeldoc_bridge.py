@@ -99,6 +99,22 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
         raise
     except Exception as exc:
         raise RuntimeError("BabelDOC 输出并非有效 PDF") from exc
+    # A valid file header is not proof of a usable translated document.
+    # Reject missing pages or universally unextractable text; report clipped
+    # spans as structural warnings for subsequent human review.
+    try:
+        try:
+            from services.pdf_quality import inspect_pair
+        except ModuleNotFoundError:
+            from pdf_quality import inspect_pair
+        quality=inspect_pair(source,winner)
+    except (ValueError,RuntimeError) as exc:
+        raise RuntimeError("译文 PDF 结构验收失败") from exc
+    if quality["status"]=="review-needed":
+        import logging
+        logging.getLogger(__name__).warning(
+            "PDF 翻译版面需要人工复核：%s 个越界文本对象",
+            quality["outside_text_spans"])
     return winner.read_bytes()
 
 def installed_ocr_languages():
