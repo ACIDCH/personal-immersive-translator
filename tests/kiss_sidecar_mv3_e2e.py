@@ -35,6 +35,28 @@ async def main():
           hrefs=await popup.locator("#pit-multimodal-links a").evaluate_all(
             "(els)=>els.map(el=>el.getAttribute('href'))")
           assert "pit/tools.html" in hrefs and "pit/options.html" in hrefs,hrefs
+          # Validate KISS's ACTUAL upstream site content script in Chromium
+          # (not merely a built manifest entry or an active MV3 worker).
+          fixture=await browser.new_page()
+          fixture_url="https://pit-upstream-fixture.example/"
+          await fixture.route("https://pit-upstream-fixture.example/*",
+            lambda route: route.fulfill(status=200,content_type="text/html",
+              body="<html lang='en'><body><p>Hello from KISS upstream fixture</p></body></html>"))
+          await fixture.goto(fixture_url,wait_until="domcontentloaded")
+          await fixture.locator("p").get_by_text("Hello from KISS").wait_for(timeout=5000)
+          await fixture.wait_for_timeout(900)
+          injected=await worker.evaluate("""async()=>{
+            const tabs=await chrome.tabs.query({});
+            const t=tabs.find(tab=>tab.url?.startsWith('https://pit-upstream-fixture.example/'));
+            if(!t)return {value:null,reason:'fixture tab not visible'};
+            const results=await chrome.scripting.executeScript({
+              target:{tabId:t.id},func:()=>globalThis.__KISS_CONTEXT__
+            });
+            return {value:results[0]?.result||null,tabId:t.id};
+          }""")
+          assert injected.get("value")=="content",injected
+          print("PASS: genuine KISS upstream translation content script injected",flush=True)
+          await fixture.close()
           tools=await browser.new_page()
           tools.on("pageerror",lambda e:errors.append(str(e)))
           await tools.goto(origin+"/pit/tools.html")
