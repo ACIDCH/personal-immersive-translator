@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.8 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.9 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -133,3 +133,12 @@ As requested, do not distribute an intermediate installer, merge Draft PRs or re
 - [Security, Windows preparation, exact config and remaining real acceptance](docs/INPROCESS_ASR_SECURITY_038_zh-CN.md).
 
 As requested, no intermediate user-facing installer, main merge or overall UI/brand redesign until all core tests and final independent Codex review.
+
+## v0.3.9 — scanned PDF classification and real subprocess acceptance
+
+- Avoid mistakenly running OCR on empty separator pages, short searchable covers and small logos; identify **substantial raster-only pages throughout the document**, including late scanned appendices. Detection is a heuristic, not a guarantee for all vector and image-only PDF styles.
+- New acceptance tests run genuine **OCRmyPDF/Tesseract/Ghostscript** followed by an actual separately launched BabelDOC-compatible CLI fixture, verifying the full PDF handoff, real generated output, credential-private TOML and error cleanup. The fixture is **not official BabelDOC**, so this is not a paid-service translation quality certification.
+- Added **opt-in actual BabelDOC acceptance command** `python -m benchmarks.babeldoc_real_acceptance`. It cannot call the real translation service without explicit `--acknowledge-billed-translation` and the user's own `DEEPSEEK_API_KEY` environment variable; it refuses to overwrite source/output files and reports only structural metrics. **No paid translator invocation has been performed automatically.**
+- [v0.3.9 runtime verification details](docs/REAL_PDF_RUNTIME_GATE_039_zh-CN.md).
+
+No UI/brand redesign, intermediate installer or main merge. Final real-model testing and independent Codex audit are still required.

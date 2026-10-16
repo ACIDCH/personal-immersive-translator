@@ -28,6 +28,24 @@ def pdf(text="A PDF containing sufficient searchable academic text about economi
     return result
 
 
+def raster_pdf():
+    """One genuinely scanned page, not a zero-text blank page."""
+    import io
+    from PIL import Image,ImageDraw,ImageFont
+    image=Image.new("RGB",(1000,220),"white")
+    draw=ImageDraw.Draw(image)
+    font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",48)
+    draw.text((30,50),"SCANNED ACADEMIC CONTENT",font=font,fill="black")
+    stream=io.BytesIO()
+    image.save(stream,format="PNG")
+    doc=fitz.open()
+    page=doc.new_page()
+    page.insert_image(fitz.Rect(25,80,560,240),stream=stream.getvalue())
+    result=doc.tobytes()
+    doc.close()
+    return result
+
+
 def wav_pcm16(rate=16000, frames=16000):
     import wave
     import io
@@ -132,12 +150,44 @@ class BridgeContractTests(unittest.TestCase):
         document=fitz.open()
         first=document.new_page()
         first.insert_text((50,75),"A sufficiently long academic introduction containing searchable text.")
-        document.new_page()  # Represents a scanned/blank appendix for detection.
+        appendix=document.new_page()
+        import io
+        from PIL import Image
+        image=Image.new("RGB",(900,300),"white")
+        png=io.BytesIO()
+        image.save(png,format="PNG")
+        appendix.insert_image(fitz.Rect(35,100,550,300),stream=png.getvalue())
         with tempfile.TemporaryDirectory() as d:
             sample=Path(d)/"mixed.pdf"
             sample.write_bytes(document.tobytes())
             self.assertTrue(bridge.scanned_pdf(sample))
         document.close()
+
+    def test_blank_short_title_and_small_logo_do_not_trigger_ocr(self):
+        import tempfile,io
+        from PIL import Image
+        doc=fitz.open()
+        doc.new_page()  # blank separator is not scanned
+        cover=doc.new_page()
+        cover.insert_text((30,70),"TITLE")
+        png=io.BytesIO()
+        Image.new("RGB",(20,20),"black").save(png,format="PNG")
+        cover.insert_image(fitz.Rect(20,100,45,125),stream=png.getvalue())
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/"cover.pdf"
+            source.write_bytes(doc.tobytes())
+            self.assertFalse(bridge.scanned_pdf(source))
+        doc.close()
+
+    def test_real_raster_scan_requires_ocr_but_blank_pdf_does_not(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            scan=Path(directory)/"scan.pdf"
+            blank=Path(directory)/"blank.pdf"
+            scan.write_bytes(raster_pdf())
+            blank.write_bytes(pdf(""))
+            self.assertTrue(bridge.scanned_pdf(scan))
+            self.assertFalse(bridge.scanned_pdf(blank))
 
     def test_reject_invalid_babeldoc_pdf_output(self):
         def fake_run(args,**kwargs):
@@ -151,7 +201,7 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(response.status_code,422)
 
     def test_scanned_pdf_requires_ocr_permission_and_retains_bilingual_file(self):
-        scanned=pdf("")
+        scanned=raster_pdf()
         with patch.object(bridge.shutil,"which",return_value="/usr/bin/fake"):
             self.assertEqual(self.submit(scanned,ocr=False).status_code,422)
         calls=[]
