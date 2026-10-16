@@ -1,0 +1,51 @@
+# Read-only, standalone KISS source validation. GPL source is checked out
+# into a temp working directory; NEVER copied into our MIT src/ or releases.
+name: POC - pinned KISS upstream compatibility
+on:
+  push:
+    branches:
+      - spike/kiss-v211-compat
+  pull_request:
+    paths:
+      - '.github/workflows/kiss-upstream-spike.yml'
+      - 'scripts/upstream-kiss-audit.mjs'
+      - 'tests/upstream-kiss-audit.test.js'
+      - 'docs/KISS_UPSTREAM_POC_zh-CN.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lock and inspect independent GPL source
+        shell: bash
+        run: |
+          git clone --no-checkout --filter=blob:none https://github.com/fishjar/kiss-translator.git /tmp/pit-kiss-upstream
+          git -C /tmp/pit-kiss-upstream checkout --detach a1279f2517bd478ef1dd93b941f9177094486cd4
+          test "$(git -C /tmp/pit-kiss-upstream rev-parse HEAD)" = "a1279f2517bd478ef1dd93b941f9177094486cd4"
+          node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream
+      - name: Install exact upstream lockfile dependencies without lifecycle scripts
+        working-directory: /tmp/pit-kiss-upstream
+        run: |
+          npm install --global --no-audit --no-fund pnpm@9.15.9
+          pnpm install --frozen-lockfile --ignore-scripts --reporter=append-only
+      - name: Run upstream's actual Chrome extension build (no distribution)
+        working-directory: /tmp/pit-kiss-upstream
+        env:
+          CI: 'true'
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          GENERATE_SOURCEMAP: 'false'
+        run: |
+          pnpm build:chrome
+          test -f build/chrome/manifest.json
+          test -f build/chrome/background.js
+          test -f build/chrome/content.js
+          test -f build/chrome/popup.html
+      - name: Compare built manifest with PIT permissions and source gate
+        run: node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream
