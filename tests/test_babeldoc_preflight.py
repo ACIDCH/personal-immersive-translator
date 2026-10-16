@@ -1,5 +1,8 @@
 """BabelDOC upstream CLI compatibility checks require no paid API keys."""
 import subprocess
+import os
+os.environ.setdefault('PIT_BRIDGE_TOKEN','test-local-secret-at-least-16')
+os.environ.setdefault('DEEPSEEK_API_KEY','fake-test-key-never-use')
 import unittest
 from unittest.mock import patch
 from services.babeldoc_preflight import FLAGS,inspect_babeldoc_cli
