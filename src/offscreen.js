@@ -108,11 +108,21 @@ async function start({streamId,tabId,token}){
     if(generation!==epoch){stream.getTracks().forEach(t=>t.stop());return {ok:false,error:'捕获已取消'};}
     context=makeAudioContext(AudioContext);
     const source=context.createMediaStreamSource(stream);
+    source.connect(context.destination); // Keep the tab audible immediately.
+    // Offscreen contexts without a user-gesture-backed capture can be
+    // suspended. Do not hang indefinitely on context activation.
+    await Promise.race([
+      context.resume(),
+      new Promise((_,reject)=>setTimeout(()=>reject(Error('AudioContext 启动超时')),4000))
+    ]);
     const queue=new BoundedAudioQueue(context.sampleRate,6);
     let processor=null,modern=false;
     if(context.audioWorklet && typeof AudioWorkletNode==='function'){
       try{
-        await context.audioWorklet.addModule(chrome.runtime.getURL('src/audio-capture-worklet.js'));
+        await Promise.race([
+          context.audioWorklet.addModule(chrome.runtime.getURL('src/audio-capture-worklet.js')),
+          new Promise((_,reject)=>setTimeout(()=>reject(Error('AudioWorklet 初始化超时')),3000))
+        ]);
         processor=new AudioWorkletNode(context,'pit-capture',{
           numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]
         });
@@ -126,7 +136,7 @@ async function start({streamId,tabId,token}){
     const mute=context.createGain();mute.gain.value=0;
     source.connect(processor);
     processor.connect(mute);mute.connect(context.destination);
-    source.connect(context.destination); // Preserve playback of captured tab.
+    // Tab playback already routed before the worklet is initialized.
     c={context,source,processor,mute,stream,tabId,token,queue,busy:false,
       timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0,failures:0,retryAt:0};
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
@@ -151,7 +161,6 @@ async function start({streamId,tabId,token}){
         await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId});
       })();
     },{once:true}));
-    await context.resume();
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
     c.timer=setInterval(()=>{void flush(c);},SEGMENT_MS);
     return {ok:true};
