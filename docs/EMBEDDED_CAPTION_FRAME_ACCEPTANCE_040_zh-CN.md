@@ -11,11 +11,11 @@
 | 授权期间 iframe 导航变化 | 用户同意站点授权后、注入脚本之前和注入脚本之后各重新解析当前 frame ID 和播放器 URL；不一致时要求重试 | 代码检查；需要实际导航竞态压测 |
 | 用户禁止翻译规则 | 授予跨域站点权限之前，先核对课程顶级网页和子帧来源是否在用户禁止翻译域名列表中 | 代码及已有后台服务端拒绝测试 |
 | 字幕启停会话 | 重新开始字幕翻译前先停止并清除同一标签页旧的跨域子帧字幕会话，避免停止/重开期间的无意义翻译请求 | 代码及 Chrome 子帧启停测试 |
-| 真浏览器多框架 | Playwright 在真正启用的 Chromium Manifest V3 扩展中加载模拟 LMS 顶层页面与同源不同 ID 的 Panopto 风格跨域 iframe；通过 Chrome 的 `webNavigation.getAllFrames`、`chrome.permissions.request` 和 `chrome.scripting.executeScript` 进行精确单帧注入、启动与停止 | `tests/embedded_frame_mv3_e2e.py`，无真实平台登录、私有字幕或付费 API |
+| 真浏览器多框架 | Playwright 在真正启用的 Chromium Manifest V3 扩展中加载模拟 LMS 顶层页面与同源不同 ID 的 Panopto 风格跨域 iframe；通过 Chrome 的 `webNavigation.getAllFrames`、`chrome.permissions.contains` 和 `chrome.scripting.executeScript` 进行精确单帧注入、启动与停止；无头 CI 在**仅测试用临时 Manifest**中预授予两个模拟站点权限，未自动验证真实用户的授权弹窗 | `tests/embedded_frame_mv3_e2e.py`，无真实平台登录、私有字幕或付费 API |
 
 ## 验收边界
 
-新测试的 iframe 与字幕文字均是**我们自建的模拟页面结构**，但浏览器、跨域隔离、扩展权限、帧枚举与内容脚本注入采用真正的 Chromium API。这比只在 JS 中模拟 iframe 的测试覆盖更多运行层；**不能据此宣称真实 Netflix/Panopto 授权账户或受 DRM 保护视频已验收**。
+新测试的 iframe 与字幕文字均是**我们自建的模拟页面结构**，但浏览器、跨域隔离、预授权站点权限检查、帧枚举与内容脚本注入采用真正的 Chromium API。**真实 `chrome.permissions.request` 的人工授权/拒绝弹窗仍需用户有界面的 Chrome 实测。**这比只在 JS 中模拟 iframe 的测试覆盖更多运行层；**不能据此宣称真实 Netflix/Panopto 授权账户或受 DRM 保护视频已验收**。
 
 网页常规机器翻译仍依赖用户合法配置的服务凭据和配额。本轮不绕过登录、付费墙、播放器安全边界，不抓取网络字幕私有接口，也不预授权所有 HTTPS 域名。
 
