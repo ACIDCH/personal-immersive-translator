@@ -27,5 +27,5 @@ def inspect_babeldoc_cli(path=None):
     # --openai-api-key-v2 as the required --openai-api-key.
     # CLI flags have explicit token boundaries in argparse's --help output.
     missing=[flag for flag in FLAGS if not re.search(
-        r"(?<![\\w-])"+re.escape(flag)+r"(?![\\w-])",help_text)]
+        r"(?<![\w-])"+re.escape(flag)+r"(?![\w-])",help_text)]
     return {"installed":True,"compatible":not missing,"missing":missing}
