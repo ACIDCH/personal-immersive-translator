@@ -48,7 +48,7 @@ async def main():
 
         popup=await context.new_page()
         await popup.goto(f"chrome-extension://{extension_id}/src/popup.html")
-        await popup.locator("#captionsStart").wait_for()
+        await popup.locator("#captionsStart").wait_for(state="attached")
         state=await popup.evaluate("""async()=> {
           const tabs=await chrome.tabs.query({});
           const target=tabs.find(t=>t.url?.startsWith('https://lms.example.edu/course/lesson'));
