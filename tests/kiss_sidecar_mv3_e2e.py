@@ -82,6 +82,61 @@ async def main():
           }""",fixture_id)
           assert captions,"Owner-started advanced caption code did not inject"
           print("PASS: opt-in advanced captions content script injected on selected page",flush=True)
+
+          # Intercept ALL network requests made through the imported
+          # personal provider adapter. This is a deterministic fake, not a
+          # paid or public translation service and not actual model inference.
+          await worker.evaluate("""async()=>{
+            await chrome.storage.local.set({pit_settings_v1:{
+              source:'en',target:'zh',standardProvider:'microsoft',
+              microsoftKey:'CI_FAKE_KEY_NO_EXTERNAL_REQUEST'
+            }});
+            globalThis.fetch=async(input,options={})=>{
+              const url=String(input);
+              if(url==='http://127.0.0.1:8765/health'){
+                if(options.headers?.['X-PIT-Token']!=='local-test-token-123456')
+                  return new Response('',{status:401});
+                return new Response(JSON.stringify({
+                  engine:'local-only',ready:false,speech_asr:true,
+                  speech_asr_backend:'faster',speech_asr_model_loaded:false
+                }),{status:200,headers:{'Content-Type':'application/json'}});
+              }
+              if(url.startsWith('https://api.cognitive.microsofttranslator.com/translate?')){
+                const body=JSON.parse(options.body);
+                return new Response(JSON.stringify(body.map(c=>({
+                  translations:[{text:'中文测试译文：'+c.Text}]
+                }))),{status:200,headers:{'Content-Type':'application/json'}});
+              }
+              throw Error('Unexpected network access blocked by CI: '+url);
+            };
+          }""")
+          await control.locator("#token").fill("local-test-token-123456")
+          await control.locator("#asrCheck").click()
+          await control.locator("#status").get_by_text("已就绪",exact=False).wait_for(timeout=9000)
+          print("PASS: token-authorized Whisper readiness health request via isolated Port",flush=True)
+
+          await fixture.evaluate("""()=>{
+            const player=document.createElement('video');
+            player.id='owned-player';
+            player.controls=true;
+            document.body.append(player);
+          }""")
+          await control.locator("#cues").set_input_files({
+            "name":"offline-fixture.vtt","mimeType":"text/vtt",
+            "buffer":b"WEBVTT\\n\\n00:00:00.000 --> 00:00:08.000\\nOwned subtitle fixture\\n"
+          })
+          await control.locator("#captionStart").click()
+          await control.locator("#status").get_by_text(
+            "已加载",exact=False).wait_for(timeout=6000)
+          await fixture.locator(".pit-caption-overlay").get_by_text(
+            "中文测试译文：Owned subtitle fixture",exact=False
+          ).wait_for(timeout=16000)
+          print("PASS: imported VTT -> isolated Port -> standard provider -> translated on-screen overlay",flush=True)
+          await control.locator("#captionStop").click()
+          await control.locator("#status").get_by_text(
+            "已停止",exact=False).wait_for(timeout=6000)
+          assert await fixture.locator(".pit-caption-overlay").count()==0
+          print("PASS: stopped subtitles remove translated overlay",flush=True)
           await fixture.close()
           tools=await browser.new_page()
           tools.on("pageerror",lambda e:errors.append(str(e)))
