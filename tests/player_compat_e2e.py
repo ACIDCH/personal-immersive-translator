@@ -32,7 +32,9 @@ async def setup(page,url,html):
       onMessage:{addListener:cb=>window.pitCallbacks.push(cb)},
       sendMessage:async msg=>{
         window.pitRequests.push(msg);
-        await new Promise(r=>setTimeout(r,msg.texts?.[0]==='First lecture caption'?550:30));
+        await new Promise(r=>setTimeout(r,
+          msg.texts?.[0]==='English delayed caption'?1450:
+          msg.texts?.[0]==='First lecture caption'?550:30));
         return {ok:true,translations:msg.texts?.map(x=>'译文:'+x)};
       }
     }};
@@ -104,6 +106,82 @@ async def run():
       await fallback.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
       print("PASS native cue recovery takes priority over prior DOM fallback")
       await fallback.close()
+
+
+      # A user may change the spoken language CC track without restarting the
+      # extension. The old translation is deliberately slow, and must not
+      # block or repaint newly selected French captions.
+      switching=await browser.new_page()
+      await setup(switching,"https://www.youtube.com/watch?v=track-fixture",
+                  '<video style="width:640px;height:360px"></video>')
+      await switching.evaluate("""() => {
+        const video=document.querySelector('video');
+        window.english=video.addTextTrack('subtitles','English','en');
+        window.french=video.addTextTrack('subtitles','French','fr');
+        window.english.mode='showing';
+        window.french.mode='disabled';
+        window.english.addCue(new VTTCue(0,8,'English delayed caption'));
+        window.french.addCue(new VTTCue(0,8,'Bonjour nouvelle piste'));
+      }""")
+      launched=await switching.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert launched["ok"],launched
+      await switching.wait_for_function("""()=>
+        window.pitRequests.some(r=>r.texts?.includes('English delayed caption'))
+      """,timeout=3000)
+      await switching.evaluate("""()=>{
+        window.english.mode='disabled';
+        window.french.mode='showing';
+      }""")
+      await switching.locator('.pit-caption-translated').get_by_text(
+          '译文:Bonjour nouvelle piste').wait_for(timeout=1100)
+      await switching.wait_for_timeout(1500)
+      text=await switching.locator('.pit-caption-translated').all_text_contents()
+      assert text==['译文:Bonjour nouvelle piste'],text
+      assert await switching.evaluate("window.french.mode")== "showing"
+      await switching.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      print("PASS actual Chrome caption track switch invalidates delayed prior language")
+      assert await switching.locator('.pit-caption-overlay').count()==0
+      await switching.close()
+
+      # If the player is replaced without changing its top-level URL, a
+      # translated overlay from the disconnected <video> must be discarded.
+      recycled=await browser.new_page()
+      await setup(recycled,"https://www.youtube.com/watch?v=replaced-fixture",
+                  '<video style="width:640px;height:360px"></video>')
+      await recycled.evaluate("""()=>{
+        const video=document.querySelector('video');
+        const track=video.addTextTrack('subtitles','English','en');
+        track.mode='showing';track.addCue(new VTTCue(0,8,'Old recording cue'));
+      }""")
+      started=await recycled.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert started["ok"],started
+      await recycled.locator('.pit-caption-translated').get_by_text(
+        '译文:Old recording cue').wait_for(timeout=4000)
+      await recycled.evaluate("""()=>{
+        document.querySelector('video').replaceWith(document.createElement('video'));
+      }""")
+      await recycled.locator('.pit-caption-overlay').wait_for(state="detached",timeout=2000)
+      print("PASS detached media element stops subtitles without leaking old overlay")
+      await recycled.close()
+
+      # Even if an SPA keeps the original video element, a new recording URL
+      # must not inherit a previous caption translation session.
+      navigation=await browser.new_page()
+      await setup(navigation,"https://www.youtube.com/watch?v=original-fixture",
+                  '<video style="width:640px;height:360px"></video>')
+      await navigation.evaluate("""()=>{
+        const v=document.querySelector('video');
+        const tr=v.addTextTrack('subtitles','English','en');tr.mode='showing';
+        tr.addCue(new VTTCue(0,8,'First video cue'));
+      }""")
+      running=await navigation.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert running["ok"],running
+      await navigation.locator('.pit-caption-translated').get_by_text(
+        '译文:First video cue').wait_for(timeout=4000)
+      await navigation.evaluate("""()=>history.replaceState({},'','?v=different-video')""")
+      await navigation.locator('.pit-caption-overlay').wait_for(state="detached",timeout=2000)
+      print("PASS top-level SPA video identity change stops old translation")
+      await navigation.close()
 
       # Unsupported sites must fail explicitly rather than make up captions.
       page=await browser.new_page()
