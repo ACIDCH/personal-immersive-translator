@@ -3,6 +3,7 @@ plus PIT PDF.js + OCR tools. No paid API keys, private media or real OCR model.
 """
 import asyncio
 import hashlib
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -16,7 +17,7 @@ async def main():
     with tempfile.TemporaryDirectory(prefix="kiss-sidecar-") as profile:
       async with async_playwright() as p:
         browser=await p.chromium.launch_persistent_context(
-          profile,headless=True,args=[
+          profile,channel="chrome",headless=True,args=[
             "--no-sandbox",f"--disable-extensions-except={ext}",
             f"--load-extension={ext}"])
         try:
@@ -34,6 +35,10 @@ async def main():
           else:
             digest=hashlib.sha256(str(ext).encode("utf-8")).digest()[:16]
             extension_id="".join(chr(97+(b>>4))+chr(97+(b&15)) for b in digest)
+          prefs=Path(profile)/"Default/Preferences"
+          if prefs.is_file():
+            config=json.loads(prefs.read_text(encoding="utf-8"))
+            print("Chromium installed extension IDs:",list(config.get("extensions",{}).get("settings",{})),flush=True)
           print("Chrome extension targets:",urls,
                 "candidate ID:",extension_id,flush=True)
           origin="chrome-extension://"+extension_id
