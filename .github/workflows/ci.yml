@@ -105,3 +105,5 @@ jobs:
           npm run vendor:pdf
       - name: Test real unpacked extension UI
         run: python tests/extension_smoke.py
+      - name: Test real MV3 cross-origin Panopto-style iframe authorization and targeted subtitles
+        run: python tests/embedded_frame_mv3_e2e.py
