@@ -67,7 +67,7 @@ class BridgeContractTests(unittest.TestCase):
     def test_health_reports_only_installed_tesseract_language_packs(self):
         with patch.object(bridge.shutil,"which",return_value="/usr/bin/tesseract"), \
              patch.object(bridge.subprocess,"run",return_value=subprocess.CompletedProcess(
-                 ["tesseract","--list-langs"],0,stdout="eng\\nfra\\njpn\\n",stderr="")):
+                 ["tesseract","--list-langs"],0,stdout="eng\nfra\njpn\n",stderr="")):
             languages=bridge.installed_ocr_languages()
         self.assertEqual(languages,["en","fr","ja"])
         self.assertNotIn("ko",languages)
