@@ -3,7 +3,7 @@
  * goes to the user's selected standard translation provider.
  */
 import {encodeMonoPcm16,averageEnergy,resampleChunks,ASR_SAMPLE_RATE} from './lib/wav.js';
-import {LiveStats,BoundedAudioQueue} from './lib/live-pipeline.js';
+import {LiveStats,BoundedAudioQueue,makeAudioContext} from './lib/live-pipeline.js';
 const SEGMENT_MS=3000;
 const MAX_REQUESTS=1440; // explicit safety stop ~72 minutes of speech.
 let current=null;
@@ -29,7 +29,7 @@ async function stop(){
 }
 async function flush(c){
   if(current!==c)return;
-  if(c.busy){
+  if(c.busy || Date.now()<(c.retryAt||0)){
     // Let the bounded queue preserve only recent samples; old audio cannot
     // create unlimited waiting time if Whisper inference is slower than speech.
     return;
@@ -60,6 +60,7 @@ async function flush(c){
     const result=await response.json();
     if(current!==c)return;
     const asrMs=Math.round(performance.now()-started);
+    c.failures=0;c.retryAt=0;
     c.stats.record(asrMs);
     const text=String(result.text||'').trim().slice(0,5000);
     if(asrMs>12000){
@@ -72,7 +73,15 @@ async function flush(c){
   }catch(e){
     if(current===c){
       c.stats.error();
-      await notify('PIT_ASR_ERROR',{tabId:c.tabId,message:'本机识别超时或失败，请检查 Whisper / 电脑负载。'});
+      c.failures++;
+      c.retryAt=Date.now()+Math.min(30000,3000*Math.pow(2,Math.min(c.failures-1,4)));
+      if(c.failures>=4 || /Whisper HTTP (401|403|503)/.test(String(e?.message||e))){
+        await notify('PIT_ASR_ERROR',{tabId:c.tabId,
+          message:'本机识别连续失败，音频已自动停止，请核查模型、令牌和服务配置。'});
+        await stop();
+        await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId});
+      }else await notify('PIT_ASR_ERROR',{tabId:c.tabId,
+        message:'本机识别失败，将在稍后重试，不会累积过期音频。'});
     }
   }finally{
     if(current===c){
@@ -90,7 +99,7 @@ async function start({streamId,tabId,token}){
     stream=await navigator.mediaDevices.getUserMedia({audio:{mandatory:{
       chromeMediaSource:'tab',chromeMediaSourceId:streamId}},video:false});
     if(generation!==epoch){stream.getTracks().forEach(t=>t.stop());return {ok:false,error:'捕获已取消'};}
-    context=new AudioContext({sampleRate:ASR_SAMPLE_RATE});
+    context=makeAudioContext(AudioContext);
     const source=context.createMediaStreamSource(stream);
     const processor=context.createScriptProcessor(4096,1,1);
     const mute=context.createGain();mute.gain.value=0;
@@ -99,7 +108,7 @@ async function start({streamId,tabId,token}){
     source.connect(context.destination); // Preserve playback, per Chrome tabCapture docs.
     const queue=new BoundedAudioQueue(context.sampleRate,6);
     c={context,source,processor,mute,stream,tabId,token,queue,busy:false,
-      timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0};
+      timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0,failures:0,retryAt:0};
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
     current=c;
     processor.onaudioprocess=e=>{
