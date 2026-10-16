@@ -1,10 +1,60 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>翻译控制</title><link rel="stylesheet" href="ui.css"></head>
-<body class="popup"><main><header><div class="brand"><img src="../assets/icon48.png" width="28" height="28" alt=""><span>沉浸式翻译 · Personal</span></div><button id="settings" class="textbtn" aria-label="打开设置">⚙ 设置</button></header>
-<section class="panel"><div class="label">选择翻译模式</div><div class="segmented"><button id="standard" class="selected">标准翻译</button><button id="ai">AI 增强</button></div><p class="muted" id="modeHint">常规服务优先，不消耗 Gemini / DeepSeek Token。</p><p id="providerInfo" class="provider">当前翻译服务：读取中…</p></section>
-<section class="controls"><button class="primary" id="translate">翻译当前网页</button><button id="continue">继续翻译后续段落（再授权 600 段）</button><button id="selection">仅翻译选中文本</button><button id="restore">恢复原文</button><button id="fileTools" class="primary">图片 OCR / PDF 翻译工具</button><button id="captureImage">翻译当前网页可见图片 / 截图</button><div class="controls"><button id="captionsStart">开始视频字幕翻译</button><label style="font-size:12px">可选字幕文件 (SRT/VTT)<input id="captionFile" type="file" accept=".srt,.vtt,text/vtt,text/plain" style="width:100%"></label><button id="captionsStop">停止视频字幕翻译</button></div></section>
-<p class="notice">优先使用原生轨，也支持 YouTube / Netflix / Panopto 页面可见字幕；对于抓取失败或课程字幕，可自行导入 SRT/VTT。跨域、DRM 与无字幕直播仍需授权的专用适配。</p>
-<section class="panel"><div class="label">实验性实时语音翻译（本机 Whisper）</div>
-<label>本机服务令牌<input id="asrToken" type="password" autocomplete="off" placeholder="PIT_BRIDGE_TOKEN" style="width:100%"></label>
-<div class="controls"><button id="asrStart">开始捕获当前标签页声音</button><button id="asrStop">停止实时语音翻译</button></div>
-<p class="muted">只有明确点击才捕获声音。原始音频只发送到本机 Whisper 服务；识别后的文本会发送至你配置的常规翻译服务。不自动调用 AI。DRM 视频可能不能录音。</p></section>
-<p class="notice">AI 仅在你主动选择 AI 模式并点击翻译时使用。网站内容会发送至所选翻译服务。</p><div id="status" class="status" role="status" aria-live="polite"></div></main><script src="lib/subtitle-import.js"></script><script type="module" src="popup.js"></script></body></html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>沉浸式翻译 · 控制面板</title><link rel="stylesheet" href="ui.css"></head>
+<body class="popup"><main>
+<header class="popup-header">
+  <div class="brand"><img src="../assets/icon48.png" width="32" height="32" alt=""><div>沉浸式翻译 <span class="brand-sub">Personal Translator</span></div></div>
+  <button id="settings" class="textbtn" aria-label="打开翻译插件设置">⚙ 设置</button>
+</header>
+<section class="panel mode-panel" aria-labelledby="modeTitle">
+ <div class="label" id="modeTitle">翻译模式</div>
+ <div class="segmented" role="group" aria-label="选择翻译模式">
+  <button id="standard" class="selected" type="button">标准翻译</button>
+  <button id="ai" type="button">AI 增强</button>
+ </div>
+ <p id="modeHint" class="muted">常规服务优先，不消耗 Gemini / DeepSeek Token。</p>
+ <div id="providerInfo" class="provider">当前翻译服务：读取中…</div>
+ <p id="setupStatus" class="setup-status" role="status">正在检查服务配置…</p>
+</section>
+<nav class="tool-modules" aria-label="翻译功能分组">
+ <details class="tool-group" id="webGroup" open>
+  <summary><span>🌐 网页与划词翻译</span><span class="group-state">常用</span></summary>
+  <div class="tool-inner controls">
+   <button class="primary" id="translate">翻译当前网页</button>
+   <div class="button-split"><button id="selection">翻译选中文字</button><button id="restore">恢复原文</button></div>
+   <button id="continue" class="subtle-action">继续翻译后续段落（额外 600 段）</button>
+   <p class="muted">原文与译文并列显示。额外段落只有点击继续后才会处理。</p>
+  </div>
+ </details>
+ <details class="tool-group" id="videoGroup">
+  <summary><span>▶ 视频字幕翻译</span><span class="group-state">HTML5 / 字幕文件</span></summary>
+  <div class="tool-inner controls">
+   <button id="captionsStart" class="primary">开始视频字幕翻译</button>
+   <label class="file-label">可选字幕文件（SRT / VTT）<input id="captionFile" type="file" accept=".srt,.vtt,text/vtt,text/plain"></label>
+   <button id="captionsStop">停止字幕翻译</button>
+   <p class="muted">先使用原生字幕轨，再尝试可见字幕。Netflix、Panopto 等受权限限制的平台不保证可抓取。</p>
+  </div>
+ </details>
+ <details class="tool-group" id="fileGroup">
+  <summary><span>▧ 图片 OCR 与 PDF</span><span class="group-state">文件工具</span></summary>
+  <div class="tool-inner controls">
+   <button class="primary" id="fileTools">打开图片 / PDF 翻译工具</button>
+   <button id="captureImage">截取当前网页进行 OCR</button>
+   <p class="muted">支持图片文本提取与翻译、PDF.js 预览；高保真 PDF 翻译需要本机 BabelDOC 环境。</p>
+  </div>
+ </details>
+ <details class="tool-group" id="speechGroup">
+  <summary><span>◉ 实时语音翻译</span><span class="group-state">实验功能</span></summary>
+  <div class="tool-inner controls">
+   <label class="file-label">本机 Whisper 服务令牌<input id="asrToken" type="password" autocomplete="off" placeholder="PIT_BRIDGE_TOKEN"></label>
+   <button id="asrStart" class="primary">开始捕获当前标签页声音</button>
+   <button id="asrStop">停止实时语音翻译</button>
+   <p class="muted">只有主动开始才捕获声音。原始音频留在本机，识别后的文字将发送到所配置的普通翻译服务。DRM 视频可能不可用。</p>
+  </div>
+ </details>
+</nav>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+<footer class="popup-footer">初期支持中、英、日、韩、法、德、西七种语言 · 开发版</footer>
+</main>
+<script src="lib/subtitle-import.js"></script><script type="module" src="popup.js"></script>
+</body></html>
