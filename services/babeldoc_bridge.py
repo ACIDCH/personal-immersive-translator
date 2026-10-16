@@ -14,6 +14,7 @@ import tempfile
 import json
 import struct
 import io
+import csv
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
@@ -108,9 +109,39 @@ def health(x_pit_token: str|None=Header(None)):
     }
 
 
+def parse_ocr_layout(tsv: str, width: int, height: int):
+    """Extract bounded image-relative text lines, never executable markup."""
+    if width < 1 or height < 1: return []
+    lines={}
+    for row in csv.DictReader(io.StringIO(tsv),delimiter="\t"):
+        try:
+            if row.get("level") != "5":continue
+            word=(row.get("text") or "").strip()
+            if not word:continue
+            x,y,w,h=(int(row[k]) for k in ("left","top","width","height"))
+            if w < 1 or h < 1 or x < 0 or y < 0 or x >= width or y >= height:continue
+            key=tuple(row.get(k,"") for k in ("page_num","block_num","par_num","line_num"))
+            if key not in lines:lines[key]={"words":[],"x":x,"y":y,"r":x+w,"b":y+h}
+            item=lines[key]
+            item["words"].append(word)
+            item["x"]=min(item["x"],x);item["y"]=min(item["y"],y)
+            item["r"]=max(item["r"],min(x+w,width))
+            item["b"]=max(item["b"],min(y+h,height))
+        except (ValueError,KeyError,TypeError):
+            continue
+    result=[]
+    for item in lines.values():
+        txt=" ".join(item["words"])[:500].strip()
+        if not txt:continue
+        result.append({"text":txt,"x":item["x"],"y":item["y"],
+                       "w":item["r"]-item["x"],"h":item["b"]-item["y"]})
+        if len(result)>=80:break
+    return result
+
+
 @app.post("/ocr-image")
 async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
-                    x_pit_token: str|None=Header(None)):
+                    layout: bool=Form(False), x_pit_token: str|None=Header(None)):
     if not authorized(x_pit_token): raise HTTPException(status_code=401)
     if source not in LANGS:raise HTTPException(status_code=400,detail="语言代码无效")
     if image.content_type not in ("image/png","image/jpeg","image/webp"):
@@ -136,9 +167,23 @@ async def ocr_image(image: UploadFile=File(...), source: str=Form("en"),
                         capture_output=True,timeout=100,check=True)
                 except (subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
                     raise HTTPException(status_code=422,detail="OCR 识别失败，请安装对应语言包") from exc
+                boxes=[]
+                if layout:
+                    try:
+                        tsv=await asyncio.to_thread(subprocess.run,
+                            ["tesseract",str(path),"stdout","-l",LANGS[source],"tsv"],
+                            capture_output=True,timeout=100,check=True)
+                        boxes=parse_ocr_layout(tsv.stdout.decode("utf8",errors="replace"),
+                                               normalized.width,normalized.height)
+                    except (subprocess.CalledProcessError,subprocess.TimeoutExpired):
+                        boxes=[]  # Plain OCR text remains usable as a fallback.
     except (UnidentifiedImageError,OSError,ValueError,Image.DecompressionBombError) as exc:
         raise HTTPException(status_code=422,detail="图片损坏、格式不匹配或尺寸超限") from exc
-    return {"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
+    response={"original_text":result.stdout.decode("utf8",errors="replace")[:12000]}
+    if layout:
+        response.update({"image_width":normalized.width,"image_height":normalized.height,
+                         "lines":boxes})
+    return response
 
 
 def validate_asr_wav(data: bytes):
