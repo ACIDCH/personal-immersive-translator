@@ -107,6 +107,70 @@ class BridgeServerTest(unittest.TestCase):
         backend.assert_not_awaited()
 
 
+class RealLoopbackTransportTest(unittest.TestCase):
+    """Actual socket, multipart upload, protected FastAPI forwarding.
+
+    The HTTP responder is a harmless local fixture, NOT a real Whisper model.
+    """
+    def test_live_loopback_asr_request_uses_persistent_server(self):
+        import json
+        from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
+        from threading import Thread
+        import asyncio
+
+        class Handler(BaseHTTPRequestHandler):
+            server_version="whisper.cpp"
+            sys_version=""
+            def version_string(self):
+                return "whisper.cpp"
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"local server")
+            def do_POST(self):
+                if self.path!="/inference":
+                    self.send_error(404)
+                    return
+                size=int(self.headers.get("Content-Length",0))
+                if not 0<size<1000000:
+                    self.send_error(413)
+                    return
+                request=self.rfile.read(size)
+                self.server.requests.append(request)
+                response=json.dumps({"text":"recognized speech from local server"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type","application/json")
+                self.send_header("Content-Length",str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+            def log_message(self,*args):
+                return
+
+        server=ThreadingHTTPServer(("127.0.0.1",0),Handler)
+        server.requests=[]
+        worker=Thread(target=server.serve_forever,daemon=True)
+        worker.start()
+        try:
+            port=server.server_address[1]
+            self.assertTrue(server_is_ready(port))
+            transcript=asyncio.run(transcribe_server(pcm_sample(),port))
+            self.assertEqual(transcript,"recognized speech from local server")
+            with patch.object(bridge,"ASR_BACKEND","server"),\
+                 patch.dict(os.environ,{"PIT_WHISPER_SERVER_PORT":str(port)}):
+                reply=TestClient(bridge.app).post("/asr",
+                    headers={"X-PIT-Token":"test-local-secret-at-least-16"},
+                    files={"audio":("chunk.wav",pcm_sample(),"audio/wav")})
+            self.assertEqual(reply.status_code,200,reply.text)
+            self.assertEqual(reply.json()["text"],transcript)
+            self.assertEqual(len(server.requests),2)
+            self.assertTrue(all(b"RIFF" in raw and b"chunk.wav" in raw
+                                for raw in server.requests))
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+
+
 class PdfQualityTest(unittest.TestCase):
     def test_structural_pass_and_page_retention(self):
         with tempfile.TemporaryDirectory() as root:
