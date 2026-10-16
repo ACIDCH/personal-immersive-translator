@@ -19,10 +19,30 @@ async def main():
             "--no-sandbox",f"--disable-extensions-except={ext}",
             f"--load-extension={ext}"])
         try:
-          worker=browser.service_workers[0] if browser.service_workers else await browser.wait_for_event(
-              "serviceworker",timeout=20000)
-          origin=worker.url.split('/background.js')[0]
-          assert origin.startswith("chrome-extension://"),origin
+          # KISS has a large webpack-built MV3 worker. Chromium may not
+          # surface an idle background worker until the popup is opened.
+          # Resolve the installed extension from Chrome's own extensions UI.
+          manager=await browser.new_page()
+          await manager.goto("chrome://extensions/")
+          try:
+            await manager.wait_for_function("""()=>
+              document.querySelector('extensions-manager')?.shadowRoot
+                ?.querySelector('#items-list')?.shadowRoot
+                ?.querySelectorAll('extensions-item').length>0
+            """,timeout=10000)
+            installed=await manager.evaluate("""()=>
+              [...document.querySelector('extensions-manager').shadowRoot
+                .querySelector('#items-list').shadowRoot.querySelectorAll('extensions-item')]
+                .map(el=>({id:el.id,name:el.shadowRoot?.querySelector('#name')?.textContent}))
+            """)
+          except Exception as exc:
+            installed=[]
+            print("Chrome extensions manager lookup failed:",str(exc),flush=True)
+          print("Chrome installed extensions:",installed,flush=True)
+          assert installed, "KISS extension did not appear in chrome://extensions"
+          extension_id=installed[0]["id"]
+          assert len(extension_id)==32,installed
+          origin="chrome-extension://"+extension_id
           errors=[]
           popup=await browser.new_page()
           popup.on("pageerror",lambda e:errors.append(str(e)))
