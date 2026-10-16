@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**Version under development:** 0.3.6 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.3.7 — release candidate preparation, **not production or real-account verified**.
 
 ## Isolation
 
@@ -114,3 +114,13 @@ The entire project remains in stacked Draft PRs. UI/name redesign and the user-f
 - `benchmarks/ocr_accuracy.py` supplies a Unicode-normalized Levenshtein CER metric for later permitted real-world fixtures. Read [development acceptance](docs/CJK_OCR_BABELDOC_PREFLIGHT_036_zh-CN.md).
 
 The repository remains in stacked Draft PRs. No intermediate user-facing ZIP; defer project naming, full control panel visual redesign and branding until all core functions and release blockers are resolved.
+
+## v0.3.7 — direct-launch reliability, stricter BabelDOC checks, seven-language OCR
+
+- Fixes an actual direct-entrypoint import failure in the local PDF/ASR bridge; the direct script path now receives the required Whisper health probe too, and is regression-tested in a separate Python process.
+- Requires **whole option-name matching** in BabelDOC CLI compatibility inspection to avoid treating similar flags as equivalent.
+- Adds **actual German and Spanish** Tesseract language-pack image recognition to existing Simplified Chinese, English, Japanese, Korean and French coverage. The clean single-line synthetic samples all achieve 0% character error; **no real-world photo accuracy guarantee**.
+- The optional persistent whisper.cpp server has permissive CORS in its upstream example and no token-bound interface. For security, server mode requires `PIT_ACK_UNAUTH_WHISPER_SERVER=1` explicitly in the **local service environment**. Without it, the server pathway fails closed; the default `cli` mode remains available. This is a development safety interlock, **not an authentication layer**.
+- [v0.3.7 runtime and release-gate audit](docs/CORE_RUNTIME_HARDENING_037_zh-CN.md).
+
+As requested, do not distribute an intermediate installer, merge Draft PRs or redesign the UI until the remaining real-device and document quality gates are satisfied.
