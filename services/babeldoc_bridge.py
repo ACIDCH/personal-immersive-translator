@@ -49,15 +49,29 @@ app.add_middleware(CORSMiddleware,
 def authorized(header):
     return bool(TOKEN and header and secrets.compare_digest(header,TOKEN))
 def scanned_pdf(path):
+    """Detect substantial raster-only pages without treating blank pages as scans.
+
+    The old text-length-only check ran OCR over completely blank separators,
+    short title pages and digitally-searchable covers. Inspect every page so
+    scanned appendices are still found after a born-digital introduction.
+    """
     try:
         import fitz
         with fitz.open(path) as doc:
-            if doc.page_count > 300: raise ValueError("超过 300 页上限")
-            if doc.page_count < 1: raise ValueError("PDF 没有任何页面")
-            # OCRmyPDF --skip-text safely leaves searchable pages untouched.
-            # Check every page: a three-page prefix misses mixed text/scanned
-            # appendices later in a paper or thesis.
-            return any(len(doc[i].get_text().strip()) < 30 for i in range(doc.page_count))
+            if doc.needs_pass: raise ValueError("PDF 已加密，请先提供可读取版本")
+            if not 1 <= doc.page_count <= 300:
+                raise ValueError("PDF 页数必须在 1–300 之间")
+            for page in doc:
+                if len(page.get_text().strip()) >= 10:
+                    continue  # Searchable short covers do not need OCR.
+                page_area=max(1.0,page.rect.width*page.rect.height)
+                # get_image_info includes inline raster images, unlike
+                # get_images(full=True), which only lists XObject references.
+                for img in page.get_image_info():
+                    rect=fitz.Rect(img.get("bbox",(0,0,0,0))) & page.rect
+                    if not rect.is_empty and rect.get_area()/page_area >= 0.10:
+                        return True
+            return False
     except (ImportError,ValueError):
         raise
     except Exception as exc:
