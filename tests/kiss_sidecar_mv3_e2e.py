@@ -65,7 +65,7 @@ async def main():
           await control.locator("#target").get_by_text(
             "pit-upstream-fixture.example",exact=False).wait_for(timeout=10000)
           state=await control.evaluate("""async()=>
-            chrome.runtime.sendMessage({type:'PIT_ASR_STATUS'})""")
+            globalThis.PITSidecar.send({type:'PIT_ASR_STATUS'})""")
           assert state.get("ok")==True and state.get("active")==False,state
           await control.locator("#asrStart").click()
           await control.locator("#status").get_by_text(

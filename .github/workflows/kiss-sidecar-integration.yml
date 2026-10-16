@@ -51,6 +51,8 @@ jobs:
           node scripts/assemble-kiss-sidecar.mjs /tmp/pit-kiss-upstream/build/chrome
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/options.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/asr-controller.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/bridge-client.js
+          node --check /tmp/pit-kiss-upstream/build/chrome/pit/view-client.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/control.js
           node --check /tmp/pit-kiss-upstream/build/chrome/pit/offscreen.js
           node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream

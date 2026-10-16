@@ -16,6 +16,7 @@ function setup(version='2.1.1'){
  file('src/pdf-preview.js',"const url=chrome.runtime.getURL('src/vendor/pdf.worker.mjs');");
  const additional=['kiss/background-entry.js','kiss/asr-controller.js',
  'kiss/control.html','kiss/control.js','kiss/popup-entry.js',
+ 'kiss/bridge-client.js','kiss/view-client.js',
  'offscreen.html','offscreen.js','audio-capture-worklet.js',
  'live-captions.js','subtitles.js','content.css',
  'lib/live-pipeline.js','lib/wav.js','lib/caption-core.js',
@@ -26,9 +27,15 @@ function setup(version='2.1.1'){
    "import {translateBatch} from '../lib/providers.js';\n"+
    "import {normalizeSettings} from '../lib/settings.js';");
  file('src/kiss/control.js',"import {chooseEmbeddedFrame} from '../lib/frame-route.js';");
- file('src/offscreen.js',"const path=chrome.runtime.getURL('src/audio-capture-worklet.js');");
- file('src/live-captions.js',"const message={type:'TRANSLATE_BATCH'};");
- file('src/subtitles.js',"const message={type:'TRANSLATE_BATCH'};");
+ file('src/offscreen.js',
+ "const path=chrome.runtime.getURL('src/audio-capture-worklet.js');\n"+
+ "async function notify(type,payload){\n  try{await chrome.runtime.sendMessage({type,...payload});}catch{}\n}");
+ file('src/live-captions.js',
+ "const message=chrome.runtime.sendMessage({type:'TRANSLATE_BATCH'});\n"+
+ "chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{});");
+ file('src/subtitles.js',
+ "const message=chrome.runtime.sendMessage({type:'TRANSLATE_BATCH'});\n"+
+ "chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{});");
  file('src/tools.js',"const a=chrome.permissions.request({}); const b=chrome.permissions.request({}); const c=chrome.permissions.request({});");
  const tick=String.fromCharCode(96),dollar=String.fromCharCode(36);
  file('src/options.js',"import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';\n"+
@@ -60,8 +67,15 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
     .includes("import '../background.js'"));
   assert.ok(readFileSync(join(f.build,'pit/offscreen.js'),'utf8')
     .includes("chrome.runtime.getURL('pit/audio-capture-worklet.js')"));
-  assert.ok(readFileSync(join(f.build,'pit/live-captions.js'),'utf8')
-    .includes("type:'PIT_SIDECAR_TRANSLATE'"));
+  const live=readFileSync(join(f.build,'pit/live-captions.js'),'utf8');
+  assert.ok(live.includes("type:'PIT_SIDECAR_TRANSLATE'"));
+  assert.ok(live.includes('globalThis.PITSidecar.send('));
+  assert.ok(live.includes('globalThis.PITSidecar.onViewMessage.addListener'));
+  assert.ok(existsSync(join(f.build,'pit/bridge-client.js')));
+  assert.ok(existsSync(join(f.build,'pit/view-client.js')));
+  const offscreen=readFileSync(join(f.build,'pit/offscreen.js'),'utf8');
+  assert.ok(offscreen.includes("name:'pit-offscreen-v046'"));
+  assert.ok(offscreen.includes("sidecarPort?.postMessage({kind:'event'"));
   assert.ok(readFileSync(join(f.build,'pit/subtitles.js'),'utf8')
     .includes("type:'PIT_SIDECAR_TRANSLATE'"));
   assert.ok(m.permissions.includes('storage'));
