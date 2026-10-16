@@ -38,10 +38,18 @@ export function inspectKissUpstream(upstreamRoot,ourRoot=process.cwd()){
   if(built){
     const final=readJson(join(root,'build/chrome/manifest.json'));
     must(final.manifest_version===3,'KISS build output is not MV3');
+    const expectedFiles=[final.background?.service_worker,final.action?.default_popup,
+      final.options_ui?.page,...(final.content_scripts||[]).flatMap(x=>x.js||[])].filter(Boolean);
+    must(expectedFiles.length>=3,'KISS build output is missing extension entrypoints');
+    for(const file of expectedFiles) {
+      must(!file.includes('..')&&existsSync(join(root,'build/chrome',file)),
+        'KISS Chrome bundle is missing declared entrypoint: '+file);
+    }
     chromeBuild={
       manifestV3:true,
       serviceWorker:final.background?.service_worker||null,
-      contentScriptCount:final.content_scripts?.length||0
+      contentScriptCount:final.content_scripts?.length||0,
+      checkedEntrypoints:expectedFiles.length
     };
   }
   return {

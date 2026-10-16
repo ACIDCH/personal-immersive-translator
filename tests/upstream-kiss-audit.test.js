@@ -39,9 +39,10 @@ test('upstream GPL/permission gate exposes risky differences instead of copying 
   assert.equal(a.upstreamChromeBuildObserved,false);
   f.write(f.upstream,'build/chrome/manifest.json',{
    manifest_version:3,background:{service_worker:'background.js'},
-   content_scripts:[{js:['content.js']}]
+   content_scripts:[{js:['content.js']}],action:{default_popup:'popup.html'}
   });
-  assert.equal(inspectKissUpstream(f.upstream,f.our).chromeBuild.serviceWorker,'background.js');
+  for(const file of ['background.js','content.js','popup.html'])f.write(f.upstream,'build/chrome/'+file,'fixture');
+  assert.equal(inspectKissUpstream(f.upstream,f.our).chromeBuild.checkedEntrypoints,3);
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
 test('wrong upstream version / missing GPL provenance fails closed',()=>{

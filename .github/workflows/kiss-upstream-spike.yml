@@ -35,16 +35,17 @@ jobs:
         run: |
           npm install --global --no-audit --no-fund pnpm@9.15.9
           pnpm install --frozen-lockfile --ignore-scripts --reporter=append-only
-      - name: Build actual upstream Chrome/Edge MV3 application (no distribution)
+      - name: Run upstream's actual Chrome extension build (no distribution)
         working-directory: /tmp/pit-kiss-upstream
         env:
           CI: 'true'
           NODE_OPTIONS: '--max-old-space-size=4096'
-          REACT_APP_CLIENT: 'chrome'
-          BUILD_PATH: './build/chrome'
           GENERATE_SOURCEMAP: 'false'
         run: |
-          pnpm exec react-app-rewired build
+          pnpm build:chrome
           test -f build/chrome/manifest.json
+          test -f build/chrome/background.js
+          test -f build/chrome/content.js
+          test -f build/chrome/popup.html
       - name: Compare built manifest with PIT permissions and source gate
         run: node scripts/upstream-kiss-audit.mjs /tmp/pit-kiss-upstream

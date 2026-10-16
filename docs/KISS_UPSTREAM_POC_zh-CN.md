@@ -40,3 +40,5 @@ KISS 仓库有 GPL-3.0 源码许可证，能取得完整项目源码；但**我�
 KISS 为 GPL-3.0、MV3、拥有网页/视频/本地 AI/文件翻译功能的大体量 React 扩展。**不宜在当前 MIT 仓库里直接粘贴 KISS 网页翻译实现**。本次动作是实际运行“获取成熟源代码 + 固定版本验证 + 尝试真实构建”的第一步，尚未完成最终 Fork 或功能移植；后续以 CI 结果为据评估。
 
 发行版与 dev 路径存在版本差异：此 PoC 固定发行标签，结构检查使用 **v2.1.1 实际存在** 的 `src/background.js`、`src/apis/trans.js`、`src/libs/batchQueue.js`、`src/config/api.js`，不得把 dev 的 `src/providers/background.js`、`src/config/defaultServices.js` 当作 v2.1.1 目录。
+
+补充：PoC 已升级为在 CI 调用上游自己定义的 **`pnpm build:chrome`**，不仅运行 `react-app-rewired build`；审计脚本逐项核对浏览器包 Manifest 声明的 service worker、content scripts、popup/options 入口文件确实存在。即便通过，也只表示**可完整构建的上游原版**，不是我们的定制包、功能兼容或安全验收。
