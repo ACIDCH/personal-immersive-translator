@@ -11,4 +11,12 @@
 .status{border:1px solid #5d7194;border-radius:30px;font-size:11px;padding:4px 9px;white-space:nowrap}
 footer{color:#7188aa;font-size:11px;margin-top:18px;line-height:1.5}
 .popup .main-grid{display:flex;flex-direction:column}.popup .module-list{display:grid;grid-template-columns:1fr 1fr}.popup .detail{min-height:140px}.popup .module-sub{display:none}
+.native-web{margin-top:16px}.native-modes,.native-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.native-web button{border:1px solid #486180;border-radius:8px;color:#e6f2ff;background:#183453;padding:10px 8px;cursor:pointer;font-weight:600;font-size:12px}
+.native-web button[aria-pressed="true"]{border-color:#80b9ff;background:#27548b}
+.native-web button:disabled{opacity:.6;cursor:wait}
+.native-actions{margin-top:12px}.native-actions button:first-child{background:#2463bc}
+.native-actions button:last-child{grid-column:1/-1}
+.native-progress,.native-status,.native-hint{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.native-progress{color:#c5dafa}.native-status{color:#b4cfed}.native-hint{color:#93a4be}
 @media(max-width:600px){.dashboard .main-grid{grid-template-columns:1fr}}
