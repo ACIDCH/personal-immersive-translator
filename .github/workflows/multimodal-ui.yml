@@ -1,0 +1,63 @@
+name: Multimodal Platform UI & BYOK validation
+
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'src/lib/ai-profiles.js'
+      - 'src/lib/providers.js'
+      - 'src/lib/settings.js'
+      - 'src/options*'
+      - 'tests/ai-profiles.test.js'
+      - '.github/workflows/multimodal-ui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  custom-ai:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax check
+        run: |
+          node --check src/lib/ai-profiles.js
+          node --check src/lib/providers.js
+          node --check src/options.js
+      - name: Universal AI profile tests
+        run: node --test tests/ai-profiles.test.js
+
+  ui-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [wxt-ui, portal]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend dependencies (preview only)
+        run: npm install --no-audit --no-fund
+      - name: Prepare WXT types
+        if: matrix.app == 'wxt-ui'
+        run: npx wxt prepare
+      - name: TypeScript check
+        run: npm run check
+      - name: Build UI artifact
+        run: npm run build
+      - name: Confirm output exists
+        run: |
+          if [ "${{ matrix.app }}" = "wxt-ui" ]; then
+            test -f .output/chrome-mv3/manifest.json
+          else
+            test -f dist/index.html
+          fi
