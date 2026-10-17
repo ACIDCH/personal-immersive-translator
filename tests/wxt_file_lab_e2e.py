@@ -28,6 +28,37 @@ def ooxml_docx():
       '<w:body><w:p><w:r><w:t>My finance DOCX document</w:t></w:r></w:p></w:body></w:document>')
   return out.getvalue()
 
+def structured_docx():
+  # A more representative OOXML document: mixed runs, a table, header, and
+  # a separate image asset. Preserve the ZIP/package structure after translation.
+  from base64 import b64decode
+  out=io.BytesIO()
+  with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
+    z.writestr('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?>'+
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Default Extension="png" ContentType="image/png"/>'+
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
+      '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>')
+    z.writestr('_rels/.rels','<?xml version="1.0" encoding="UTF-8"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+    z.writestr('word/_rels/document.xml.rels','<?xml version="1.0" encoding="UTF-8"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>')
+    z.writestr('word/document.xml','<?xml version="1.0" encoding="UTF-8"?>'+
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+
+      '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Bold financial </w:t></w:r>'+
+      '<w:r><w:t>report overview</w:t></w:r></w:p>'+
+      '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Annual income table value</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'+
+      '</w:body></w:document>')
+    z.writestr('word/header1.xml','<?xml version="1.0" encoding="UTF-8"?>'+
+      '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
+      '<w:p><w:r><w:t>Private finance header</w:t></w:r></w:p></w:hdr>')
+    z.writestr('word/media/image1.png',b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOaQSLQAAAAASUVORK5CYII='))
+  return out.getvalue()
+
 async def main():
   report={"application":"installed WXT Chrome MV3 file-lab","docx":"not_run","ocr":"not_run"}
   with tempfile.TemporaryDirectory(prefix="wxt-doc-file-") as profile:
@@ -90,6 +121,25 @@ async def main():
         report['docx_provider_calls']=await sw.evaluate('()=>globalThis.__fileDocxCalls')
         assert report['docx_provider_calls']==1,report
         print('WXT DOCX TRANSLATION + DOWNLOAD: PASS',flush=True)
+        source=structured_docx()
+        await page.locator('.document-lab input[type="file"]').set_input_files({
+          'name':'structured.docx',
+          'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'buffer':source})
+        async with page.expect_download(timeout=26000) as event:
+          await page.get_by_role('button',name='翻译并导出 DOCX').click()
+        structured_export=await (await event.value).path()
+        with zipfile.ZipFile(io.BytesIO(source)) as origin,zipfile.ZipFile(structured_export) as output:
+          assert origin.read('word/media/image1.png')==output.read('word/media/image1.png')
+          assert origin.read('word/_rels/document.xml.rels')==output.read('word/_rels/document.xml.rels')
+          xml=output.read('word/document.xml').decode('utf8')
+          header=output.read('word/header1.xml').decode('utf8')
+          assert '译文:Bold financial report overview' in xml,xml[:400]
+          assert '译文:Annual income table value' in xml,xml[:400]
+          assert '译文:Private finance header' in header,header[:400]
+          assert '<w:tbl>' in xml and '<w:b' in xml
+        report['docx_tables_header_media']='pass'
+        print('WXT DOCX COMPLEX STRUCTURE: PASS (table/header/media preserved; inline run format caveat)',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
