@@ -136,7 +136,14 @@ for(const [id,fn] of [
  });
 }
 initSiteDiagnostics(verified);
-loadTarget().catch(e=>{
+loadTarget().then(()=>{
+  // Activated only by the explicit PIT dashboard button; regular visits do
+  // not scan pages and never upload diagnostic reports without user action.
+  if(new URLSearchParams(location.search).get('autoScan')==='1'){
+    el('diagStatus').textContent='你已点击 PIT 的一键上传入口，正在扫描并提交…';
+    el('diagUpload').click();
+  }
+}).catch(e=>{
  say('无法绑定网页：'+String(e.message||e));
  el('target').textContent='请从 KISS 原生弹窗打开本页。';
  el('captionStart').disabled=true;el('asrStart').disabled=true;

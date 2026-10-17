@@ -31,22 +31,39 @@ async def main():
           errors=[]
           popup=await browser.new_page()
           popup.on("pageerror",lambda e:errors.append(str(e)))
-          await popup.goto(origin+"/popup.html")
+          await popup.goto(origin+"/pit/home.html")
+          await popup.locator("#webTranslate").wait_for(timeout=10000)
+          for element in ("#videoControl","#fileTools","#githubReport",
+                          "#pitSettings","#kissSettings"):
+            assert await popup.locator(element).count()==1,element
+          dashboard=await browser.new_page()
+          await dashboard.goto(origin+"/pit/dashboard.html")
+          await dashboard.locator("#githubReport").wait_for(timeout=10000)
+          assert await dashboard.locator("body").get_attribute("data-view")=="dashboard"
+          print("PASS: PIT-authored native popup and full dashboard expose own module controls",flush=True)
           display=await popup.evaluate("""()=>{
             const m=chrome.runtime.getManifest();
             return {name:m.name,version:m.version,version_name:m.version_name,
-              title:m.action?.default_title,icon:m.icons?.['128']};
+              title:m.action?.default_title,icon:m.icons?.['128'],
+              popup:m.action?.default_popup,
+              options:m.options_ui?.page||m.options_page};
           }""")
           assert display["name"]=="PIT 沉浸式翻译（测试版）",display
           assert display["version"]=="2.1.1",display
-          assert display["version_name"]=="PIT v0.4.9 (KISS 2.1.1)",display
-          assert display["title"]=="PIT 沉浸式翻译 · v0.4.9",display
+          assert display["version_name"]=="PIT v0.5.0 (KISS 2.1.1)",display
+          assert display["title"]=="PIT 沉浸式翻译 · v0.5.0",display
           assert display["icon"]=="pit/icons/icon128.png",display
           print("PASS: Chrome extension identity displays PIT brand and KISS core attribution",flush=True)
-          await popup.locator("#pit-multimodal-links a").first.wait_for(timeout=10000)
-          hrefs=await popup.locator("#pit-multimodal-links a").evaluate_all(
-            "(els)=>els.map(el=>el.getAttribute('href'))")
-          assert "pit/tools.html" in hrefs and "pit/options.html" in hrefs,hrefs
+          assert display.get("popup")=="pit/home.html",display
+          assert display.get("options")=="pit/dashboard.html",display
+          assert await popup.locator("#githubReport").is_visible()
+          assert await dashboard.locator("#fileTools").is_visible()
+          # Original KISS settings remain accessible under their original URL.
+          legacy=await browser.new_page()
+          await legacy.goto(origin+"/options.html")
+          await legacy.locator("#root").wait_for(timeout=10000)
+          assert await legacy.locator("#root").count()==1
+          print("PASS: original KISS advanced settings remain accessible by explicit link",flush=True)
           # Validate KISS's ACTUAL upstream site content script in Chromium
           # (not merely a built manifest entry or an active MV3 worker).
           fixture=await browser.new_page()
@@ -256,7 +273,7 @@ async def main():
           # KISS's React popup may have upstream log warnings, but the tools'
           # own module imports and PDF.js worker must not cause JS errors.
           assert not [e for e in errors if 'pit/' in e],errors
-          print("PASS: original KISS MV3 popup exposes PIT PDF/OCR links")
+          print("PASS: PIT native popup is default and keeps KISS advanced UI compatible")
           print("PASS: Mozilla PDF.js renders a generated PDF in Chromium")
           print("PASS: independent PIT settings save and reload without remote API")
         finally:
