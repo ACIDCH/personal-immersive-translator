@@ -1,0 +1,6 @@
+# Optional actual BabelDOC layout engine for PIT's local bridge.
+# Upstream BabelDOC 0.6.4 imports bitstring.BitStream, removed in bitstring 5.
+# The unconstrained resolver installed 5.0.0 and broke "babeldoc --version"
+# on 2026-10-18 (GitHub Actions actual-engine job). Pin at install time.
+BabelDOC==0.6.4
+bitstring>=4.3,<5
