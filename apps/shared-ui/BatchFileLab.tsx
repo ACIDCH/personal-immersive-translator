@@ -6,7 +6,7 @@ import {bilingualImagePng,splitOcrLines} from './imageTranslate';
 type Mode='standard'|'ai';
 type Lang='eng'|'fra'|'chi_sim'|'jpn'|'kor';
 const MAX_FILES=8,MAX_FILE=12*1024*1024,MAX_BATCH=48*1024*1024;
-const accepted=/\.(docx|pptx|xlsx|png|jpe?g|webp|bmp)$/i;
+const accepted=/\.(docx|pptx|xlsx|epub|txt|md|html?|png|jpe?g|webp|bmp)$/i;
 type ChromeRuntime={
  id?:string;
  getURL?:(name:string)=>string;
@@ -82,6 +82,10 @@ export function BatchFileLab(){
          const {translateOffice}=await import('./officeTranslate');
          result=await translateOffice(await file.arrayBuffer(),type,translate,(done,total)=>
            setProgress('文件 '+(i+1)+'/'+items.length+'：Office '+done+'/'+total+' 段'));
+       }else if(['epub','txt','md','html','htm'].includes(type)){
+         const {translatePortable}=await import('./portableDocumentTranslate');
+         result=await translatePortable(await file.arrayBuffer(),type as 'epub'|'txt'|'md'|'html'|'htm',translate,(done,total)=>
+           setProgress('文件 '+(i+1)+'/'+items.length+'：'+type.toUpperCase()+' '+done+'/'+total+' 段'));
        }else{
          if(!ocrWorker){
            const {createWorker}=await import('tesseract.js');
@@ -119,9 +123,9 @@ export function BatchFileLab(){
  }
  return <section className="document-lab batch-file-lab">
    <h2>批量多格式翻译</h2>
-   <p>同时选择 DOCX、PPTX、XLSX 或图片；逐个解析并翻译，一次下载 ZIP。需要高保真 PDF 时请使用独立 PDF 工具。</p>
+   <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML 以及图片；逐个翻译并下载 ZIP。EPUB 保留章节结构和媒体，Markdown 含代码/链接的复杂行保持原文；高保真 PDF 请使用独立工具。</p>
    <label className="document-field">选择文件（最多 8 个）
-     <input type="file" multiple accept=".docx,.pptx,.xlsx,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
+     <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
    </label>
    <div className="native-modes" role="group" aria-label="批量翻译服务">
      <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
