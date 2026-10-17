@@ -90,6 +90,22 @@ export function NativeWebControls(){
      setStatus('授权失败：'+String(error instanceof Error?error.message:error));
    }
  }
+ async function screenshotToFileLab(){
+   if(working)return;
+   setWorking(true);setStatus('正在截取当前可见网页…');
+   try{
+     const [tab]=await browser.tabs.query({active:true,currentWindow:true});
+     if(!tab?.id || !tab.windowId || !/^https?:\/\//.test(tab.url||''))
+       throw Error('只能截取当前普通网页，不能截取浏览器内部页');
+     const png=await browser.tabs.captureVisibleTab(tab.windowId,{format:'png'});
+     if(!png.startsWith('data:image/png;base64,')||png.length>6_000_000)
+       throw Error('当前网页截图无效或超过 4.5 MB');
+     await browser.storage.session.set({pit_ocr_screenshot:png});
+     await browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')});
+     setStatus('截图已传送到文件实验台，可选择识别语言后处理。');
+   }catch(e){setStatus('网页截图失败：'+String(e instanceof Error?e.message:e));}
+   finally{setWorking(false);}
+ }
  async function liveAsr(action:'start'|'stop'){
    if(captionBusy)return;
    if(action==='start' && !window.confirm(
@@ -205,6 +221,7 @@ export function NativeWebControls(){
      <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
      <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
      <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>打开本地 DOCX / 图片 OCR 实验台</button>
+     <button type="button" disabled={working} onClick={()=>void screenshotToFileLab()}>截图当前网页 → 图片 OCR</button>
      <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('pit-tools.html' as never)})}>打开 PDF / 高保真本机工具</button>
      <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
      <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
