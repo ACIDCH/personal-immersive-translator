@@ -79,7 +79,9 @@ npm run check --workspace portal
 npm run build --workspace portal
 ```
 
-Cloudflare Pages Git 项目未来配置：root=`apps/portal`、build=`npm run build`、output=`dist`。尚未创建项目或域名。生产版前端接口授权和 CSP 仍待复验。
+Cloudflare Pages Git 项目未来配置：**Root directory=`apps`**，Build command=`npm run build --workspace portal`，Build output directory=`portal/dist`（均相对于 `apps`）。不能把 Root 设为 `apps/portal`，否则共享 `apps/shared-ui` 的 React 依赖无法从工作区正确安装。尚未创建项目或域名。生产版前端接口授权和 CSP 仍待复验。
+
+Cloudflare Workers Git 项目未来配置：Root directory=`cloudflare/multimodal-api`，配置文件 `wrangler.jsonc`，Deploy command=`npx wrangler deploy`。当前仅健康检查和能力状态，没有实际 AI 代理或公网应用访问地址。
 
 ## 八、真实功能门禁与部署边界
 
