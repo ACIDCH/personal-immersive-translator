@@ -1,0 +1,50 @@
+name: Actual BabelDOC layout engine (offline translation stub)
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/babeldoc_real_layout_engine_probe.py'
+      - 'services/babeldoc_bridge.py'
+      - 'services/babeldoc_preflight.py'
+      - 'services/pdf_quality.py'
+      - 'services/requirements-babeldoc.txt'
+      - '.github/workflows/real-babeldoc-layout.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: babeldoc-real-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actual-babeldoc-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 27
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual AGPL BabelDOC 0.6.4 and bridge dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgl1 libglib2.0-0 fonts-noto-cjk
+          python -m pip install --no-cache-dir \
+            -r services/requirements-babeldoc.txt \
+            -r services/requirements.txt
+          babeldoc --version
+      - name: Run actual page-layout engine on a generated non-user PDF
+        run: python -m benchmarks.babeldoc_real_layout_engine_probe
+      - name: Validate evidence without claiming semantic translation
+        run: |
+          python -c "import json; r=json.load(open('actual-babeldoc-layout-probe.json')); assert r['real_engine_executed'] and r['model_request_count']>=1 and not r['linguistic_translation_evaluated']; print('REAL BABELDOC LAYOUT CORE TEST PASS')"
+      - name: Archive aggregate structural evidence (no files or keys)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-babeldoc-layout-evidence
+          path: actual-babeldoc-layout-probe.json
+          if-no-files-found: ignore
+          retention-days: 10

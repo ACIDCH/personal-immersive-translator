@@ -91,6 +91,31 @@ async def main():
       alert=await page.locator(".pit-asr-interrupted").inner_text()
       assert '已中断' in alert and '已停止' in alert,alert
       assert await page.locator(".pit-asr-overlay").count()==0
+      # An expressly opt-in AI ASR session switches the actual transient
+      # provider request mode and supplies limited previous dialogue as context.
+      sid_c="cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_START',sessionId:sid,mode:'ai'})",sid_c)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        text:'Financial markets are changing',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Financial markets are changing").wait_for(timeout=5000)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        text:'They remain resilient',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:They remain resilient").wait_for(timeout=5000)
+      ai_requests=await page.evaluate("""()=>window.requests.filter(r=>
+        r.mode==='ai'&&r.sessionId==='cccccccc-cccc-4ccc-8ccc-cccccccccccc')""")
+      assert len(ai_requests)==2,ai_requests
+      assert all(x['userInitiated'] is True and x['transient'] is True for x in ai_requests)
+      assert 'Financial markets are changing' in ai_requests[1]['context']
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_c)
+      assert await page.locator(".pit-asr-overlay").count()==0
+      print("PASS: opt-in live Whisper AI receives bounded historical subtitle context")
+
       print("PASS: unexpected track-end notification without stale recording overlay")
       assert not errors,errors
       print("PASS: rapid ASR captions coalesce, no stale results, latency metrics, stop cleanup")

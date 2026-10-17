@@ -24,6 +24,7 @@ on:
       - 'services/pdf_provider_profile.py'
       - 'tests/wxt_video_image_pdf_e2e.py'
       - 'tests/wxt_video_platform_matrix_e2e.py'
+      - 'benchmarks/public_video_real_probe.py'
   workflow_dispatch:
 
 concurrency:
@@ -149,6 +150,17 @@ jobs:
         id: real_site_probe
         continue-on-error: true
         run: python tests/wxt_public_site_probe.py
+      - name: Probe real public YouTube and Bilibili player UI (non-gating)
+        continue-on-error: true
+        run: python benchmarks/public_video_real_probe.py
+      - name: Archive real public-video accessibility and caption observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multimodal-real-public-video-probe
+          path: public-video-probe.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Archive non-gating public-site probe observations
         if: always()
         uses: actions/upload-artifact@v4

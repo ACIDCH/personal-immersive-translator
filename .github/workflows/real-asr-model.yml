@@ -1,0 +1,51 @@
+name: Real Whisper tiny CPU inference (synthetic speech)
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/faster_whisper_real_acceptance.py'
+      - 'services/faster_whisper_backend.py'
+      - 'services/requirements-faster-whisper.txt'
+      - '.github/workflows/real-asr-model.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: real-asr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actual-model-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install open ASR runtime and local synthetic voice
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y espeak
+          python -m pip install --no-cache-dir \
+            'faster-whisper>=1.1,<2' 'huggingface_hub>=0.24,<2' \
+            'numpy>=1.26,<3' 'scipy>=1.12,<2'
+      - name: Download pinned public MIT tiny model and execute production inference
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: |
+          python -m benchmarks.faster_whisper_real_acceptance \
+            --download --count 3 --report real-asr-synthetic-report.json
+      - name: Validate aggregate real-model report
+        run: |
+          python -c "import json; r=json.load(open('real-asr-synthetic-report.json')); assert r['count']==3 and r['p95_inference_ms']>=0 and not r['audio_saved']; print('REAL SYNTHETIC ASR PASS')"
+      - name: Archive aggregate results only, never audio or transcripts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-asr-cpu-synthetic-report
+          path: real-asr-synthetic-report.json
+          if-no-files-found: ignore
+          retention-days: 10

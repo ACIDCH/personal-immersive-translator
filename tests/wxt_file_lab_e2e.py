@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from PIL import Image,ImageDraw,ImageFont
 from playwright.async_api import async_playwright
+from wxt_video_image_pdf_e2e import pdf_fixture
 
 ROOT=Path(__file__).resolve().parents[1]
 PACKAGE=ROOT/"apps/wxt-ui/.output/chrome-mv3"
@@ -75,6 +76,30 @@ def xlsx_fixture():
     z.writestr('xl/sharedStrings.xml','<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Income and investment</t></si></sst>')
     z.writestr('xl/worksheets/sheet1.xml','<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>1+2</f><v>3</v></c><c r="C1" t="inlineStr"><is><t>Forecast notes</t></is></c></row></sheetData></worksheet>')
   return o.getvalue()
+
+
+def epub_fixture():
+  out=io.BytesIO()
+  with zipfile.ZipFile(out,'w') as z:
+    z.writestr(zipfile.ZipInfo('mimetype'),b'application/epub+zip',
+               compress_type=zipfile.ZIP_STORED)
+    z.writestr('META-INF/container.xml',
+      '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">'+
+      '<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>'+
+      '</rootfiles></container>')
+    z.writestr('OEBPS/content.opf',
+      '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">'+
+      '<manifest><item id="chapter" href="Text/ch1.xhtml" media-type="application/xhtml+xml"/>'+
+      '<item id="img" href="Images/art.png" media-type="image/png"/></manifest>'+
+      '<spine><itemref idref="chapter"/></spine></package>')
+    z.writestr('OEBPS/Text/ch1.xhtml',
+      '<?xml version="1.0" encoding="UTF-8"?>'+
+      '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Finance book</title></head>'+
+      '<body><h1>Market outlook</h1><p>Economics <strong>in context</strong></p>'+
+      '<p><code>const total = 3;</code> Next sentence</p>'+
+      '<img src="../Images/art.png" alt="figure"/></body></html>')
+    z.writestr('OEBPS/Images/art.png',b'epub-original-picture-bytes')
+  return out.getvalue()
 
 async def main():
   report={"application":"installed WXT Chrome MV3 file-lab","docx":"not_run","ocr":"not_run"}
@@ -236,6 +261,97 @@ async def main():
           report['office_batch_zip']='pass'
           report['image_batch_zip']='pass'
         print('WXT MIXED OFFICE BATCH ZIP: PASS',flush=True)
+
+        # Actual installed MV3 batch translator, real OOXML/EPUB ZIP serialization
+        # and mocked provider transport: not vendor accuracy or reader typography.
+        await page.locator('.batch-file-lab input[type=file]').set_input_files([
+          {'name':'book.epub','mimeType':'application/epub+zip','buffer':epub_fixture()},
+          {'name':'note.txt','mimeType':'text/plain','buffer':b'Plain document line\r\nSecond line'},
+          {'name':'chapter.md','mimeType':'text/markdown','buffer':(
+            b'# Finance chapter\n\n- Investment overview\n'+
+            b'**Market** trends and [External link](https://example.org) with `fixed-code`.\n'+
+            b'```python\nprint("stay")\n```\n')},
+          {'name':'story.html','mimeType':'text/html','buffer':(
+            b'<!DOCTYPE html><html><body><p>HTML greeting <strong>business reader</strong></p>'+
+            b'<script>originalCode()</script></body></html>')},
+          {'name':'long.txt','mimeType':'text/plain',
+           'buffer':('Long economics paragraph. '*240).encode('utf8')}
+        ])
+        async with page.expect_download(timeout=55000) as portable_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await portable_event.value).path()) as package:
+          names={name for name in package.namelist() if not name.endswith('/')}
+          assert len(names)==5,names
+          with zipfile.ZipFile(io.BytesIO(package.read('translated/01-book-translated.epub'))) as book:
+            assert book.namelist()[0]=='mimetype',book.namelist()
+            assert book.getinfo('mimetype').compress_type==zipfile.ZIP_STORED
+            assert book.read('mimetype')==b'application/epub+zip'
+            assert book.read('OEBPS/Images/art.png')==b'epub-original-picture-bytes'
+            assert b'chapter' in book.read('OEBPS/content.opf')
+            root=ET.fromstring(book.read('OEBPS/Text/ch1.xhtml'))
+            ns={'h':'http://www.w3.org/1999/xhtml'}
+            heading=root.find('.//h:h1',ns)
+            paragraph=root.find('.//h:p',ns)
+            assert ''.join(heading.itertext())=='译文:Market outlook'
+            assert ''.join(paragraph.itertext())=='译文:Economics in context'
+            assert paragraph.find('.//h:strong',ns) is not None
+            assert 'const total = 3;' in ''.join(root.itertext())
+          txt=package.read('translated/02-note-translated.txt').decode('utf8')
+          assert txt=='译文:Plain document line\r\n译文:Second line',repr(txt)
+          markdown=package.read('translated/03-chapter-translated.md').decode('utf8')
+          assert '# 译文:Finance chapter' in markdown,markdown
+          assert '- 译文:Investment overview' in markdown,markdown
+          assert 'print("stay")' in markdown
+          assert '](https://example.org)' in markdown and '**' in markdown
+          assert '`fixed-code`' in markdown
+          long_line=package.read('translated/05-long-translated.txt').decode('utf8')
+          assert long_line.count('译文:')>=2 and 'Long economics paragraph' in long_line
+          html=package.read('translated/04-story-translated.html').decode('utf8')
+          assert '译文:HTML greeting business reader' in ''.join(ET.fromstring(
+            html[html.index('<html'):]).itertext())
+          assert '<strong>' in html and 'originalCode()' in html
+        report['epub_html_markdown_txt_batch']='pass'
+        print('WXT EPUB/TXT/MD/HTML STRUCTURE + ZIP BATCH: PASS',flush=True)
+
+
+        # The same multi-file picker must accept both a genuine extractable
+        # PDF and an ordinary TXT in one atomic ZIP, without requiring a
+        # separate PDF-only upload step.
+        await page.locator('.batch-file-lab input[type=file]').set_input_files([
+          {'name':'finance.pdf','mimeType':'application/pdf','buffer':pdf_fixture()},
+          {'name':'notes.txt','mimeType':'text/plain','buffer':b'One more financial note'}
+        ])
+        async with page.expect_download(timeout=85000) as mixed_pdf_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await mixed_pdf_event.value).path()) as bundle:
+          entries={name for name in bundle.namelist() if not name.endswith('/')}
+          assert len(entries)==2,entries
+          bilingual=bundle.read('translated/01-finance-translated.pdf')
+          assert bilingual.startswith(b'%PDF-') and len(bilingual)>1500
+          translated=bundle.read('translated/02-notes-translated.txt').decode('utf8')
+          assert translated=='译文:One more financial note',translated
+        report['mixed_pdf_and_text_zip']='pass'
+        print('WXT MIXED PDF+TXT BILINGUAL ZIP: PASS',flush=True)
+
+        # Browser drag/drop must use the identical MIME/size validator and
+        # translation pipeline as the multiple-select file picker.
+        await page.locator('.batch-file-lab .document-drop').evaluate("""root=>{
+          const data=new DataTransfer();
+          data.items.add(new File(['Drag and drop economics'], 'dragged.txt',
+            {type:'text/plain'}));
+          root.dispatchEvent(new DragEvent('drop',{
+            bubbles:true,cancelable:true,dataTransfer:data
+          }));
+        }""")
+        await page.locator('.batch-file-lab').get_by_text('已选择 1 个文件').wait_for(timeout=8000)
+        async with page.expect_download(timeout=20000) as drag_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await drag_event.value).path()) as archive:
+          translation=archive.read('translated/01-dragged-translated.txt').decode('utf8')
+          assert translation=='译文:Drag and drop economics',translation
+        report['drag_drop_file_translation']='pass'
+        print('WXT REAL DROP EVENT AND TRANSLATED TXT ZIP: PASS',flush=True)
+
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'lecture.vtt','mimeType':'text/vtt',
           'buffer':b'WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello world\n\n00:00:04.500 --> 00:00:08.000\nFinancial models\n'

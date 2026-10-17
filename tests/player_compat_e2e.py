@@ -12,6 +12,9 @@ PLATFORMS=[
   ("youtube","https://www.youtube.com/watch?v=fixture",
    '<video style="width:640px;height:360px"></video><div class="ytp-caption-window-container"><span class="ytp-caption-segment">First lecture caption</span></div>',
    ".ytp-caption-segment"),
+  ("bilibili","https://www.bilibili.com/video/BVfixture",
+   '<video style="width:640px;height:360px"></video><div class="bpx-player-subtitle-panel"><span class="bpx-player-subtitle-panel-text">First lecture caption</span></div>',
+   ".bpx-player-subtitle-panel-text"),
   ("netflix","https://www.netflix.com/watch/12345",
    '<video style="width:640px;height:360px"></video><div class="player-timedtext"><div class="player-timedtext-text-container"><span data-uia="subtitle-text">First lecture caption</span></div></div>',
    '[data-uia="subtitle-text"]'),
@@ -72,6 +75,30 @@ async def run():
         assert sent<=4,(provider,sent)
         print("PASS",provider,"visible captions, update, hidden state, stop, bounded calls")
         await page.close()
+
+      # If PIT activates a disabled native subtitle TextTrack, the original
+      # is otherwise invisible. The original and translation must both appear
+      # in the overlay without introducing an additional original DOM copy
+      # for sites that already paint visible captions.
+      bilingual=await browser.new_page()
+      await setup(bilingual,"https://www.youtube.com/watch?v=bilingual-native",
+                  '<video style="width:640px;height:360px"></video>')
+      await bilingual.evaluate("""()=>{
+        const track=document.querySelector('video').addTextTrack('subtitles','English','en');
+        track.addCue(new VTTCue(0,8,'Original native caption'));
+        track.mode='disabled';
+        window.nativeTrack=track;
+      }""")
+      native=await bilingual.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert native['ok'],native
+      await bilingual.locator('.pit-caption-translated').get_by_text(
+        '译文:Original native caption').wait_for(timeout=6000)
+      assert await bilingual.locator('.pit-caption-original').inner_text()=='Original native caption'
+      await bilingual.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await bilingual.evaluate("window.nativeTrack.mode")=='disabled'
+      assert await bilingual.locator('.pit-caption-overlay').count()==0
+      await bilingual.close()
+      print('PASS bilingual native text-track original and translated overlay')
 
       # AI captions must actually supply bounded cross-sentence
       # context; v0.4.4 had hardcoded context:'' even with AI enabled.

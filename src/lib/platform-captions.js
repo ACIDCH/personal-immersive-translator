@@ -5,6 +5,13 @@
   const rules=[
     {id:'youtube',hosts:[/(^|\.)youtube\.com$/i,/(^|\.)youtube-nocookie\.com$/i],
       selectors:['.ytp-caption-window-container .ytp-caption-segment','.ytp-caption-segment']},
+    {id:'bilibili',hosts:[/(^|\.)bilibili\.com$/i],
+      selectors:[
+        '.bpx-player-subtitle-panel-major-group span',
+        '.bpx-player-subtitle-panel-text',
+        '.bpx-player-subtitle-item',
+        '.bilibili-player-video-subtitle .subtitle-item'
+      ]},
     {id:'netflix',hosts:[/(^|\.)netflix\.com$/i],
       selectors:['.player-timedtext [data-uia="subtitle-text"]','.player-timedtext-text-container']},
     {id:'panopto',hosts:[/(^|\.)panopto\./i],

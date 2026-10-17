@@ -1,4 +1,4 @@
-"""Chromium WXT: native subtitle adapters on realistic YouTube/Netflix/Panopto
+"""Chromium WXT: native subtitle adapters on realistic YouTube/Bilibili/Netflix/Panopto
 visible DOM fixtures, Panopto iframe route, and user-provided SRT. The platform
 pages are controlled HTML fixtures, NOT real authenticated streaming sessions.
 """
@@ -10,6 +10,8 @@ EXT=Path(__file__).resolve().parents[1]/'apps/wxt-ui/.output/chrome-mv3'
 SITES=[
  ('youtube','https://www.youtube.com/watch?v=fixture',
   '<div class="ytp-caption-window-container"><span class="ytp-caption-segment">Visible YouTube captions now</span></div>'),
+ ('bilibili','https://www.bilibili.com/video/BVfixture',
+  '<div class="bpx-player-subtitle-panel"><span class="bpx-player-subtitle-panel-text">Bilibili video subtitle line</span></div>'),
  ('netflix','https://www.netflix.com/watch/10001234',
   '<div class="player-timedtext"><span data-uia="subtitle-text">Netflix subtitle example</span></div>'),
  ('panopto','https://sample.panopto.com/Panopto/Pages/Viewer.aspx?id=course',
@@ -101,6 +103,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==5 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==6 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())

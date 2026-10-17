@@ -70,11 +70,22 @@
     state.overlay.replaceChildren();
     if(!text) { state.overlay.style.display='none'; return; }
     state.overlay.style.display='block';
+    // A hidden native TextTrack and an imported SRT/VTT are invisible to the
+    // viewer without PIT. Show the original alongside the translation. When
+    // the source is already visibly drawn by YouTube/Bilibili/Netflix, avoid
+    // displaying a second duplicate original.
+    const originalNeeded=Boolean(cueText && !state.domMode &&
+      (state.importedCues || state.track?.mode!=='showing'));
+    if(originalNeeded){
+      const original=document.createElement('div');
+      original.className='pit-caption-original';
+      original.textContent=cueText;
+      state.overlay.append(original);
+    }
     const line=document.createElement('div');
     line.className='pit-caption-translated';
     line.textContent=text;
     state.overlay.append(line);
-    // Original native CC is normally already visible. Never duplicate it in the overlay.
   }
   function createOverlay() {
     const overlay=document.createElement('div');
@@ -175,7 +186,7 @@
     state.seenAny=true;
     const now=video.currentTime;
     const current=core.currentCue(cues,now);
-    render(current ? (state.cache.get(current.key) || '正在翻译…') : '');
+    render(current ? (state.cache.get(current.key) || '正在翻译…') : '',current?.text || '');
     if(state.busy || Date.now()-state.failedAt < 3000) return;
     const upcoming=core.upcomingCues(cues,now,video.playbackRate,5);
     if(!upcoming.length || !upcoming.some(c=>!state.cache.has(c.key))) return;
@@ -190,7 +201,7 @@
       await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation,nearby));
       if(generation===state.generation && state.active) {
         const fresh=core.currentCue(cues,video.currentTime);
-        render(fresh ? (state.cache.get(fresh.key) || '正在翻译…') : '');
+        render(fresh ? (state.cache.get(fresh.key) || '正在翻译…') : '',fresh?.text || '');
       }
     } catch(error) {
       if(generation===state.generation){

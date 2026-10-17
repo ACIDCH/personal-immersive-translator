@@ -34,6 +34,10 @@ test('quick START then STOP is serialized without orphaned offscreen recorder',a
   }
  };
  await import('../src/background.js');
+ globalThis.fetch=async url=>{
+   assert.equal(url,'http://127.0.0.1:8765/health');
+   return {ok:true,json:async()=>({speech_asr:true,speech_asr_requires_risk_ack:false})};
+ };
  const ui={id:chrome.runtime.id};
  const dispatch=(msg,sender=ui)=>new Promise(resolve=>handler(msg,sender,resolve));
  const starting=dispatch({type:'PIT_ASR_START',tabId:44,token:'test-token-123456789'});

@@ -44,7 +44,7 @@ function withAsrTransition(operation){
 async function stopLiveAsr() {
   const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
   // Invalidate before teardown, so old offscreen callbacks are ignored.
-  await chrome.storage.session.remove(['pit_live_asr_tab','pit_live_asr_session']);
+  await chrome.storage.session.remove(['pit_live_asr_tab','pit_live_asr_session','pit_live_asr_mode','pit_live_ai_requests']);
   try {if(await chrome.offscreen.hasDocument()){
     await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_STOP'});
     await chrome.offscreen.closeDocument();
@@ -53,18 +53,47 @@ async function stopLiveAsr() {
     await chrome.tabs.sendMessage(session.pit_live_asr_tab,{type:'PIT_ASR_VIEW_STOP',sessionId:session.pit_live_asr_session}).catch(()=>{});
   }
 }
+async function verifyLocalAsr(token){
+  let response;
+  try{
+    response=await fetch('http://127.0.0.1:8765/health',{
+      headers:{'X-PIT-Token':token},redirect:'error',
+      signal:AbortSignal.timeout(3000)
+    });
+  }catch{
+    throw new TranslationError('无法连接本机 Whisper 8765 服务；请先启动并加载模型');
+  }
+  if(!response.ok)throw new TranslationError(
+    response.status===401?'本机 Whisper 服务令牌不匹配':'本机 Whisper 健康检查失败');
+  let status;
+  try{status=await response.json();}catch{
+    throw new TranslationError('本机 Whisper 健康检查返回了无效数据');
+  }
+  if(!status || typeof status!=='object' || status.speech_asr!==true)
+    throw new TranslationError('本机 Whisper 模型尚未就绪，请检查 /health 中的 speech_asr');
+  if(status.speech_asr_requires_risk_ack)
+    throw new TranslationError('当前本机 Whisper 服务使用未经批准的实验模式');
+}
 async function startLiveAsr(message){
   const token=String(message.token||'');
   if(token.length<16) throw new TranslationError('缺少本机 Whisper 服务令牌');
+  const mode=message.mode==='ai'?'ai':'standard';
+  if(mode==='ai' && message.userInitiated!==true)
+    throw new TranslationError('本机实时字幕使用 AI 必须明确确认计费风险');
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
   if(!tab?.id || tab.id!==message.tabId || !/^https?:\/\//.test(tab.url||'')) throw new TranslationError('只有当前活动视频标签页才能启动录音');
+  // Establish actual local model readiness before opening any audio track.
+  // A configured port or a successfully created recorder is not proof that
+  // Whisper inference can run. This is only a readiness gate, not a quality test.
+  await verifyLocalAsr(token);
   await stopLiveAsr();
   await chrome.offscreen.createDocument({url:'src/offscreen.html',reasons:['USER_MEDIA'],
     justification:'用户明确启动的本机实时音频字幕识别'});
   try{
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     const sessionId=crypto.randomUUID();
-    await chrome.storage.session.set({pit_live_asr_tab:tab.id,pit_live_asr_session:sessionId});
+    await chrome.storage.session.set({pit_live_asr_tab:tab.id,pit_live_asr_session:sessionId,
+      pit_live_asr_mode:mode,pit_live_ai_requests:0});
     const started=await chrome.runtime.sendMessage({
       target:'offscreen',type:'PIT_OFFSCREEN_START',streamId,tabId:tab.id,token,sessionId
     });
@@ -72,7 +101,7 @@ async function startLiveAsr(message){
     const still=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
     if(still.pit_live_asr_tab!==tab.id || still.pit_live_asr_session!==sessionId)
       throw Error('音频会话已提前结束，无法标记为录制中');
-    await chrome.tabs.sendMessage(tab.id,{type:'PIT_ASR_VIEW_START',sessionId});
+    await chrome.tabs.sendMessage(tab.id,{type:'PIT_ASR_VIEW_START',sessionId,mode});
     return {started:true};
   }catch(error) {
     await stopLiveAsr();
@@ -172,11 +201,19 @@ async function handle(message, sender) {
   const model = isAI ? (provider==='gemini'?settings.geminiModel:provider==='deepseek'?settings.deepseekModel:(()=>{const p=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);return [p?.id,p?.model,p?.baseUrl].join(':');})()) : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
   if(message.transient===true) {
-    if(message.mode!=='standard' || !sender.tab) throw new TranslationError('临时字幕只允许网页内标准翻译');
-    const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
+    if(!sender.tab)throw new TranslationError('临时字幕必须来自有效网页');
+    const session=await chrome.storage.session.get(
+      ['pit_live_asr_tab','pit_live_asr_session','pit_live_asr_mode','pit_live_ai_requests']);
     if(session.pit_live_asr_tab!==sender.tab.id ||
        !session.pit_live_asr_session || message.sessionId!==session.pit_live_asr_session)
       throw new TranslationError('语音字幕会话已经结束，请重新启动。');
+    if(message.mode!==(session.pit_live_asr_mode||'standard'))
+      throw new TranslationError('实时字幕翻译模式与授权会话不匹配');
+    if(isAI){
+      const count=Math.max(0,Number(session.pit_live_ai_requests)||0);
+      if(count>=80)throw new TranslationError('本次实时 AI 字幕达到 80 次请求上限，请停止并明确重新启动');
+      await chrome.storage.session.set({pit_live_ai_requests:count+1});
+    }
     const translations=await translateBatch(texts,{...settings,provider,source,target,context});
     return {translations,provider,cached:false,transient:true};
   }

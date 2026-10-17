@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import '../src/lib/platform-captions.js';
 const {identify,compact,readVisibleCaptions,captionChanged}=globalThis.PITPlatformCaptions;
-test('selects explicit YouTube, Netflix, Panopto providers by hostname',()=>{
+test('selects explicit YouTube, Bilibili, Netflix, Panopto providers by hostname',()=>{
  assert.equal(identify('www.youtube.com').id,'youtube');
+ assert.equal(identify('www.bilibili.com').id,'bilibili');
  assert.equal(identify('netflix.com').id,'netflix');
  assert.equal(identify('uni.au.panopto.com').id,'panopto');
  assert.equal(identify('evilnetflix.com').id,'generic');
+ assert.equal(identify('bilibili.com.evil.com').id,'generic');
 });
 test('does not scrape unrelated pages or arbitrary website text',()=>{
  const document={querySelectorAll(){throw Error('should not inspect')}}; 

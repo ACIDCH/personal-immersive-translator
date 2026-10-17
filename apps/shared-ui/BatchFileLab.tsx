@@ -1,12 +1,12 @@
 import {useRef,useState} from 'react';
-import type {ChangeEvent} from 'react';
+import type {ChangeEvent,DragEvent} from 'react';
 import JSZip from 'jszip';
 import {bilingualImagePng,splitOcrLines} from './imageTranslate';
 
 type Mode='standard'|'ai';
 type Lang='eng'|'fra'|'chi_sim'|'jpn'|'kor';
 const MAX_FILES=8,MAX_FILE=12*1024*1024,MAX_BATCH=48*1024*1024;
-const accepted=/\.(docx|pptx|xlsx|png|jpe?g|webp|bmp)$/i;
+const accepted=/\.(docx|pptx|xlsx|epub|txt|md|html?|pdf|png|jpe?g|webp|bmp)$/i;
 type ChromeRuntime={
  id?:string;
  getURL?:(name:string)=>string;
@@ -35,16 +35,20 @@ export function BatchFileLab(){
  const [progress,setProgress]=useState('');
  const [status,setStatus]=useState('一次最多 8 个文件，合计不超过 48 MiB，单个不超过 12 MiB。');
  if(!available)return null;
- const handle=(event:ChangeEvent<HTMLInputElement>)=>{
-   const files=Array.from(event.target.files||[]);
+ const acceptFiles=(files:File[])=>{
    const total=files.reduce((sum,file)=>sum+file.size,0);
    if(!files.length){setItems([]);setStatus('请选择文件');return;}
    if(files.length>MAX_FILES||total>MAX_BATCH||files.some(f=>!accepted.test(f.name)||f.size>MAX_FILE)){
      setItems([]);
-     setStatus('文件数量、类型或大小超出上限；PDF 请使用独立高保真工具。');
+     setStatus('文件数量、类型或大小超出上限。批量 PDF 也限 12 MiB/份与 8 页；BabelDOC 需本机独立工具。');
    }else{
      setItems(files);setStatus('已选择 '+files.length+' 个文件。');
    }
+ };
+ const handle=(event:ChangeEvent<HTMLInputElement>)=>acceptFiles(Array.from(event.target.files||[]));
+ const onDrop=(event:DragEvent<HTMLDivElement>)=>{
+   event.preventDefault();
+   acceptFiles(Array.from(event.dataTransfer.files||[]));
  };
  async function runBatch(){
    if(busy||!items.length||!runtime?.sendMessage)return;
@@ -82,6 +86,16 @@ export function BatchFileLab(){
          const {translateOffice}=await import('./officeTranslate');
          result=await translateOffice(await file.arrayBuffer(),type,translate,(done,total)=>
            setProgress('文件 '+(i+1)+'/'+items.length+'：Office '+done+'/'+total+' 段'));
+       }else if(type==='pdf'){
+         const {translateBilingualPdf}=await import('./pdfBilingual');
+         const output=await translateBilingualPdf(file,translate,lang,(done,total,stage)=>
+           setProgress('文件 '+(i+1)+'/'+items.length+'：PDF '+done+'/'+total+' 页 · '+stage),controller.signal);
+         result=output.pdf;
+         ext='pdf';
+       }else if(['epub','txt','md','html','htm'].includes(type)){
+         const {translatePortable}=await import('./portableDocumentTranslate');
+         result=await translatePortable(await file.arrayBuffer(),type as 'epub'|'txt'|'md'|'html'|'htm',translate,(done,total)=>
+           setProgress('文件 '+(i+1)+'/'+items.length+'：'+type.toUpperCase()+' '+done+'/'+total+' 段'));
        }else{
          if(!ocrWorker){
            const {createWorker}=await import('tesseract.js');
@@ -119,10 +133,13 @@ export function BatchFileLab(){
  }
  return <section className="document-lab batch-file-lab">
    <h2>批量多格式翻译</h2>
-   <p>同时选择 DOCX、PPTX、XLSX 或图片；逐个解析并翻译，一次下载 ZIP。需要高保真 PDF 时请使用独立 PDF 工具。</p>
-   <label className="document-field">选择文件（最多 8 个）
-     <input type="file" multiple accept=".docx,.pptx,.xlsx,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
-   </label>
+   <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML、图片及小型 PDF 批量输入和 ZIP 下载。PDF 每份最多 8 页，双栏栅格输出；需要可编辑的高保真排版请使用本机 BabelDOC 工具。</p>
+   <div className="document-drop" role="group" aria-label="选择或拖入批量文件"
+        onDragOver={event=>event.preventDefault()} onDrop={onDrop}>
+     <label className="document-field">选择文件（最多 8 个），或把文件拖入此区域
+       <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,.pdf,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
+     </label>
+   </div>
    <div className="native-modes" role="group" aria-label="批量翻译服务">
      <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
      <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>自选 AI</button>
