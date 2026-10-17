@@ -1,5 +1,5 @@
 import {useRef,useState} from 'react';
-import type {ChangeEvent} from 'react';
+import type {ChangeEvent,DragEvent} from 'react';
 import JSZip from 'jszip';
 import {bilingualImagePng,splitOcrLines} from './imageTranslate';
 
@@ -35,8 +35,7 @@ export function BatchFileLab(){
  const [progress,setProgress]=useState('');
  const [status,setStatus]=useState('一次最多 8 个文件，合计不超过 48 MiB，单个不超过 12 MiB。');
  if(!available)return null;
- const handle=(event:ChangeEvent<HTMLInputElement>)=>{
-   const files=Array.from(event.target.files||[]);
+ const acceptFiles=(files:File[])=>{
    const total=files.reduce((sum,file)=>sum+file.size,0);
    if(!files.length){setItems([]);setStatus('请选择文件');return;}
    if(files.length>MAX_FILES||total>MAX_BATCH||files.some(f=>!accepted.test(f.name)||f.size>MAX_FILE)){
@@ -45,6 +44,11 @@ export function BatchFileLab(){
    }else{
      setItems(files);setStatus('已选择 '+files.length+' 个文件。');
    }
+ };
+ const handle=(event:ChangeEvent<HTMLInputElement>)=>acceptFiles(Array.from(event.target.files||[]));
+ const onDrop=(event:DragEvent<HTMLDivElement>)=>{
+   event.preventDefault();
+   acceptFiles(Array.from(event.dataTransfer.files||[]));
  };
  async function runBatch(){
    if(busy||!items.length||!runtime?.sendMessage)return;
@@ -130,9 +134,12 @@ export function BatchFileLab(){
  return <section className="document-lab batch-file-lab">
    <h2>批量多格式翻译</h2>
    <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML、图片及小型 PDF 批量输入和 ZIP 下载。PDF 每份最多 8 页，双栏栅格输出；需要可编辑的高保真排版请使用本机 BabelDOC 工具。</p>
-   <label className="document-field">选择文件（最多 8 个）
-     <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,.pdf,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
-   </label>
+   <div className="document-drop" role="group" aria-label="选择或拖入批量文件"
+        onDragOver={event=>event.preventDefault()} onDrop={onDrop}>
+     <label className="document-field">选择文件（最多 8 个），或把文件拖入此区域
+       <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,.pdf,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
+     </label>
+   </div>
    <div className="native-modes" role="group" aria-label="批量翻译服务">
      <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
      <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>自选 AI</button>
