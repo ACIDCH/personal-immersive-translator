@@ -16,6 +16,9 @@ on:
       - 'tests/wxt_public_site_probe.py'
   workflow_dispatch:
 
+concurrency:
+  group: multimodal-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 
