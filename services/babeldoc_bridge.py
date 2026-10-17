@@ -39,7 +39,7 @@ from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
 TOKEN=os.environ.get("PIT_BRIDGE_TOKEN","")
-KEY=os.environ.get("DEEPSEEK_API_KEY","")
+KEY=os.environ.get("PIT_PDF_API_KEY") or os.environ.get("DEEPSEEK_API_KEY","")
 MAX_BYTES=25*1024*1024
 # Never launch two memory-heavy layout/OCR translation jobs simultaneously.
 pdf_lock=asyncio.Lock()
