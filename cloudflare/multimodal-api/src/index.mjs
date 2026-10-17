@@ -35,8 +35,43 @@ export default {
    if(!authorized(request,env))return json({error:'unauthorized'},401);
    return json({ready:Boolean(env?.AI),model:MODEL,
     routes:{translate:env?.AI?'ready':'ai-binding-missing',ocr:'not-deployed',
-            asr:'not-deployed',pdf:'not-deployed'},
+            asr:env?.AI?'ready':'ai-binding-missing',pdf:'not-deployed'},
     languages:[...LANGUAGES],auto_detection:'CJK script; Latin fallback unverified'});
+  }
+  if(u.pathname==='/v1/asr'){
+   if(request.method!=='POST')return json({error:'method_not_allowed'},405);
+   if(!authorized(request,env))return json({error:'unauthorized'},401);
+   if(!env?.AI?.run)return json({error:'workers_ai_binding_missing'},503);
+   if(!/^audio\/wav(?:\s*;.*)?$/i.test(request.headers.get('content-type')||''))
+    return json({error:'wav_required'},415);
+   if(Number(request.headers.get('content-length')||0)>350000)
+    return json({error:'audio_too_large'},413);
+   let wav;
+   try{wav=new Uint8Array(await request.arrayBuffer());}
+   catch{return json({error:'invalid_audio'},400);}
+   if(wav.length<44||wav.length>350000||
+      String.fromCharCode(...wav.slice(0,4))!=='RIFF'||
+      String.fromCharCode(...wav.slice(8,12))!=='WAVE')
+    return json({error:'invalid_wav'},400);
+   // The model expects a base64 audio blob, not a model-download URI or
+   // a fetch of arbitrary user-provided URLs. Avoid remote SSRF entirely.
+   let base64='';
+   for(let i=0;i<wav.length;i+=8192){
+    base64+=String.fromCharCode(...wav.subarray(i,i+8192));
+   }
+   const encoded=btoa(base64);
+   try{
+    const answer=await env.AI.run('@cf/openai/whisper-large-v3-turbo',{
+     audio:encoded,task:'transcribe',vad_filter:true,
+     condition_on_previous_text:false
+    });
+    const text=answer?.text;
+    if(typeof text!=='string')return json({error:'invalid_asr_output'},502);
+    return json({text:text.trim().slice(0,5000),
+      engine:'@cf/openai/whisper-large-v3-turbo'});
+   }catch(error){
+    return json({error:'cloud_asr_unavailable'},Number(error?.status)===429?429:503);
+   }
   }
   if(u.pathname==='/v1/translate'){
    if(request.method!=='POST')return json({error:'method_not_allowed'},405);
