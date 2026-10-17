@@ -65,3 +65,6 @@ jobs:
           else
             test -f portal/dist/index.html
           fi
+      - name: Validate native WXT web integration package
+        if: matrix.app == 'wxt-ui'
+        run: node wxt-ui/scripts/check-native-bundle.mjs
