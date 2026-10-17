@@ -1,7 +1,7 @@
 """E2E installed WXT: native video cues, local OCR -> real bilingual PNG,
 and PDF.js first-page viewer. Provider response alone is a deliberate stub.
 """
-import asyncio,io,json,tempfile,time
+import asyncio,io,json,tempfile,time,base64
 from pathlib import Path
 from PIL import Image,ImageDraw,ImageFont
 from playwright.async_api import async_playwright
@@ -124,6 +124,21 @@ async def main():
           assert overlay.convert('RGB').tobytes()!=pic.tobytes()
         report['ocr_original_position_png']='pass'
         print('WXT IN-PLACE OCR TRANSLATION EXPORT: PASS',flush=True)
+
+        # One-time screenshot hand-off between WXT popup and local OCR page.
+        # This validates the transfer path without depending on flaky
+        # headless desktop capture behavior or retaining a screenshot.
+        encoded='data:image/png;base64,'+base64.b64encode(data.getvalue()).decode()
+        await popup.evaluate('(img)=>chrome.storage.session.set({pit_ocr_screenshot:img})',encoded)
+        screenshot=await ctx.new_page()
+        await screenshot.goto(f'chrome-extension://{eid}/file-lab.html')
+        await screenshot.get_by_text('已载入当前网页的可见区域截图',exact=False).wait_for(timeout=12000)
+        assert await screenshot.get_by_role('button',name='图片 OCR').get_attribute('aria-pressed')=='true'
+        assert not (await popup.evaluate(
+          '()=>chrome.storage.session.get("pit_ocr_screenshot")')).get('pit_ocr_screenshot')
+        report['screenshot_local_relay']='pass'
+        await screenshot.close()
+        print('WXT ONE-TIME SCREENSHOT -> LOCAL OCR RELAY: PASS',flush=True)
 
         tools=await ctx.new_page()
         await tools.goto(f'chrome-extension://{eid}/pit-tools.html')
