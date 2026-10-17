@@ -97,3 +97,23 @@ export function applyPortablePreferences(current,data){
  }
  return normalizeSettings({...normalizeSettings(current),...imported});
 }
+
+/** Non-secret readiness, NOT a network/credit or accuracy guarantee. */
+export function isStandardServiceConfigured(value){
+ const s=normalizeSettings(value);
+ switch(s.standardProvider){
+ case 'cloud':
+  try{
+   const u=new URL(s.cloudEndpoint);
+   return u.protocol==='https:'&&!u.username&&!u.password&&
+     String(s.cloudToken).length>=16;
+  }catch{return false;}
+ case 'microsoft':return Boolean(String(s.microsoftKey||'').trim());
+ case 'google':return Boolean(String(s.googleKey||'').trim());
+ case 'deepl':return Boolean(String(s.deeplKey||'').trim());
+ case 'libre':
+  try{return new URL(s.libreUrl).protocol==='https:';}
+  catch{return false;}
+ default:return false;
+ }
+}
