@@ -40,26 +40,38 @@ export function createRecoverableTranslator(
       }
     }
     if(missing.length){
-      let translated:string[]|undefined;
-      for(let attempt=0;attempt<=maxRetries;attempt++){
-        cancelled();
-        try{
-          const output=await request(missing);
-          if(!Array.isArray(output)||output.length!==missing.length||
-            output.some(s=>typeof s!=='string'||!s.trim()))
-            throw Error('翻译服务返回的段落数量不正确');
-          translated=output;break;
-        }catch(error){
-          if(attempt>=maxRetries||!retryable(error))throw error;
-          const delay=350*Math.pow(2,attempt);
-          options.onRetry?.({attempt:attempt+1,delayMs:delay,
-            reason:String(error instanceof Error?error.message:error).slice(0,160)});
-          await sleep(delay);
+      // Background providers have a 12k-character request ceiling. The
+      // front-end stays below 10.5k even for OCR paragraphs that can be long.
+      const results:string[]=[];
+      for(let i=0;i<missing.length;){
+        const chunk:string[]=[];let chars=0;
+        for(let j=i;j<missing.length&&chunk.length<8;j++){
+          if(chunk.length&&chars+missing[j].length>10500)break;
+          chunk.push(missing[j]);chars+=missing[j].length;
         }
+        let translated:string[]|undefined;
+        for(let attempt=0;attempt<=maxRetries;attempt++){
+          cancelled();
+          try{
+            const output=await request(chunk);
+            if(!Array.isArray(output)||output.length!==chunk.length||
+              output.some(s=>typeof s!=='string'||!s.trim()))
+              throw Error('翻译服务返回的段落数量不正确');
+            translated=output;break;
+          }catch(error){
+            if(attempt>=maxRetries||!retryable(error))throw error;
+            const delay=350*Math.pow(2,attempt);
+            options.onRetry?.({attempt:attempt+1,delayMs:delay,
+              reason:String(error instanceof Error?error.message:error).slice(0,160)});
+            await sleep(delay);
+          }
+        }
+        if(!translated)throw Error('翻译任务未得到有效响应');
+        results.push(...translated);
+        i+=chunk.length;
       }
-      if(!translated)throw Error('翻译任务未得到有效响应');
-      // Commit whole batch only after full-length validation; no partial cache.
-      missing.forEach((key,i)=>cache.set(key,translated![i]));
+      // Commit once the entire logical batch was translated and validated.
+      missing.forEach((key,i)=>cache.set(key,results[i]));
     }
     cancelled();
     return keys.map(key=>cache.get(key)!);
