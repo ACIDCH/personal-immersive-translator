@@ -23,7 +23,7 @@ export function NativeWebControls(){
    let count=0;
    const update=async()=>{
      try{
-       const answer=await chrome.tabs.sendMessage(tabId,{type:'PIT_GET_PROGRESS'});
+       const answer=await browser.tabs.sendMessage(tabId,{type:'PIT_GET_PROGRESS'});
        if(alive && answer?.ok && answer.progress)setProgress(answer.progress);
      }catch{
        if(alive)setStatus('无法读取当前标签页的翻译进度；可能已离开该网页。');
@@ -43,14 +43,14 @@ export function NativeWebControls(){
    const token=++latest.current;
    setWorking(true);setStatus('正在与网页通信…');
    try{
-     const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+     const [tab]=await browser.tabs.query({active:true,currentWindow:true});
      if(!tab?.id || !/^https?:\/\//.test(tab.url||''))throw Error('请先打开可访问的普通网页');
      if(action==='PIT_START'||action==='PIT_SELECTION'||action==='PIT_RESTORE'||action==='PIT_CONTINUE'){
        // activeTab permits only the currently selected site. No blanket page access.
-       await chrome.scripting.insertCSS({target:{tabId:tab.id},files:[rootCss]});
-       await chrome.scripting.executeScript({target:{tabId:tab.id},files:[rootFile]});
+       await browser.scripting.insertCSS({target:{tabId:tab.id},files:[rootCss]});
+       await browser.scripting.executeScript({target:{tabId:tab.id},files:[rootFile]});
      }
-     const answer=await chrome.tabs.sendMessage(tab.id,{type:action,mode});
+     const answer=await browser.tabs.sendMessage(tab.id,{type:action,mode});
      if(!answer?.ok)throw Error(answer?.reason||'原生翻译核心未接受请求');
      if(token!==latest.current)return;
      setTabId(tab.id);
@@ -69,7 +69,7 @@ export function NativeWebControls(){
      <button type="button" disabled={working} onClick={()=>void run('PIT_CONTINUE')}>继续翻译</button>
      <button type="button" disabled={working} onClick={()=>void run('PIT_SELECTION')}>翻译选中内容</button>
      <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
-     <button type="button" onClick={()=>void chrome.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
+     <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
    </div>
    {progress&&<p role="status" className="native-progress">正文覆盖 {progress.translated}/{progress.eligible}
     （{progress.coveragePercent===null?'暂无':progress.coveragePercent+'%'}）；未处理 {progress.remaining}；
