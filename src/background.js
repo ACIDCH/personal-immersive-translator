@@ -163,6 +163,56 @@ async function startLiveAsr(message){
   }
 }
 
+/** Context-menu handlers call only the bundled native PIT entrypoint.
+ * Only the user-selected caption/image/text is involved; no site scraping
+ * occurs on right-click. Image URL is fetched later after file-lab opens.
+ */
+const menuNames=[
+ ['pit-translate-selected','PIT：翻译选中文字','selection'],
+ ['pit-read-selected','PIT：朗读选中文字','selection'],
+ ['pit-translate-page','PIT：翻译当前页面','page'],
+ ['pit-image-ocr','PIT：识别并翻译此图片','image']
+];
+chrome.runtime.onInstalled.addListener(()=>{
+ if(!chrome.contextMenus?.create)return;
+ for(const [id,title,context] of menuNames){
+  chrome.contextMenus.create({id,title,contexts:[context]},()=>{
+   // Menus can already exist during an extension update.
+   void chrome.runtime.lastError;
+  });
+ }
+});
+chrome.contextMenus?.onClicked?.addListener((info,tab)=>{
+ void (async()=>{
+  if(!tab?.id||!/^https?:\/\//.test(tab.url||''))return;
+  if(info.menuItemId==='pit-image-ocr'){
+   let u;
+   try{u=new URL(String(info.srcUrl||''));}catch{return;}
+   if(!['https:','http:'].includes(u.protocol)||u.username||u.password)return;
+   await chrome.storage.session.set({pit_ocr_image_url:u.toString()});
+   await chrome.tabs.create({url:chrome.runtime.getURL('file-lab.html')});
+   return;
+  }
+  const settings=await getSettings();
+  if(hostIsBlocked(new URL(tab.url).hostname,settings.blockedHosts))return;
+  if(settings.standardProvider==='cloud'&&(!settings.cloudEndpoint||!settings.cloudToken))return;
+  if(info.menuItemId==='pit-translate-page'){
+   await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+   await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+   await chrome.tabs.sendMessage(tab.id,{type:'PIT_START',mode:'standard',
+     scope:settings.webScope,display:settings.webDisplay,theme:settings.translationTheme});
+   return;
+  }
+  const selected=String(info.selectionText||'').trim().slice(0,5000);
+  if(!selected)return;
+  const speak=info.menuItemId==='pit-read-selected';
+  if(!speak&&info.menuItemId!=='pit-translate-selected')return;
+  await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+  await chrome.tabs.sendMessage(tab.id,{
+   type:speak?'PIT_SPEAK_SELECTION':'PIT_SELECTION_CONTEXT',text:selected});
+ })().catch(()=>{});
+});
 async function handle(message, sender) {
   if (!message || typeof message.type !== 'string') throw new TranslationError('无效的请求');
   ensureSource(sender, message.type);
