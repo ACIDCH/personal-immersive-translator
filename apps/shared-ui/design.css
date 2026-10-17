@@ -1,0 +1,14 @@
+:root{font-family:Inter,"Segoe UI","PingFang SC",system-ui,sans-serif;color:#eaf0fa;background:#0c1220;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}button{font:inherit}.shell{max-width:1060px;margin:auto;padding:22px}.shell.popup{width:390px;padding:17px}
+.hero{display:flex;align-items:center;gap:14px;margin-bottom:22px}.brand-icon{width:53px;height:53px;display:grid;place-items:center;background:#2563eb;border-radius:15px;font-size:25px;font-weight:700}
+.subtitle{font-size:10px;letter-spacing:.15em;color:#7fafee}.hero h1{font-size:24px;margin:3px 0}.hero p{font-size:12px;color:#aebbd1;margin:0}
+.notice{border:1px solid #41516d;background:#182437;padding:12px;border-radius:9px;font-size:12px;color:#cbd7e8;margin-bottom:18px;line-height:1.6}
+.main-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}.module-list{display:flex;flex-direction:column;gap:7px}
+.module{text-align:left;background:#141f31;color:#eaf0fa;border:1px solid #29374f;border-radius:11px;padding:12px;cursor:pointer}
+.module.selected{background:#1a355a;border-color:#5b94df}.module-title{display:block;font-weight:650}.module-sub{display:block;color:#97a8bf;font-size:11px;margin-top:4px;line-height:1.4}
+.detail{background:#141f31;border:1px solid #29374f;border-radius:12px;min-height:240px;padding:20px;color:#bccae0}
+.detail h2{margin:0;color:#eef4ff}.detail h3{color:#eef4ff}.detail-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.status{border:1px solid #5d7194;border-radius:30px;font-size:11px;padding:4px 9px;white-space:nowrap}
+footer{color:#7188aa;font-size:11px;margin-top:18px;line-height:1.5}
+.popup .main-grid{display:flex;flex-direction:column}.popup .module-list{display:grid;grid-template-columns:1fr 1fr}.popup .detail{min-height:140px}.popup .module-sub{display:none}
+@media(max-width:600px){.dashboard .main-grid{grid-template-columns:1fr}}
