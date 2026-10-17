@@ -13,15 +13,10 @@ export default defineConfig({
     description:'PIT native webpage translation through the WXT React control panel. Video/PDF not enabled in this build.',
     minimum_chrome_version:'125',
     permissions:['activeTab','scripting','storage','tabs'],
-    host_permissions:[
-      'https://api.cognitive.microsofttranslator.com/*',
-      'https://translation.googleapis.com/*',
-      'https://api-free.deepl.com/*',
-      'https://api.deepl.com/*',
-      'https://generativelanguage.googleapis.com/*',
-      'https://api.deepseek.com/*'
-    ],
-    optional_host_permissions:['https://*/*','http://*/*']
+    // A translator must work on arbitrary normal sites, not just API
+    // provider domains. One install-time permission avoids per-site prompts.
+    // Browser internal pages remain restricted.
+    host_permissions:['https://*/*','http://*/*']
   },
   hooks:{
     'build:manifestGenerated': (_wxt,manifest)=>{
