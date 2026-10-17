@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useRef,useState} from 'react';
 import type {ChangeEvent} from 'react';
 import JSZip from 'jszip';
 import {bilingualImagePng,splitOcrLines} from './imageTranslate';
@@ -31,6 +31,7 @@ export function BatchFileLab(){
  const [mode,setMode]=useState<Mode>('standard');
  const [lang,setLang]=useState<Lang>('eng');
  const [busy,setBusy]=useState(false);
+ const currentAbort=useRef<AbortController|null>(null);
  const [progress,setProgress]=useState('');
  const [status,setStatus]=useState('一次最多 8 个文件，合计不超过 48 MiB，单个不超过 12 MiB。');
  if(!available)return null;
@@ -48,6 +49,7 @@ export function BatchFileLab(){
  async function runBatch(){
    if(busy||!items.length||!runtime?.sendMessage)return;
    if(mode==='ai'&&!window.confirm('批量调用你配置的 AI 翻译服务，可能产生费用。确认开始吗？'))return;
+   const controller=new AbortController();currentAbort.current=controller;
    setBusy(true);setStatus('正在处理文件，请勿关闭此页面');
    let completed=0;
    let ocrWorker:Awaited<ReturnType<(typeof import('tesseract.js'))['createWorker']>>|null=null;
@@ -63,8 +65,9 @@ export function BatchFileLab(){
           response.translations.some(s=>typeof s!=='string'||!s.trim()))
          throw Error(response?.error||'翻译服务返回了无效的分段数据');
        return response.translations;
-     },{onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
+     },{signal:controller.signal,onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
      for(const [i,file] of items.entries()){
+       if(controller.signal.aborted)throw Error('用户已取消翻译');
        const type=file.name.split('.').at(-1)!.toLowerCase();
        const original=file.name.replace(/[^a-zA-Z0-9.\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af_-]/g,'_');
        const base=original.replace(/\.[^.]+$/,'');
@@ -101,13 +104,16 @@ export function BatchFileLab(){
        out.file('translated/'+String(i+1).padStart(2,'0')+'-'+base+'-translated.'+ext,result);
        completed++;setProgress('已处理 '+completed+'/'+items.length+' 个文件');
      }
+     if(controller.signal.aborted)throw Error('用户已取消翻译');
      const archive=await out.generateAsync({type:'uint8array',compression:'DEFLATE'});
+     if(controller.signal.aborted)throw Error('用户已取消翻译');
      downloadZip(archive);
      setStatus('已完成 '+completed+' 个文件并生成 ZIP。原文件仅在浏览器内读取；识别后的文字会发给所选翻译服务。');
    }catch(error){
      setStatus('批处理停止于第 '+(completed+1)+' 个文件：'+friendly(error)+'。没有输出不完整的 ZIP。');
    }finally{
      if(ocrWorker)await ocrWorker.terminate().catch(()=>{});
+     currentAbort.current=null;
      setBusy(false);
    }
  }
@@ -131,6 +137,7 @@ export function BatchFileLab(){
    <button type="button" disabled={busy||items.length===0} onClick={()=>void runBatch()}>
      {busy?'批量处理中…':'翻译全部并打包 ZIP'}
    </button>
+   {busy&&<button type="button" onClick={()=>{currentAbort.current?.abort();setStatus('取消请求已发出，当前操作结束后停止。');}}>取消批量处理</button>}
    {items.length>0&&<p>待处理：{items.map(x=>x.name).join('、')}</p>}
    {progress&&<p role="status">{progress}</p>}
    <p aria-live="polite">{status}</p>
