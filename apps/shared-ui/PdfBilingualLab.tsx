@@ -1,6 +1,6 @@
 import {useRef,useState} from 'react';
 import type {ChangeEvent} from 'react';
-import type {PdfOcrLanguage,PdfTranslationMode} from './pdfBilingual';
+import type {OcrSelection,PdfTranslationMode} from './pdfBilingual';
 
 type MessageResult={ok?:boolean;error?:string;translations?:string[]};
 type BrowserRuntime={id?:string;sendMessage?:(arg:unknown)=>Promise<MessageResult>};
@@ -11,7 +11,7 @@ export function PdfBilingualLab(){
  const available=Boolean(runtime?.id&&runtime.sendMessage&&location.protocol==='chrome-extension:'&&
    location.pathname==='/file-lab.html');
  const [file,setFile]=useState<File|null>(null);
- const [ocrLang,setOcrLang]=useState<PdfOcrLanguage>('eng');
+ const [ocrLang,setOcrLang]=useState<OcrSelection>('auto');
  const [mode,setMode]=useState<PdfTranslationMode>('standard');
  const [busy,setBusy]=useState(false);
  const currentAbort=useRef<AbortController|null>(null);
@@ -39,27 +39,30 @@ export function PdfBilingualLab(){
      },{signal:controller.signal,onRetry:info=>setProgress('PDF 翻译暂时限流/超时，重试 '+info.attempt+' 次')});
      const result=await translateBilingualPdf(file,translate,ocrLang,(done,total,stage)=>setProgress(`${done}/${total} 页 · ${stage}`),controller.signal);
      if(controller.signal.aborted)throw Error('用户已取消 PDF 翻译');
-     const copy=new Uint8Array(result.pdf.byteLength);copy.set(result.pdf);
-     const url=URL.createObjectURL(new Blob([copy],{type:'application/pdf'}));
+     const payload=result.archive||result.pdf;
+     if(!payload)throw Error('PDF 输出为空');
+     const copy=new Uint8Array(payload.byteLength);copy.set(payload);
+     const isZip=Boolean(result.archive);
+     const url=URL.createObjectURL(new Blob([copy],{type:isZip?'application/zip':'application/pdf'}));
      const a=document.createElement('a');
-     a.href=url;a.download=file.name.replace(/\.pdf$/i,'')+'-bilingual.pdf';
+     a.href=url;a.download=file.name.replace(/\.pdf$/i,'')+(isZip?'-bilingual-parts.zip':'-bilingual.pdf');
      document.body.append(a);a.click();a.remove();
      setTimeout(()=>URL.revokeObjectURL(url),60000);
-     setStatus('生成双语 PDF 共 '+result.pages+' 页，使用 OCR '+result.ocrPages+
-       ' 页。原页视觉保留，译文排在右侧；输出为栅格页面而非可编辑原版。');
+     setStatus('处理 '+result.pages+' 页，OCR '+result.ocrPages+' 页，共 '+result.parts+
+       ' 份输出。超过 12 页自动分卷 ZIP；原版文字层不保留。');
    }catch(error){
      setStatus('PDF 处理失败：'+String(error instanceof Error?error.message:error));
    }finally{currentAbort.current=null;setBusy(false);}
  }
  return <section className="document-lab pdf-bilingual-lab">
    <h2>浏览器内 PDF / 扫描件双语翻译</h2>
-   <p>不用安装 Python 即可处理小型 PDF。原页面与译文并排，扫描件自动 OCR；每次最多 8 页、16 MiB。论文公式排版需要保真的情况请改用本机 BabelDOC。</p>
+   <p>不用安装 Python 即可处理小型 PDF。原页面与译文并排，扫描件自动 OCR；支持最多 300 页、48 MiB；超过 12 页生成多份双语 PDF 的 ZIP。OCR 支持自动多语种识别；本模式仍是栅格导出，复杂论文需要尚未上线的云端高保真引擎。</p>
    <label className="document-field">选择 PDF 文件
      <input type="file" accept="application/pdf,.pdf" onChange={onSelect}/>
    </label>
    <label className="document-field">扫描页识别语言
-     <select value={ocrLang} onChange={e=>setOcrLang(e.target.value as PdfOcrLanguage)}>
-       <option value="eng">英语</option><option value="fra">法语</option>
+     <select value={ocrLang} onChange={e=>setOcrLang(e.target.value as OcrSelection)}>
+       <option value="auto">自动识别（英法日韩中 OCR）</option><option value="eng">英语</option><option value="fra">法语</option>
        <option value="chi_sim">简体中文</option><option value="jpn">日语</option>
        <option value="kor">韩语</option>
      </select>
