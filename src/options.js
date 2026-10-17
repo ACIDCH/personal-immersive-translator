@@ -2,7 +2,7 @@ import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';
 import {validateAIProfile} from './lib/ai-profiles.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
-const checkboxKeys=['contextAI'];
+const checkboxKeys=['contextAI','hoverTranslate','inputTranslate'];
 let profiles=[], activeProfileId='';
 const pick=id=>document.getElementById(id);
 function profileMessage(message) {pick('profileStatus').textContent=message;}
