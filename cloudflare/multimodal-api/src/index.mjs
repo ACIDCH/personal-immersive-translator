@@ -8,7 +8,10 @@ const LANGUAGES=new Set(['en','zh','ja','ko','fr','de','es']);
 function json(data,status=200){
  return new Response(JSON.stringify(data),{status,headers:{
   'content-type':'application/json; charset=utf-8','cache-control':'no-store',
-  'access-control-allow-origin':'*','x-content-type-options':'nosniff'}});
+  'access-control-allow-origin':'*',
+  'access-control-allow-methods':'GET, POST, OPTIONS',
+  'access-control-allow-headers':'Authorization, Content-Type',
+  'access-control-max-age':'600','x-content-type-options':'nosniff'}});
 }
 export function detectSource(text){
  const s=String(text||'').slice(0,6000);
@@ -26,6 +29,12 @@ function authorized(request,env){
 }
 export default {
  async fetch(request,env){
+  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{
+   'access-control-allow-origin':'*',
+   'access-control-allow-methods':'GET, POST, OPTIONS',
+   'access-control-allow-headers':'Authorization, Content-Type',
+   'access-control-max-age':'600'
+  }});
   const u=new URL(request.url);
   if(request.method==='GET'&&u.pathname==='/health')
    return json({ok:true,service:'pit-cloud-translator',
