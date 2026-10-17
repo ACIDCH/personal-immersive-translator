@@ -85,6 +85,9 @@ export function assembleKissSidecar(buildDirectory,sourceRoot=process.cwd()){
    'kiss/control.html':'control.html',
    'kiss/control.js':'control.js',
    'kiss/popup-entry.js':'popup-entry.js',
+   'kiss/home.html':'home.html',
+   'kiss/home.css':'home.css',
+   'kiss/home.js':'home.js',
    'offscreen.html':'offscreen.html',
    'offscreen.js':'offscreen.js',
    'audio-capture-worklet.js':'audio-capture-worklet.js',
@@ -186,9 +189,38 @@ sidecarPort.onDisconnect.addListener(()=>{
  }
  manifest.icons=pitIcons;
  manifest.action={...manifest.action,
-   default_title:'PIT 沉浸式翻译 · v0.4.9',
+   default_title:'PIT 沉浸式翻译 · v0.5.0',
    default_icon:pitIcons
  };
+ writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
+ // The original KISS popup and settings remain available as explicit
+ // advanced-engine compatibility links. Both native extension entry points
+ // MUST point to PIT's actual authored UI, not a cosmetics-only KISS page.
+ const kissPaths={
+   popup:manifest.action?.default_popup || 'popup.html',
+   settings:manifest.options_ui?.page || manifest.options_page || 'options.html'
+ };
+ for(const value of Object.values(kissPaths))
+   must(typeof value==='string'&&value.endsWith('.html')&&
+     !value.includes('..')&&!value.startsWith('/')&&existsSync(join(build,value)),
+     'Expected original KISS HTML UI asset');
+ writeFileSync(join(build,'pit/KISS-UI-PATHS.json'),
+   JSON.stringify(kissPaths,null,2)+'\n');
+ const homeFile=join(build,'pit/home.html');
+ const homeHtml=readFileSync(homeFile,'utf8');
+ must(homeHtml.includes('id="webTranslate"')&&
+   homeHtml.includes('id="githubReport"')&&
+   homeHtml.includes('id="videoControl"')&&
+   homeHtml.includes('id="fileTools"'),
+   'PIT original feature dashboard is incomplete');
+ const dashboard=homeHtml.replace('data-view="popup"','data-view="dashboard"')
+   .replace('class="pit-shell"','class="pit-shell dashboard"')
+   .replace('<title>PIT · 个人沉浸式翻译</title>',
+     '<title>PIT · 个人沉浸式翻译完整控制台</title>');
+ writeFileSync(join(build,'pit/dashboard.html'),dashboard);
+ manifest.action.default_popup='pit/home.html';
+ manifest.options_ui={page:'pit/dashboard.html',open_in_tab:true};
+ delete manifest.options_page;
  writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
  const popupExtra=readFileSync(popupFile,'utf8');
  must(popupExtra.includes('pit-multimodal-links'),'Expected original PIT navigation');
@@ -199,7 +231,8 @@ sidecarPort.onDisconnect.addListener(()=>{
    '<script type="module" src="pit/popup-entry.js"></script></body>'));
 
  const report={host:'KISS Translator v2.1.1',hostLicense:'GPL-3.0',originalCorePreserved:true,originalKissWorkerImported:true,whisperControl:'pit/control.html',
-  entry:'pit/tools.html',settings:'pit/options.html',pdfEngine:'Mozilla PDF.js 6.4.299 Apache-2.0',
+  entry:'pit/home.html',settings:'pit/dashboard.html',
+  kissUi:kissPaths,pdfEngine:'Mozilla PDF.js 6.4.299 Apache-2.0',
   sidecarLicense:'MIT',distribution:'POC_ONLY_NO_RELEASE'};
  writeFileSync(join(build,'pit/INTEGRATION-SOURCE.json'),JSON.stringify(report,null,2));
  return report;
