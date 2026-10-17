@@ -416,8 +416,12 @@
         const rule=raw.trim().toLowerCase().replace(/^\*\./,'');
         return host===rule||host.endsWith('.'+rule);
       });
-    if(matches(p.autoTranslateHosts)&&!matches(p.blockedHosts))
-      start('standard',{scope,display,theme});
+    if(matches(p.autoTranslateHosts)&&!matches(p.blockedHosts)){
+      // A first install must never silently fake translations or send API
+      // calls to an unconfigured self-hosted Worker.
+      if(p.standardReady===true)start('standard',{scope,display,theme});
+      else toast('该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
+    }
   }).catch(()=>{});
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
     if(message?.type==='PIT_GET_PROGRESS'){
