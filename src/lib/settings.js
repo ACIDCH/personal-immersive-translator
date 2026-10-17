@@ -17,11 +17,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   geminiModel: 'gemini-2.5-flash',
   deepseekKey: '',
   deepseekModel: 'deepseek-chat',
+  aiProfiles: [],
+  activeAIProfileId: '',
   glossary: '',
   blockedHosts: ''
 });
 export const STANDARD_PROVIDERS = ['microsoft', 'google', 'deepl', 'libre'];
-export const AI_PROVIDERS = ['gemini', 'deepseek'];
+export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
 export function normalizeSettings(value = {}) {
@@ -36,6 +38,8 @@ export function normalizeSettings(value = {}) {
   if (!['auto', ...LANGUAGES].includes(clean.source)) clean.source = 'auto';
   if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'microsoft';
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
+  clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
+  clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
   clean.autoAI = false;
   clean.contextAI = Boolean(clean.contextAI);
   return clean;
