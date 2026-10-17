@@ -216,6 +216,21 @@ async def main():
           report['office_batch_zip']='pass'
           report['image_batch_zip']='pass'
         print('WXT MIXED OFFICE BATCH ZIP: PASS',flush=True)
+        await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
+          'name':'lecture.vtt','mimeType':'text/vtt',
+          'buffer':b'WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello world\n\n00:00:04.500 --> 00:00:08.000\nFinancial models\n'
+        })
+        async with page.expect_download(timeout=20000) as subtitle_event:
+          await page.get_by_role('button',name='翻译并导出双语 SRT').click()
+        subtitle_download=await subtitle_event.value
+        assert subtitle_download.suggested_filename=='lecture-bilingual.srt'
+        translated_text=Path(await subtitle_download.path()).read_text(encoding='utf8')
+        assert '00:00:01,000 --> 00:00:04,000' in translated_text
+        assert 'Hello world\n译文:Hello world' in translated_text
+        assert '00:00:04,500 --> 00:00:08,000' in translated_text
+        assert 'Financial models\n译文:Financial models' in translated_text
+        report['offline_subtitle_translation']='pass'
+        print('WXT OFFLINE VTT TO BILINGUAL SRT: PASS',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
