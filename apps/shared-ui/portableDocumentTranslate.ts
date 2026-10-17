@@ -26,8 +26,26 @@ function xml(raw:string):Document{
 }
 function add(units:Unit[],source:string,apply:(text:string)=>void){
   if(!source.trim())return;
-  if(source.length>4500)throw Error('单个文本块超过 4500 字符，请先拆分段落');
-  units.push({source,apply});
+  if(source.length<=4500){units.push({source,apply});return;}
+  // Preserve very long book paragraphs/TXT lines by splitting at nearby
+  // sentence/word boundaries rather than rejecting an otherwise valid book.
+  // Each request unit stays below the background's 4,500-character ceiling.
+  const chunks:string[]=[];
+  for(let offset=0;offset<source.length;){
+    let end=Math.min(offset+3500,source.length);
+    if(end<source.length){
+      const boundary=Math.max(source.lastIndexOf('。',end),source.lastIndexOf('. ',end),
+        source.lastIndexOf(' ',end),source.lastIndexOf('\n',end));
+      if(boundary>offset+2100)end=boundary+1;
+      if(end<source.length&&/[\uD800-\uDBFF]/.test(source.charAt(end-1)))end--;
+    }
+    chunks.push(source.slice(offset,end));offset=end;
+  }
+  const translated=new Array<string|undefined>(chunks.length);
+  chunks.forEach((text,index)=>units.push({source:text,apply:(value)=>{
+    translated[index]=value;
+    if(translated.every(s=>s!==undefined))apply(translated.join(''));
+  }}));
 }
 function guard(units:Unit[]){
   if(units.length>MAX_SEGMENTS||units.reduce((n,u)=>n+u.source.length,0)>MAX_CHARS)
@@ -84,6 +102,40 @@ function markupUnits(doc:Document):Unit[]{
   guard(units);
   return units;
 }
+function markdownText(line:string,commit:(line:string)=>void):{source:string;apply:(t:string)=>void}{
+  type Token={value:string;editable:boolean};
+  const tokens:Token[]=[];
+  const push=(value:string,editable:boolean)=>{if(value)tokens.push({value,editable});};
+  // Only a limited, explicit subset of Markdown inline syntax is edited.
+  // Opaque code spans, images and URL targets retain their original bytes.
+  const markup=/(\x60+[^\x60\n]*\x60+|!?\[[^\]\n]*\]\([^)\n]*\)|https?:\/\/[^\s)]+|\*\*|__|~~|\*|_)/g;
+  let last=0,match:RegExpExecArray|null;
+  while((match=markup.exec(line))){
+    push(line.slice(last,match.index),true);
+    const token=match[0];
+    if(token.startsWith('[')){
+      const end=token.indexOf('](');
+      push('[',false);push(token.slice(1,end),true);push(token.slice(end),false);
+    }else push(token,false);
+    last=match.index+token.length;
+  }
+  push(line.slice(last),true);
+  const editable=tokens.filter(t=>t.editable);
+  const source=editable.map(t=>t.value).join('');
+  return {source,apply:(translation)=>{
+    const lengths=editable.map(t=>Array.from(t.value).length);
+    const total=lengths.reduce((a,b)=>a+b,0);
+    const chars=Array.from(translation);
+    let used=0,seen=0;
+    editable.forEach((token,index)=>{
+      seen+=lengths[index];
+      const end=index===editable.length-1?chars.length:
+        Math.max(used,Math.min(chars.length,Math.round(chars.length*seen/total)));
+      token.value=chars.slice(used,end).join('');used=end;
+    });
+    commit(tokens.map(t=>t.value).join(''));
+  }};
+}
 function plaintextUnits(source:string,markdown:boolean):{units:Unit[];write:()=>string}{
   // Retain exact original newline delimiters, including CRLF.
   const parts=source.split(/(\r\n|\r|\n)/);
@@ -101,14 +153,17 @@ function plaintextUnits(source:string,markdown:boolean):{units:Unit[];write:()=>
         continue;
       }
       if(fenced||/^( {4}|\t| {0,3}!\[| {0,3}\[[^\]]+\]:| {0,3}(?:---+|___+|\*\*\*+)\s*$)/.test(line))continue;
-      // Preserve link targets, inline code, raw tags, URLs and table syntax
-      // verbatim; they need an AST parser before safe inline editing.
-      if(/(\x60|!?\[[^\]]+\]\(|https?:\/\/|<\/?[a-z][^>]*>|\|)/i.test(line))continue;
+      // Raw HTML and pipe tables need a full Markdown AST to edit safely.
+      if(/(<\/?[a-z][^>]*>|\|)/i.test(line))continue;
     }
     const prefix=markdown?(line.match(/^(\s*(?:(?:#{1,6}|>|[-+*]|\d+[.)])\s+))(.*)$/)||[]):[];
     const original=prefix.length?prefix[2]:line;
     if(!original.trim()||/^\s*[\d\W_]+\s*$/.test(original))continue;
-    add(units,original,(translated)=>{parts[i]=(prefix.length?prefix[1]:'')+translated;});
+    const commit=(translated:string)=>{parts[i]=(prefix.length?prefix[1]:'')+translated;};
+    if(markdown){
+      const parsed=markdownText(original,commit);
+      add(units,parsed.source,parsed.apply);
+    }else add(units,original,commit);
   }
   guard(units);
   return {units,write:()=>parts.join('')};
