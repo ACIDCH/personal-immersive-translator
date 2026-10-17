@@ -51,6 +51,12 @@ async def main():
                 await options.locator('[name="standardProvider"]').select_option('microsoft')
                 await options.get_by_role('button',name='保存设置').click()
                 await options.get_by_text('设置已保存。').wait_for(timeout=8000)
+                # A trusted options tab must be able to test the provider,
+                # even though Chrome attaches sender.tab to tab-hosted UIs.
+                tested=await options.evaluate("""async()=>chrome.runtime.sendMessage({
+                  type:'TEST_PROVIDER',mode:'standard'
+                })""")
+                assert tested.get('ok') and tested.get('translations')==['译文:Hello, world!'],tested
 
                 paragraphs="".join(
                     f'<p id="p-{i}">Financial research paragraph number {i}: forecasting international market conditions, currency risk and operational decisions.</p>'
@@ -70,6 +76,11 @@ async def main():
                 popup=await context.new_page()
                 await popup.goto(f"chrome-extension://{eid}/popup.html")
                 await popup.get_by_role("button",name="翻译当前网页").wait_for(timeout=15000)
+                # A popup is not the settings page and cannot flush private cache.
+                rejected=await popup.evaluate("""async()=>chrome.runtime.sendMessage({
+                  type:'CLEAR_CACHE'
+                })""")
+                assert rejected.get('ok') is False and '仅设置界面' in rejected.get('error',''),rejected
                 target=await context.new_page()
                 await target.goto(URL)
                 await target.bring_to_front()
