@@ -152,7 +152,7 @@ async function handle(message, sender) {
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
   const source = settings.source;
   const target = settings.target;
-  const model = isAI ? (provider==='gemini'?settings.geminiModel:provider==='deepseek'?settings.deepseekModel:settings.activeAIProfileId) : '';
+  const model = isAI ? (provider==='gemini'?settings.geminiModel:provider==='deepseek'?settings.deepseekModel:(()=>{const p=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);return [p?.id,p?.model,p?.baseUrl].join(':');})()) : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
   if(message.transient===true) {
     if(message.mode!=='standard' || !sender.tab) throw new TranslationError('临时字幕只允许网页内标准翻译');
