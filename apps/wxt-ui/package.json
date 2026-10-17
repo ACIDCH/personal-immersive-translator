@@ -18,7 +18,8 @@
     "mammoth": "^1.8.0",
     "tesseract.js": "^6.0.1",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "6.4.299"
+    "pdfjs-dist": "6.4.299",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
