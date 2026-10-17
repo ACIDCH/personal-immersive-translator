@@ -64,7 +64,7 @@
     // Avoid numeric-only UI counters while retaining short article headings
     // and normal CJK text. The former 12-character minimum discarded a large
     // class of legitimate short paragraphs without reporting any failure.
-    if(original.length>5000||!/[^\W\d_]/u.test(original))return false;
+    if(original.length>5000||!/[\p{L}]/u.test(original))return false;
     const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
