@@ -99,7 +99,7 @@ async def main():
         await filepage.get_by_role('button',name='开始本地读取 / 识别').click()
         await filepage.locator('.document-result').get_by_text('HELLO WORLD 2026',exact=False).wait_for(timeout=95000)
         async with filepage.expect_download(timeout=28000) as download:
-          await filepage.get_by_role('button',name='翻译识别文本并导出双语 PNG').click()
+          await filepage.get_by_role('button',name='翻译识别文本并导出 PNG').click()
         artifact=await download.value
         assert artifact.suggested_filename=='image-fixture-bilingual.png'
         path=await artifact.path()
@@ -108,6 +108,22 @@ async def main():
           assert result.width>pic.width
         report['ocr_translation_png']='pass'
         print('WXT IMAGE OCR + PROVIDER + BILINGUAL PNG DOWNLOAD: PASS',flush=True)
+        # New spatial translation: local OCR coordinate boxes + flat-background
+        # replacement. Check pixel geometry, not only download existence.
+        await filepage.get_by_role('button',name='原位覆盖（纯色背景）').click()
+        async with filepage.expect_download(timeout=24000) as inline_event:
+          await filepage.get_by_role('button',name='翻译识别文本并导出 PNG').click()
+        inline=await inline_event.value
+        assert inline.suggested_filename=='image-fixture-overlay.png'
+        inline_path=await inline.path()
+        with Image.open(inline_path) as overlay:
+          assert overlay.format=='PNG'
+          assert overlay.size==pic.size
+          assert overlay.convert('RGB').getpixel((3,3))==pic.getpixel((3,3))
+          # The recognized line rectangle was changed; no layout expansion.
+          assert overlay.convert('RGB').tobytes()!=pic.tobytes()
+        report['ocr_original_position_png']='pass'
+        print('WXT IN-PLACE OCR TRANSLATION EXPORT: PASS',flush=True)
 
         tools=await ctx.new_page()
         await tools.goto(f'chrome-extension://{eid}/pit-tools.html')
