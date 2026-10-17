@@ -1,4 +1,4 @@
-import {defineBackground} from 'wxt/sandbox';
+import {defineBackground} from '#imports';
 
 // Original PIT module remains the authority for provider routing and cache.
 // WXT's entrypoint loader does not execute this runtime import during build.
