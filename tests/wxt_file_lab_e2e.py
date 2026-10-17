@@ -252,13 +252,13 @@ async def main():
         # WebVTT metadata and timestamp settings are not translatable cues.
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'styled.vtt','mimeType':'text/vtt',
-          'buffer':b'WEBVTT - Finance seminar\\n\\nNOTE speaker metadata\\nnot a cue\\n\\nSTYLE\\n::cue { color: red; }\\n\\nlecture-1\\n00:00:01.200 --> 00:00:03.400 align:start position:10%\\nHello <b>students</b>\\n\\n00:01:62.000 --> 00:01:65.000\\ninvalid time\\n'
+          'buffer':b'WEBVTT - Finance seminar\n\nNOTE speaker metadata\nnot a cue\n\nSTYLE\n::cue { color: red; }\n\nlecture-1\n00:00:01.200 --> 00:00:03.400 align:start position:10%\nHello <b>students</b>\n\n00:01:62.000 --> 00:01:65.000\ninvalid time\n'
         })
         async with page.expect_download(timeout=20000) as styled_event:
           await page.get_by_role('button',name='翻译并导出双语 SRT').click()
         styled=Path(await (await styled_event.value).path()).read_text(encoding='utf8')
         assert '00:00:01,200 --> 00:00:03,400' in styled,styled
-        assert 'Hello students\\n译文:Hello students' in styled,styled
+        assert 'Hello students\n译文:Hello students' in styled,styled
         assert 'STYLE' not in styled and 'NOTE' not in styled and 'invalid time' not in styled,styled
         report['subtitle_metadata_filter']='pass'
         report['offline_subtitle_translation']='pass'
