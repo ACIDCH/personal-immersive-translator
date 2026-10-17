@@ -124,7 +124,7 @@ export default {
      translations.push(answer.translated_text);
     }
     return json({translations,detected,model:MODEL,
-      autoWarning:detected.some(x=>x.confidence==='latin-fallback-unverified')});
+      autoWarning:detected.some(x=>x.confidence.startsWith('latin-'))});
    }catch(err){
     // Never surface raw provider exceptions, source texts or private token.
     return json({error:'cloud_model_unavailable'},Number(err?.status)===429?429:503);
