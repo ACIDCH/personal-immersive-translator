@@ -177,6 +177,7 @@ export function NativeWebControls(){
      <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
      <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
      <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>打开本地 DOCX / 图片 OCR 实验台</button>
+     <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('pit-tools.html' as never)})}>打开 PDF / 高保真本机工具</button>
      <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
      <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
      <label>可选：导入 SRT / VTT（限 2 MiB）
