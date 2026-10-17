@@ -38,13 +38,13 @@ async def main():
         page=await browser.new_page()
         page.on("pageerror",lambda err:print("OCR PAGE ERROR:",str(err)[:300]))
         await page.goto(f"http://127.0.0.1:{server.server_port}/",wait_until="domcontentloaded",timeout=20000)
-        await page.get_by_role("heading",name="文件与图片解析实验台").wait_for(timeout=16000)
+        await page.get_by_role("heading",name="文件与图片处理").wait_for(timeout=16000)
         await page.get_by_role("button",name="图片 OCR").click()
         await page.locator('.document-lab input[type="file"]').set_input_files({
           "name":"local-ocr-fixture.png","mimeType":"image/png","buffer":buf.getvalue()
         })
         started=time.monotonic()
-        await page.get_by_role("button",name="开始本地处理").click()
+        await page.get_by_role("button",name="开始本地读取 / 识别").click()
         try:
           await page.wait_for_function("""()=>{
             const result=document.querySelector('.document-lab .document-result');
