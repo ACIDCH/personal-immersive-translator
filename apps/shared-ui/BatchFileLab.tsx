@@ -53,7 +53,8 @@ export function BatchFileLab(){
    let ocrWorker:Awaited<ReturnType<(typeof import('tesseract.js'))['createWorker']>>|null=null;
    try{
      const out=new JSZip();
-     const translate=async (texts:string[]):Promise<string[]>=>{
+     const {createRecoverableTranslator}=await import('./translationRecovery');
+     const translate=createRecoverableTranslator(async (texts:string[]):Promise<string[]>=>{
        const response=await runtime.sendMessage!({
          type:'TRANSLATE_DOCUMENT',texts,mode,userInitiated:true
        });
@@ -62,7 +63,7 @@ export function BatchFileLab(){
           response.translations.some(s=>typeof s!=='string'||!s.trim()))
          throw Error(response?.error||'翻译服务返回了无效的分段数据');
        return response.translations;
-     };
+     },{onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
      for(const [i,file] of items.entries()){
        const type=file.name.split('.').at(-1)!.toLowerCase();
        const original=file.name.replace(/[^a-zA-Z0-9.\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af_-]/g,'_');
