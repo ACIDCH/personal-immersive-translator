@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>沉浸式翻译 · 控制面板</title><link rel="stylesheet" href="ui.css"></head>
+<title>多模态翻译 · 控制面板</title><link rel="stylesheet" href="ui.css"></head>
 <body class="popup"><main>
 <header class="popup-header">
-  <div class="brand"><img src="../assets/icon48.png" width="32" height="32" alt=""><div>沉浸式翻译 <span class="brand-sub">Personal Translator</span></div></div>
+  <div class="brand"><img src="../assets/icon48.png" width="32" height="32" alt=""><div>多模态翻译 <span class="brand-sub">Multimodal Translate</span></div></div>
   <button id="settings" class="textbtn" aria-label="打开翻译插件设置">⚙ 设置</button>
 </header>
 <section class="panel mode-panel" aria-labelledby="modeTitle">
@@ -12,7 +12,7 @@
   <button id="standard" class="selected" type="button">标准翻译</button>
   <button id="ai" type="button">AI 增强</button>
  </div>
- <p id="modeHint" class="muted">常规服务优先，不消耗 Gemini / DeepSeek Token。</p>
+ <p id="modeHint" class="muted">常规翻译优先；AI 服务只在手动启用时调用。</p>
  <div id="providerInfo" class="provider">当前翻译服务：读取中…</div>
  <p id="setupStatus" class="setup-status" role="status">正在检查服务配置…</p>
 </section>

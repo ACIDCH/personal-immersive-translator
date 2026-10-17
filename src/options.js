@@ -1,8 +1,73 @@
 import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';
+import {validateAIProfile} from './lib/ai-profiles.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
 const checkboxKeys=['contextAI'];
+let profiles=[], activeProfileId='';
+const pick=id=>document.getElementById(id);
+function profileMessage(message) {pick('profileStatus').textContent=message;}
+function renderProfiles(){
+  const list=pick('profileList');
+  list.replaceChildren();
+  const empty=document.createElement('option');
+  empty.value='';empty.textContent='选择配置';list.append(empty);
+  for(const profile of profiles){
+    const option=document.createElement('option');
+    option.value=profile.id;option.textContent=profile.name+' — '+profile.model;
+    list.append(option);
+  }
+  if(!profiles.some(p=>p.id===activeProfileId))activeProfileId='';
+  list.value=activeProfileId;
+  editProfile();
+}
+function editProfile(){
+  const p=profiles.find(x=>x.id===pick('profileList').value);
+  pick('profileName').value=p?.name||'';
+  pick('profileProtocol').value=p?.protocol||'openai-chat';
+  pick('profileBaseUrl').value=p?.baseUrl||'';
+  pick('profileModel').value=p?.model||'';
+  pick('profileApiKey').value=p?.apiKey||'';
+}
+function readProfile(id){
+  return validateAIProfile({
+    id,
+    name:pick('profileName').value,
+    protocol:pick('profileProtocol').value,
+    baseUrl:pick('profileBaseUrl').value,
+    model:pick('profileModel').value,
+    apiKey:pick('profileApiKey').value
+  });
+}
+pick('profileList').addEventListener('change',()=>{
+  activeProfileId=pick('profileList').value;editProfile();
+  profileMessage('已选择配置。点击页面底部保存设置后生效。');
+});
+pick('profileAdd').addEventListener('click',()=>{
+  try {
+    if(profiles.length>=20)throw Error('最多保存 20 个 AI 配置');
+    const id='ai-'+crypto.randomUUID();
+    const p=readProfile(id); profiles.push(p);activeProfileId=id;
+    renderProfiles();profileMessage('已添加配置，记得点击页面底部「保存设置」。');
+  } catch(e){profileMessage('添加失败：'+e.message);}
+});
+pick('profileUpdate').addEventListener('click',()=>{
+  try {
+    if(!activeProfileId)throw Error('请先选择要更新的配置');
+    const p=readProfile(activeProfileId);
+    profiles=profiles.map(old=>old.id===p.id?p:old);
+    renderProfiles();profileMessage('已更新配置，记得点击页面底部「保存设置」。');
+  }catch(e){profileMessage('更新失败：'+e.message);}
+});
+pick('profileDelete').addEventListener('click',()=>{
+  if(!activeProfileId)return profileMessage('请先选择要删除的配置');
+  profiles=profiles.filter(p=>p.id!==activeProfileId);
+  activeProfileId=profiles[0]?.id||'';renderProfiles();
+  profileMessage('已移除配置，记得点击页面底部「保存设置」。');
+});
 function viewSettings(settings) {
+  profiles=Array.isArray(settings.aiProfiles)?settings.aiProfiles.slice(0,20):[];
+  activeProfileId=settings.activeAIProfileId||'';
+  renderProfiles();
   for (const el of form.elements) {
     if (!el.name || !Object.hasOwn(settings,el.name)) continue;
     if (el.type === 'checkbox') el.checked=Boolean(settings[el.name]);
@@ -17,6 +82,8 @@ function collect() {
     if (!el) continue;
     data[key]=checkboxKeys.includes(key)?el.checked:el.value;
   }
+  data.aiProfiles=profiles;
+  data.activeAIProfileId=activeProfileId;
   return normalizeSettings(data);
 }
 async function requestLibrePermission(settings) {
@@ -28,9 +95,17 @@ async function requestLibrePermission(settings) {
   const granted=await chrome.permissions.request({origins:[url.origin+'/*']});
   if(!granted) throw new Error('未授权连接 LibreTranslate 服务器');
 }
+async function requestAIProfilePermission(settings){
+  if(settings.aiProvider!=='custom')return;
+  const profile=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);
+  const valid=validateAIProfile(profile);
+  const granted=await chrome.permissions.request({origins:[new URL(valid.baseUrl).origin+'/*']});
+  if(!granted)throw new Error('未授予该 AI 服务商的网络访问权限');
+}
 async function saveSettings() {
   const settings=collect();
   await requestLibrePermission(settings);
+  await requestAIProfilePermission(settings);
   await chrome.storage.local.set({[SETTINGS_KEY]:settings});
   status.textContent='设置已保存。';
   return settings;

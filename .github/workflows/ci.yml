@@ -1,7 +1,11 @@
 name: Validate and package extension
 on:
   push:
+    branches: [main]
   pull_request:
+concurrency:
+  group: extension-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

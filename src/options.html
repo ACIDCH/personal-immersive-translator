@@ -1,5 +1,5 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>翻译插件设置</title><link rel="stylesheet" href="ui.css"></head>
-<body class="options"><main><div class="options-header"><h1>Personal Immersive Translator</h1>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>多模态翻译 · 设置</title><link rel="stylesheet" href="ui.css"></head>
+<body class="options"><main><div class="options-header"><h1>多模态翻译 · Multimodal Translate</h1>
 <p class="muted">七种主要语言 · 标准翻译优先 · AI 仅主动启用</p></div>
 <nav class="options-nav" aria-label="设置分类快速定位">
   <a href="#baseSettings">基础及语言</a>
@@ -13,7 +13,7 @@
 <label>目标语言<select name="target"><option value="zh">简体中文</option><option value="en">English</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
 <label>原文语言<select name="source"><option value="auto">自动识别</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ko">한국어</option></select></label>
 <label>默认机器翻译服务<select name="standardProvider"><option value="microsoft">Microsoft Translator</option><option value="google">Google Cloud Translation</option><option value="deepl">DeepL</option><option value="libre">LibreTranslate (自有服务)</option></select></label>
-<label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option></select></label>
+<label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="custom">自定义 AI 配置（多服务商）</option></select></label>
 <label class="inline"><input type="checkbox" name="contextAI">AI 翻译时包含相邻段落作为上下文</label></section>
 <section id="standardKeys" class="panel"><h2>常规翻译凭据</h2>
 <label>Microsoft Key<input name="microsoftKey" type="password" autocomplete="off" placeholder="仅存于本地浏览器"></label>
@@ -28,6 +28,18 @@
 <label>Gemini 模型名称<input name="geminiModel" type="text" spellcheck="false"></label>
 <label>DeepSeek API Key<input name="deepseekKey" type="password" autocomplete="off"></label>
 <label>DeepSeek 模型名称<input name="deepseekModel" type="text" spellcheck="false"></label>
+<div class="panel" id="profileManager">
+<h3>自定义 AI 服务商与模型</h3>
+<p class="muted">支持 OpenAI 兼容 Chat Completions 服务（OpenAI、OpenRouter、DeepSeek、Qwen、GLM、Groq 等）和 Anthropic Messages 协议。可以增加多个配置、选择当前模型；调用成本以对应平台为准。</p>
+<label>已配置模型<select id="profileList"><option value="">尚未创建</option></select></label>
+<label>服务商名称<input id="profileName" type="text" maxlength="80" placeholder="例如 OpenRouter / Claude / Qwen"></label>
+<label>协议<select id="profileProtocol"><option value="openai-chat">OpenAI-compatible /chat/completions</option><option value="anthropic-messages">Anthropic /messages</option></select></label>
+<label>API Base URL<input id="profileBaseUrl" type="url" spellcheck="false" placeholder="https://api.openai.com/v1"></label>
+<label>模型 ID<input id="profileModel" type="text" spellcheck="false" placeholder="gpt-... / qwen/...:free"></label>
+<label>API Key<input id="profileApiKey" type="password" autocomplete="off" placeholder="仅保存在本机浏览器"></label>
+<div class="buttons"><button type="button" id="profileAdd">保存为新配置</button><button type="button" id="profileUpdate">更新当前配置</button><button type="button" id="profileDelete">删除当前配置</button></div>
+<p id="profileStatus" role="status" aria-live="polite" class="muted">自定义模型不会自动调用。先创建并选中模型，然后保存整个设置。</p>
+</div>
 <label>专业术语提示（AI 可用）<textarea name="glossary" rows="4" placeholder="yield curve = 收益率曲线"></textarea></label></section>
 <section id="privacySettings" class="panel"><h2>隐私及站点规则</h2>
 <label>禁止翻译的域名（每行一个，包含子域名）<textarea name="blockedHosts" rows="4" placeholder="example.com&#10;banking.example"></textarea></label>
