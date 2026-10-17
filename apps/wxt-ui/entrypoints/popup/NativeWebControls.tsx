@@ -48,7 +48,8 @@ export function NativeWebControls(){
      const [tab]=await browser.tabs.query({active:true,currentWindow:true});
      if(!tab?.id || !/^https?:\/\//.test(tab.url||''))throw Error('请先打开可访问的普通网页');
      if(action==='PIT_START'||action==='PIT_SELECTION'||action==='PIT_RESTORE'||action==='PIT_CONTINUE'){
-       // activeTab permits only the currently selected site. No blanket page access.
+       // Installed HTTP(S) site access enables normal page injection without
+       // repeated per-domain prompts; Chrome internal pages remain blocked.
        await browser.scripting.insertCSS({target:{tabId:tab.id},files:[rootCss]});
        // WXT's generated pathname union enumerates listed entrypoints only;
        // this static public asset is verified byte-for-byte by the output test.
