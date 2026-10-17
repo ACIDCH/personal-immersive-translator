@@ -105,16 +105,19 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
   let result;
   switch (provider) {
     case 'mymemory': {
-      const out=[];
-      // MyMemory's *documented* public endpoint has a strict 500 UTF-8
-      // byte limit per GET and a limited anonymous daily character quota.
-      // This is a low-volume fallback, not a free unlimited PDF backend.
-      for(const text of texts){
+      // Small public MT endpoint: at most 3 concurrent lookups per batch.
+      // Serial requests made a normal 25-paragraph page take ~30 seconds in
+      // real headless public-site probing. Maintain order without exceeding
+      // the provider's 500-byte per-request limit or parallelizing 100 calls.
+      const output=new Array(texts.length);
+      let cursor=0,failed=false;
+      async function translateOne(text){
         const guess=source==='auto'?identifyLanguage(text):{language:source,confidence:'explicit'};
         const sourceLang=guess.language;
-        if(sourceLang===target){out.push(text);continue;}
+        if(sourceLang===target)return text;
         const chunks=utf8Chunks(text,450),translated=[];
         for(const segment of chunks){
+          if(failed)throw new TranslationError('免费翻译批次已取消');
           if(!segment.trim()){translated.push(segment);continue;}
           const url=new URL('https://api.mymemory.translated.net/get');
           url.searchParams.set('q',segment);
@@ -130,19 +133,26 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
           try{payload=await response.json();}
           catch{throw new TranslationError('免费翻译服务返回非 JSON 响应');}
           if(Number(payload?.responseStatus)!==200 ||
-              typeof payload?.responseData?.translatedText!=='string'||
-              !payload.responseData.translatedText.trim()){
+             typeof payload?.responseData?.translatedText!=='string'||
+             !payload.responseData.translatedText.trim())
             throw new TranslationError('免费翻译服务返回错误、配额耗尽或无有效译文',
               Number(payload?.responseStatus)||429);
-          }
           const value=decodeEntities(payload.responseData.translatedText);
           if(/^(?:MYMEMORY WARNING:|QUERY LENGTH LIMIT EXCEEDED)/i.test(value))
             throw new TranslationError('免费翻译额度不足，请切换云端/其他翻译服务',429);
           translated.push(value);
         }
-        out.push(translated.join(''));
+        return translated.join('');
       }
-      return toPlainStringArray(out,texts.length);
+      async function worker(){
+        while(!failed&&cursor<texts.length){
+          const index=cursor++;
+          try{output[index]=await translateOne(texts[index]);}
+          catch(error){failed=true;throw error;}
+        }
+      }
+      await Promise.all(Array.from({length:Math.min(3,texts.length)},()=>worker()));
+      return toPlainStringArray(output,texts.length);
     }
     case 'cloud': {
       const raw = required(opts.cloudEndpoint, 'PIT 云端翻译服务 HTTPS 地址（需先部署 Worker）');
