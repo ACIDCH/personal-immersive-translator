@@ -2,7 +2,9 @@ export const SETTINGS_KEY = 'pit_settings_v1';
 export const DEFAULT_SETTINGS = Object.freeze({
   target: 'zh',
   source: 'auto',
-  standardProvider: 'microsoft',
+  standardProvider: 'cloud',
+  cloudEndpoint: '',
+  cloudToken: '',
   aiProvider: 'gemini',
   autoAI: false,
   contextAI: true,
@@ -22,7 +24,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   glossary: '',
   blockedHosts: ''
 });
-export const STANDARD_PROVIDERS = ['microsoft', 'google', 'deepl', 'libre'];
+export const STANDARD_PROVIDERS = ['cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
@@ -36,7 +38,7 @@ export function normalizeSettings(value = {}) {
   }
   if (!LANGUAGES.includes(clean.target)) clean.target = 'zh';
   if (!['auto', ...LANGUAGES].includes(clean.source)) clean.source = 'auto';
-  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'microsoft';
+  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'cloud';
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
