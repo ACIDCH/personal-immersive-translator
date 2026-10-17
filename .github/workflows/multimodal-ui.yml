@@ -69,6 +69,13 @@ jobs:
       - name: Validate native WXT web integration package
         if: matrix.app == 'wxt-ui'
         run: node wxt-ui/scripts/check-native-bundle.mjs
+      - name: Upload isolated WXT web-integration package
+        if: matrix.app == 'wxt-ui'
+        uses: actions/upload-artifact@v4
+        with:
+          name: multimodal-wxt-web-integration-test
+          path: apps/wxt-ui/.output/chrome-mv3
+          retention-days: 7
 
   wxt-browser:
     runs-on: ubuntu-latest
