@@ -121,19 +121,19 @@ export function DocumentLab(){
     setBusy(true);setMessage('正在使用所选服务翻译识别文字…');
     try{
       const {splitOcrLines,bilingualImagePng,inplaceImagePng}=await import('./imageTranslate');
+      const {createRecoverableTranslator}=await import('./translationRecovery');
+      const translateLines=createRecoverableTranslator(async texts=>{
+        const res=await runtime.sendMessage!({type:'TRANSLATE_DOCUMENT',texts,mode:translationMode,userInitiated:true});
+        if(!res?.ok||!res.translations)throw Error(res?.error||'图片翻译服务响应失败');
+        return res.translations;
+      },{onRetry:info=>setProgress('图片 API 暂时不可用，重试 '+info.attempt+' 次')});
       const overlay=imageLayout==='overlay';
       if(overlay&&!ocrRegions.length)throw Error('缺少 OCR 坐标，无法原位覆盖；请改用双栏导出');
       const lines=overlay?ocrRegions.map(x=>x.text):splitOcrLines(text);
       if(!lines.length)throw Error('没有可翻译的 OCR 文本');
       const output:string[]=[];
       for(let i=0;i<lines.length;i+=8){
-        const reply=await runtime.sendMessage({
-          type:'TRANSLATE_DOCUMENT',texts:lines.slice(i,i+8),mode:translationMode,userInitiated:true
-        });
-        if(!reply?.ok||!Array.isArray(reply.translations)||
-           reply.translations.length!==Math.min(8,lines.length-i))
-          throw Error(reply?.error||'OCR 翻译服务没有返回相同数量的译文');
-        output.push(...reply.translations);
+        output.push(...await translateLines(lines.slice(i,i+8)));
         setProgress('图片文字翻译 '+Math.min(i+8,lines.length)+'/'+lines.length+' 行');
       }
       const png=overlay?await inplaceImagePng(file,ocrRegions,output):await bilingualImagePng(file,text,output);
@@ -153,14 +153,15 @@ export function DocumentLab(){
     if(translationMode==='ai'&&!confirm('将使用你选择的 AI 模型翻译当前 Office 文件，可能产生 API 费用。确认开始吗？'))return;
     setBusy(true);setProgress('准备 Office 翻译…');setMessage('翻译由你配置的服务处理；内容将发送给所选服务商。');
     try{
-      const translate=async (texts:string[])=>{
+      const {createRecoverableTranslator}=await import('./translationRecovery');
+      const translate=createRecoverableTranslator(async (texts:string[])=>{
         const response=await runtime.sendMessage!({
           type:'TRANSLATE_DOCUMENT',texts,mode:translationMode,userInitiated:true
         });
         if(!response?.ok||!Array.isArray(response.translations))
           throw Error(response?.error||'翻译后台没有返回有效结果');
         return response.translations;
-      };
+      },{onRetry:info=>setProgress('暂时限流/超时，Office 翻译重试 '+info.attempt+' 次')});
       const onProgress=(done:number,total:number)=>setProgress('翻译进度 '+done+'/'+total+' 段/单元格');
       const result=mode==='docx'
         ? await (await import('./docxTranslate')).translateDocx(await file.arrayBuffer(),translate,onProgress)
