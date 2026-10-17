@@ -1,0 +1,5 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {Shell} from '../../wxt-ui/shared/Shell';
+import '../../wxt-ui/shared/design.css';
+createRoot(document.getElementById('root')!).render(<React.StrictMode><Shell view="dashboard"/></React.StrictMode>);
