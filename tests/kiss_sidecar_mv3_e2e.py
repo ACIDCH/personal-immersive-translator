@@ -50,7 +50,7 @@ async def main():
           }""")
           assert display["name"]=="PIT 沉浸式翻译（测试版）",display
           assert display["version"]=="2.1.1",display
-          assert display["version_name"]=="PIT v0.4.9 (KISS 2.1.1)",display
+          assert display["version_name"]=="PIT v0.5.0 (KISS 2.1.1)",display
           assert display["title"]=="PIT 沉浸式翻译 · v0.5.0",display
           assert display["icon"]=="pit/icons/icon128.png",display
           print("PASS: Chrome extension identity displays PIT brand and KISS core attribution",flush=True)

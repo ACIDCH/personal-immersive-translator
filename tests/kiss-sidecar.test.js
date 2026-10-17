@@ -79,7 +79,7 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
   assert.equal(upstreamUi.popup,'popup.html');
   assert.equal(m.name,'PIT 沉浸式翻译（测试版）');
   assert.equal(m.version,'2.1.1');
-  assert.equal(m.version_name,'PIT v0.4.9 (KISS 2.1.1)');
+  assert.equal(m.version_name,'PIT v0.5.0 (KISS 2.1.1)');
   assert.equal(m.icons['128'],'pit/icons/icon128.png');
   assert.equal(m.action.default_title,'PIT 沉浸式翻译 · v0.5.0');
   assert.equal(m.action.default_icon['48'],'pit/icons/icon48.png');

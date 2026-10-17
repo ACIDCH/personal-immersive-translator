@@ -176,7 +176,7 @@ sidecarPort.onDisconnect.addListener(()=>{
  // Do not mutate/rebrand the KISS source package or strip its GPL license.
  manifest.name='PIT 沉浸式翻译（测试版）';
  manifest.short_name='PIT 翻译';
- manifest.version_name='PIT v0.4.9 (KISS 2.1.1)';
+ manifest.version_name='PIT v0.5.0 (KISS 2.1.1)';
  manifest.description='PIT 个人沉浸式翻译测试版：双语网页、视频字幕、图片 OCR、PDF 与 GitHub 诊断。基于 KISS Translator 2.1.1（GPL-3.0）。';
  const pitIcons={};
  for(const size of [16,48,128]){
