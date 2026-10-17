@@ -1,0 +1,26 @@
+{
+  "name": "multimodal-translate-wxt-ui-preview",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build -b chrome",
+    "check": "tsc --noEmit",
+    "preview": "wxt build -b chrome"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.0.0",
+    "wxt": "^0.20.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
