@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   webDisplay: 'bilingual',
   webScope: 'smart',
   hoverTranslate: false,
+  floatingControl: false,
   inputTranslate: false,
   inputTarget: 'en',
   autoTranslateHosts: '',
@@ -56,6 +57,7 @@ export function normalizeSettings(value = {}) {
   if (!['subtle','underline','highlight'].includes(clean.translationTheme)) clean.translationTheme='subtle';
   if (!LANGUAGES.includes(clean.inputTarget)) clean.inputTarget='en';
   clean.hoverTranslate=Boolean(clean.hoverTranslate);
+  clean.floatingControl=Boolean(clean.floatingControl);
   clean.inputTranslate=Boolean(clean.inputTranslate);
   clean.autoTranslateHosts=typeof clean.autoTranslateHosts==='string'?clean.autoTranslateHosts.slice(0,4000):'';
   clean.autoAI = false;
