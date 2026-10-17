@@ -22,10 +22,10 @@ function fillStyledNodes(nodes:Element[],translated:string):void{
  }
 }
 type Part={name:string,doc:Document,nodes:Element[][],strings:string[]};
-const MAX_SIZE=12*1024*1024;
-const MAX_XML=15*1024*1024;
-const MAX_SEGMENTS=2000;
-const MAX_CHARACTERS=200000;
+const MAX_SIZE=48*1024*1024;
+const MAX_XML=64*1024*1024;
+const MAX_SEGMENTS=20000;
+const MAX_CHARACTERS=3000000;
 const elementNodes=(e:Element,name:string):Element[]=>
   Array.from(e.getElementsByTagName(name));
 
@@ -44,7 +44,7 @@ function readable(doc:Document,kind:OfficeKind,name:string):Element[][]{
   return elementNodes(doc.documentElement,'is').map(p=>elementNodes(p,'t')).filter(a=>a.length);
 }
 async function parse(buffer:ArrayBuffer,kind:OfficeKind):Promise<{zip:JSZip,parts:Part[],strings:string[]}>{
-  if(!buffer.byteLength||buffer.byteLength>MAX_SIZE)throw Error('Office 文件不能超过 12 MiB');
+  if(!buffer.byteLength||buffer.byteLength>MAX_SIZE)throw Error('Office 文件不能超过 48 MiB');
   const zip=await JSZip.loadAsync(buffer,{checkCRC32:true});
   const names=sourceParts(zip,kind);
   if(kind==='pptx'&&!names.some(n=>n.startsWith('ppt/slides/slide')))
@@ -61,10 +61,9 @@ async function parse(buffer:ArrayBuffer,kind:OfficeKind):Promise<{zip:JSZip,part
     const filtered=nodes.map(n=>({nodes:n,text:n.map(x=>x.textContent||'').join('')}))
       .filter(x=>x.text.trim());
     for(const item of filtered){
-      if(item.text.length>4500)throw Error('单个段落/单元格超出 4500 字符');
       chars+=item.text.length;count++;
     }
-    if(chars>MAX_CHARACTERS||count>MAX_SEGMENTS)throw Error('Office 本次处理超过 2000 段、20 万字符');
+    if(chars>MAX_CHARACTERS||count>MAX_SEGMENTS)throw Error('Office 本次处理超过 20000 段、300 万字符');
     parts.push({name,doc,nodes:filtered.map(x=>x.nodes),strings:filtered.map(x=>x.text)});
   }
   return {zip,parts,strings:parts.flatMap(p=>p.strings)};
@@ -82,6 +81,16 @@ export async function translateOffice(
   progress(0,strings.length);
   const results:string[]=[];
   while(done<strings.length){
+    if(strings[done].length>4500){
+      const chars=Array.from(strings[done]),pieces:string[]=[];
+      for(let offset=0;offset<chars.length;offset+=3400){
+        const translated=await translator([chars.slice(offset,offset+3400).join('')]);
+        if(translated.length!==1||!translated[0]?.trim())
+          throw Error('Office 超长段落翻译失败');
+        pieces.push(translated[0]);
+      }
+      results.push(pieces.join(''));done++;progress(done,strings.length);continue;
+    }
     const batch:string[]=[];let sum=0;
     for(let i=done;i<strings.length&&batch.length<8;i++){
       const value=strings[i];
