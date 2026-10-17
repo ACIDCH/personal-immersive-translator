@@ -6,3 +6,32 @@
 .pit-caption-translated { display:inline-block !important; max-width:100% !important; padding:6px 14px !important; color:#fff !important; font:bold 21px/1.4 system-ui,sans-serif !important; background:rgba(0,0,0,.72) !important; text-shadow:0 1px 1px black !important; border-radius:7px !important; overflow-wrap:anywhere !important; white-space:pre-wrap !important; }
 
 .pit-caption-original { display:block !important; max-width:100% !important; margin:0 auto 4px !important; padding:4px 12px !important; color:#fff !important; font:500 18px/1.35 system-ui,sans-serif !important; background:rgba(0,0,0,.58) !important; border-radius:6px !important; white-space:pre-wrap !important; overflow-wrap:anywhere !important; }
+
+/* Owner-selectable immersive reading styles. These selectors only affect
+ * nodes already translated by PIT; no global host-page text is changed. */
+.pit-translation[data-theme="underline"] {
+  text-decoration: underline dotted currentColor !important;
+  text-underline-offset: .26em !important;
+}
+.pit-translation[data-theme="highlight"] {
+  background: rgba(255,217,108,.22) !important;
+  border-inline-start:3px solid rgba(236,163,47,.55) !important;
+  padding: .25em .5em !important;
+  border-radius: .25em !important;
+}
+/* Translation-only: retain the original DOM for reversibility. Ordinary
+ * paragraphs are hidden; table cells/list items cannot be hidden entirely
+ * because their translation is inside the original element. */
+.pit-original-concealed:not(li):not(td):not(th) {
+  display:none !important;
+}
+.pit-original-concealed:is(li,td,th) {
+  font-size:0 !important;
+}
+.pit-original-concealed:is(li,td,th) > :not(.pit-translation) {
+  display:none !important;
+}
+.pit-original-concealed:is(li,td,th) > .pit-translation {
+  display:block !important;font-size:14px !important;
+  visibility:visible !important;
+}
