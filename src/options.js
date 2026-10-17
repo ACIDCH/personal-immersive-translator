@@ -87,13 +87,13 @@ function collect() {
   return normalizeSettings(data);
 }
 async function requestLibrePermission(settings) {
-  if (settings.standardProvider!=='libre') return;
+  if (!['libre','cloud'].includes(settings.standardProvider)) return;
   let url;
-  try { url=new URL(settings.libreUrl); }
-  catch {throw new Error('LibreTranslate URL 无效');}
-  if (url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw new Error('LibreTranslate 必须使用无内嵌凭据的 HTTPS URL');
+  try { url=new URL(settings.standardProvider==='cloud'?settings.cloudEndpoint:settings.libreUrl); }
+  catch {throw new Error('翻译服务 URL 无效');}
+  if (url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw new Error('翻译服务必须使用无内嵌凭据的 HTTPS URL');
   const granted=await chrome.permissions.request({origins:[url.origin+'/*']});
-  if(!granted) throw new Error('未授权连接 LibreTranslate 服务器');
+  if(!granted) throw new Error('未授权连接所选翻译服务器');
 }
 async function requestAIProfilePermission(settings){
   if(settings.aiProvider!=='custom')return;
