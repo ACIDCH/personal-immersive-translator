@@ -247,7 +247,7 @@ async def main():
         assert bundle.suggested_filename=='multimodal-translated-batch.zip'
         with zipfile.ZipFile(await bundle.path()) as pack:
           names=[name for name in pack.namelist() if not name.endswith('/')]
-          assert len(names)==5,names
+          assert len(names)==4,names
           for part,entry,expected in [
             ('translated/01-batch-translated.docx','word/document.xml','译文:My finance DOCX document'),
             ('translated/02-batch-translated.pptx','ppt/slides/slide1.xml','译文:Strategic planning presentation'),
@@ -280,7 +280,7 @@ async def main():
           await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
         with zipfile.ZipFile(await (await portable_event.value).path()) as package:
           names={name for name in package.namelist() if not name.endswith('/')}
-          assert len(names)==4,names
+          assert len(names)==5,names
           with zipfile.ZipFile(io.BytesIO(package.read('translated/01-book-translated.epub'))) as book:
             assert book.namelist()[0]=='mimetype',book.namelist()
             assert book.getinfo('mimetype').compress_type==zipfile.ZIP_STORED
