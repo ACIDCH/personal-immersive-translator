@@ -146,7 +146,7 @@ export function NativeWebControls(){
        const allowed=(url:string)=>{try{
          const u=new URL(url);u.hash='';
          return u.protocol==='https:' &&
-           (/(^|\\.)(youtube\\.com|youtube-nocookie\\.com|panopto\\.com|panopto\\.eu)$/i.test(u.hostname))?
+           (/(^|\.)(youtube\.com|youtube-nocookie\.com|panopto\.com|panopto\.eu)$/i.test(u.hostname))?
            u.href:null;
        }catch{return null;}};
        const matches=(frames||[]).filter(f=>f.frameId>0 &&
