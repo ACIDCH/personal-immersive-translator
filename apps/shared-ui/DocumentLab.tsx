@@ -62,7 +62,7 @@ export function DocumentLab(){
         setMode('ocr');
         setFile(new File([bytes],'captured-webpage.png',{type:'image/png'}));
         setOcrRegions([]);setText('');
-        setMessage('已载入可见网页截图，请选择 OCR 语言后开始识别。');
+        setMessage('已载入当前网页的可见区域截图，请选择 OCR 语言并点击开始识别。');
         return;
       }
       const imageStored=await session.get(imageUrlKey);
