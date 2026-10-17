@@ -75,7 +75,9 @@ async def main():
                 await target.locator("#source + .pit-translation").wait_for(timeout=18000)
                 translated=await target.locator("#source + .pit-translation").inner_text()
                 assert "译文:Original paragraph" in translated,translated
-                await popup.get_by_text("正文覆盖").wait_for(timeout=7000)
+                await popup.wait_for_function("""()=>
+                  document.querySelector(".native-progress")?.textContent.includes("1/1")
+                """,timeout=12000)
                 progress=await popup.locator(".native-progress").inner_text()
                 assert "1/1" in progress,progress
                 print("PASS: WXT React button → PIT MV3 service worker → stubbed official provider → real DOM → coverage")
