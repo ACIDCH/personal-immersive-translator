@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {translateBatch,parseAIResponse,decodeEntities,TranslationError} from '../src/lib/providers.js';
 import {normalizeSettings,hostIsBlocked} from '../src/lib/settings.js';
 import {identifyLanguage} from '../src/lib/language-detect.js';
+import {createPreferenceBackup,importPreferenceBackup} from '../src/lib/preference-export.js';
 
 function mockResponse(output,check) {return async (url,init) => {check?.(url,init);return {ok:true,status:200,json:async()=>output};};}
 const config = {target:'zh', source:'en'};
@@ -175,4 +176,30 @@ test('heuristic language ID discloses uncertainty and handles common scripts',()
  assert.equal(identifyLanguage('Die Wirtschaft und der Markt sind').language,'de');
  assert.equal(identifyLanguage('Hola los mercados son importantes').language,'es');
  assert.equal(identifyLanguage('qzx ppt ggg').confidence,'latin-default-uncertain');
+});
+
+test('settings export imports only reading options; never leaks API tokens or profiles',()=>{
+ const current={microsoftKey:'top-secret',cloudToken:'secret-remote-123',
+   geminiKey:'top-secret-ai',aiProfiles:[{apiKey:'hidden'}],
+   webDisplay:'translation-only',hoverTranslate:true,blockedHosts:'bank.example'};
+ const data=createPreferenceBackup(current);
+ const text=JSON.stringify(data);
+ for(const forbidden of ['top-secret','secret-remote','apiKey','aiProfiles','cloudToken']){
+   assert.equal(text.includes(forbidden),false,forbidden);
+ }
+ assert.equal(data.preferences.webDisplay,'translation-only');
+ const restored=importPreferenceBackup(data,{
+   microsoftKey:'keep-my-key',standardProvider:'mymemory',
+   webDisplay:'bilingual',blockedHosts:''
+ });
+ assert.equal(restored.microsoftKey,'keep-my-key');
+ assert.equal(restored.webDisplay,'translation-only');
+ assert.equal(restored.hoverTranslate,true);
+ assert.equal(restored.blockedHosts,'bank.example');
+ assert.throws(()=>importPreferenceBackup({
+   product:'PIT',schema:1,preferences:{hoverTranslate:{dangerous:true}}
+ },{}),/格式/);
+ assert.throws(()=>importPreferenceBackup({
+   product:'unknown',schema:1,preferences:{}
+ },{}),/有效/);
 });
