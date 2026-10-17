@@ -17,6 +17,6 @@
     "src/**/*.tsx",
     "src/**/*.ts",
     "src/**/*.d.ts",
-    "../shared-ui/**/*.tsx"
+    "../shared-ui/**/*.tsx", "../shared-ui/**/*.d.ts"
   ]
 }
