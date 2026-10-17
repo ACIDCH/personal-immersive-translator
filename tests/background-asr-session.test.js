@@ -29,13 +29,20 @@ test('background discards stale offscreen ASR events and closes a valid session'
   }
  };
  await import('../src/background.js');
+ let modelReady=false;
  globalThis.fetch=async url=>{
    assert.equal(url,'http://127.0.0.1:8765/health');
-   return {ok:true,json:async()=>({speech_asr:true,speech_asr_requires_risk_ack:false})};
+   return {ok:modelReady,status:modelReady?200:503,
+     json:async()=>({speech_asr:modelReady,speech_asr_requires_risk_ack:false})};
  };
  const request=(msg,sender)=>new Promise(resolve=>listener(msg,sender,resolve));
  const ui={id:chrome.runtime.id};
  const media={id:chrome.runtime.id,url:chrome.runtime.getURL('src/offscreen.html')};
+ const blocked=await request({type:'PIT_ASR_START',tabId:31,token:'fixture-token-123456789'},ui);
+ assert.equal(blocked.ok,false);
+ assert.match(blocked.error,/健康检查失败/);
+ assert.equal(offscreenOpen,false,'must never open tab audio before local model is ready');
+ modelReady=true;
  const started=await request({type:'PIT_ASR_START',tabId:31,token:'fixture-token-123456789'},ui);
  assert.equal(started.ok,true);
  assert.match(activeSession,/^[0-9a-f-]{36}$/i);
