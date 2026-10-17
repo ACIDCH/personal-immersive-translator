@@ -96,10 +96,10 @@ async def main():
             covered=await page.evaluate("""()=>{
               return Array.from({length:24},(_,i)=>{
                 const source=document.querySelector('#paragraph-'+i);
+                // Strict per-paragraph ownership; looking up all translations
+                // in the shared article would incorrectly inflate coverage.
                 const translation=source?.querySelector('.kiss-translator-inner');
-                const siblings=source?.parentElement?.querySelectorAll('.kiss-translator-inner')||[];
-                return Boolean(translation?.textContent?.includes('译文:')||
-                  [...siblings].some(x=>x.textContent?.includes('译文:')));
+                return Boolean(translation?.textContent?.includes('译文:'));
               }).filter(Boolean).length;
             }""")
             if covered>=SAMPLES:break
