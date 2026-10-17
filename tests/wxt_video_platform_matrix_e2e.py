@@ -48,9 +48,9 @@ async def main():
         await popup.goto(f'chrome-extension://{eid}/popup.html')
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=14000)
         for name,url,content in SITES:
-          async def route_html(route,body=content):
+          async def route_html(route):
             await route.fulfill(status=200,content_type='text/html',
-              body='<html><body style="font-size:24px"><section>'+body+'</section></body></html>')
+              body='<html><body style="font-size:24px"><section>'+content+'</section></body></html>')
           await ctx.route(url,route_html)
           page=await ctx.new_page()
           await page.goto(url)
