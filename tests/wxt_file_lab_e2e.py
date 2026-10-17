@@ -76,6 +76,30 @@ def xlsx_fixture():
     z.writestr('xl/worksheets/sheet1.xml','<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>1+2</f><v>3</v></c><c r="C1" t="inlineStr"><is><t>Forecast notes</t></is></c></row></sheetData></worksheet>')
   return o.getvalue()
 
+
+def epub_fixture():
+  out=io.BytesIO()
+  with zipfile.ZipFile(out,'w') as z:
+    z.writestr(zipfile.ZipInfo('mimetype'),b'application/epub+zip',
+               compress_type=zipfile.ZIP_STORED)
+    z.writestr('META-INF/container.xml',
+      '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">'+
+      '<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>'+
+      '</rootfiles></container>')
+    z.writestr('OEBPS/content.opf',
+      '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">'+
+      '<manifest><item id="chapter" href="Text/ch1.xhtml" media-type="application/xhtml+xml"/>'+
+      '<item id="img" href="Images/art.png" media-type="image/png"/></manifest>'+
+      '<spine><itemref idref="chapter"/></spine></package>')
+    z.writestr('OEBPS/Text/ch1.xhtml',
+      '<?xml version="1.0" encoding="UTF-8"?>'+
+      '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Finance book</title></head>'+
+      '<body><h1>Market outlook</h1><p>Economics <strong>in context</strong></p>'+
+      '<p><code>const total = 3;</code> Next sentence</p>'+
+      '<img src="../Images/art.png" alt="figure"/></body></html>')
+    z.writestr('OEBPS/Images/art.png',b'epub-original-picture-bytes')
+  return out.getvalue()
+
 async def main():
   report={"application":"installed WXT Chrome MV3 file-lab","docx":"not_run","ocr":"not_run"}
   with tempfile.TemporaryDirectory(prefix="wxt-doc-file-") as profile:
@@ -236,6 +260,52 @@ async def main():
           report['office_batch_zip']='pass'
           report['image_batch_zip']='pass'
         print('WXT MIXED OFFICE BATCH ZIP: PASS',flush=True)
+
+        # Actual installed MV3 batch translator, real OOXML/EPUB ZIP serialization
+        # and mocked provider transport: not vendor accuracy or reader typography.
+        await page.locator('.batch-file-lab input[type=file]').set_input_files([
+          {'name':'book.epub','mimeType':'application/epub+zip','buffer':epub_fixture()},
+          {'name':'note.txt','mimeType':'text/plain','buffer':b'Plain document line\r\nSecond line'},
+          {'name':'chapter.md','mimeType':'text/markdown','buffer':(
+            b'# Finance chapter\n\n- Investment overview\n' +
+            b'```python\nprint("stay")\n```\n[External link](https://example.org)\n')},
+          {'name':'story.html','mimeType':'text/html','buffer':(
+            b'<!DOCTYPE html><html><body><p>HTML greeting <strong>business reader</strong></p>'+
+            b'<script>originalCode()</script></body></html>')}
+        ])
+        async with page.expect_download(timeout=55000) as portable_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await portable_event.value).path()) as package:
+          names=set(package.namelist())
+          assert len(names)==4,names
+          with zipfile.ZipFile(io.BytesIO(package.read('translated/01-book-translated.epub'))) as book:
+            assert book.namelist()[0]=='mimetype',book.namelist()
+            assert book.getinfo('mimetype').compress_type==zipfile.ZIP_STORED
+            assert book.read('mimetype')==b'application/epub+zip'
+            assert book.read('OEBPS/Images/art.png')==b'epub-original-picture-bytes'
+            assert b'chapter' in book.read('OEBPS/content.opf')
+            root=ET.fromstring(book.read('OEBPS/Text/ch1.xhtml'))
+            ns={'h':'http://www.w3.org/1999/xhtml'}
+            heading=root.find('.//h:h1',ns)
+            paragraph=root.find('.//h:p',ns)
+            assert ''.join(heading.itertext())=='译文:Market outlook'
+            assert ''.join(paragraph.itertext())=='译文:Economics in context'
+            assert paragraph.find('.//h:strong',ns) is not None
+            assert 'const total = 3;' in ''.join(root.itertext())
+          txt=package.read('translated/02-note-translated.txt').decode('utf8')
+          assert txt=='译文:Plain document line\r\n译文:Second line',repr(txt)
+          markdown=package.read('translated/03-chapter-translated.md').decode('utf8')
+          assert '# 译文:Finance chapter' in markdown,markdown
+          assert '- 译文:Investment overview' in markdown,markdown
+          assert 'print("stay")' in markdown
+          assert '[External link](https://example.org)' in markdown
+          html=package.read('translated/04-story-translated.html').decode('utf8')
+          assert '译文:HTML greeting business reader' in ''.join(ET.fromstring(
+            html[html.index('<html'):]).itertext())
+          assert '<strong>' in html and 'originalCode()' in html
+        report['epub_html_markdown_txt_batch']='pass'
+        print('WXT EPUB/TXT/MD/HTML STRUCTURE + ZIP BATCH: PASS',flush=True)
+
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'lecture.vtt','mimeType':'text/vtt',
           'buffer':b'WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello world\n\n00:00:04.500 --> 00:00:08.000\nFinancial models\n'
