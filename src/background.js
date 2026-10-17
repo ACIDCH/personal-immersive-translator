@@ -6,7 +6,20 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
     const data = await chrome.storage.local.get(SETTINGS_KEY);
-    if (!data[SETTINGS_KEY]) await chrome.storage.local.set({[SETTINGS_KEY]: normalizeSettings()});
+    if(!data[SETTINGS_KEY]){
+      await chrome.storage.local.set({[SETTINGS_KEY]:normalizeSettings()});
+    }else{
+      // The old native v0.5-0.6 release shipped the default cloud provider
+      // while its Worker had no endpoint and returned 501. On update, migrate
+      // *only* that unusable empty configuration to the documented low-volume
+      // no-key MT option. Never modify existing working cloud credentials.
+      const previous=normalizeSettings(data[SETTINGS_KEY]);
+      if(previous.standardProvider==='cloud'&&!previous.cloudEndpoint&&!previous.cloudToken){
+        await chrome.storage.local.set({
+          [SETTINGS_KEY]:{...previous,standardProvider:'mymemory'}
+        });
+      }
+    }
   } catch (error) { console.warn('PIT setup failed', error); }
 });
 chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});
