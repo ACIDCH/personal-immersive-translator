@@ -187,18 +187,23 @@ async def main():
           report[kind+'_translation_export']='pass'
           print('WXT '+kind.upper()+' TRANSLATION + STRUCTURE: PASS',flush=True)
 
+        image_batch=Image.new('RGB',(950,170),'white')
+        ImageDraw.Draw(image_batch).text((30,40),'HELLO WORLD 2026',
+          font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',64),fill='black')
+        image_data=io.BytesIO();image_batch.save(image_data,format='PNG')
         await page.locator('.batch-file-lab input[type="file"]').set_input_files([
           {'name':'batch.docx','mimeType':'application/octet-stream','buffer':ooxml_docx()},
           {'name':'batch.pptx','mimeType':'application/octet-stream','buffer':pptx_fixture()},
-          {'name':'batch.xlsx','mimeType':'application/octet-stream','buffer':xlsx_fixture()}
+          {'name':'batch.xlsx','mimeType':'application/octet-stream','buffer':xlsx_fixture()},
+          {'name':'batch.png','mimeType':'image/png','buffer':image_data.getvalue()}
         ])
-        async with page.expect_download(timeout=45000) as batch_event:
+        async with page.expect_download(timeout=105000) as batch_event:
           await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
         bundle=await batch_event.value
         assert bundle.suggested_filename=='multimodal-translated-batch.zip'
         with zipfile.ZipFile(await bundle.path()) as pack:
           names=pack.namelist()
-          assert len(names)==3,names
+          assert len(names)==4,names
           for part,entry,expected in [
             ('translated/01-batch-translated.docx','word/document.xml','译文:My finance DOCX document'),
             ('translated/02-batch-translated.pptx','ppt/slides/slide1.xml','译文:Strategic planning presentation'),
@@ -206,7 +211,10 @@ async def main():
           ]:
             with zipfile.ZipFile(io.BytesIO(pack.read(part))) as inner:
               assert expected in inner.read(entry).decode('utf8')
+          with Image.open(io.BytesIO(pack.read('translated/04-batch-translated.png'))) as raster:
+            assert raster.format=='PNG' and raster.width>image_batch.width
           report['office_batch_zip']='pass'
+          report['image_batch_zip']='pass'
         print('WXT MIXED OFFICE BATCH ZIP: PASS',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
