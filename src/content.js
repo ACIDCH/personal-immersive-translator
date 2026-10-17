@@ -67,6 +67,57 @@
     document.documentElement.append(el);
     setTimeout(()=>el.remove(),5000);
   }
+  function speakText(value){
+    if(!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window)){
+      toast('当前浏览器未提供系统语音朗读功能');return;
+    }
+    const spoken=new SpeechSynthesisUtterance(String(value||'').slice(0,3000));
+    spoken.lang=document.documentElement.lang||navigator.language||'en-US';
+    spoken.rate=1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(spoken);
+  }
+  function showSelectionCard(source,translated,status='已翻译'){
+    document.querySelector('.pit-selection-card')?.remove();
+    const region=document.createElement('section');
+    region.className='pit-selection-card';
+    region.setAttribute('role','dialog');
+    region.setAttribute('aria-label','PIT 划词翻译');
+    const bar=document.createElement('div');
+    bar.className='pit-selection-toolbar';
+    const title=document.createElement('strong');
+    title.textContent='PIT · '+status;
+    bar.append(title);
+    function action(label,callback){
+      const button=document.createElement('button');
+      button.type='button';button.textContent=label;
+      button.addEventListener('click',callback);bar.append(button);
+      return button;
+    }
+    action('复制',()=>{void navigator.clipboard?.writeText(translated).catch(()=>
+      toast('复制失败，请手动选中译文'));});
+    action('朗读',()=>speakText(translated));
+    action('关闭',()=>region.remove());
+    const original=document.createElement('p');
+    original.className='pit-selection-original';
+    original.textContent=source;
+    const translation=document.createElement('p');
+    translation.className='pit-selection-translated';
+    translation.textContent=translated;
+    region.append(bar,original,translation);
+    document.documentElement.append(region);
+  }
+  async function translateSelectionText(text,requestedMode){
+    const source=String(text||'').trim();
+    if(!source||source.length>5000){toast('划词翻译限 1–5000 字符');return;}
+    showSelectionCard(source,'正在翻译…','处理中');
+    try{
+      const response=await request([source],requestedMode,'');
+      // Don't overwrite a newer selection panel with a stale response.
+      if(document.querySelector('.pit-selection-card .pit-selection-original')?.textContent===source)
+        showSelectionCard(source,response[0]);
+    }catch(error){showSelectionCard(source,'失败：'+String(error.message||error));}
+  }
   function translatable(el,original){
     // Avoid numeric-only UI counters while retaining short article headings
     // and normal CJK text. The former 12-character minimum discarded a large
@@ -234,6 +285,7 @@
         node.classList.remove('pit-source-block','pit-original-concealed'));
     }
     document.querySelectorAll('.pit-toast').forEach(node=>node.remove());
+    document.querySelector('.pit-selection-card')?.remove();
     processed=new WeakMap();aiCount=0;standardSpent=0;standardBudget=STANDARD_STEP;
     failedBatches=0;succeededBatches=0;lastError='';
   }
@@ -266,8 +318,7 @@
     if(!text || text.length>5000){toast('请选中 1–5000 字符的正文');return;}
     const anchor=selection.anchorNode?.parentElement;
     if(anchor && isUnsafe(anchor)){toast('无法翻译编辑框或受保护区域');return;}
-    try{const result=await request([text],requestedMode,'');toast(result[0]);}
-    catch(error){toast('翻译失败：'+String(error.message||error));}
+    await translateSelectionText(text,requestedMode);
   }
   // Opt-in paragraph hover, only after an explicit Shift+pointer gesture.
   // Passwords, forms, buttons, code and hidden page sections stay excluded.
@@ -355,6 +406,14 @@
       reply({ok:true});
     }else if(message?.type==='PIT_CONTINUE'){
       reply({ok:false,reason:'请先开启标准网页翻译，才能继续翻译后续段落。'});
+    }else if(message?.type==='PIT_SELECTION_CONTEXT'){
+      // Right-click originates from Chrome's context menu, not from page JS.
+      const text=String(message.text||'').slice(0,5000);
+      void translateSelectionText(text,'standard');
+      reply({ok:true});
+    }else if(message?.type==='PIT_SPEAK_SELECTION'){
+      speakText(String(message.text||'').slice(0,3000));
+      reply({ok:true});
     }else if(message?.type==='PIT_SET_DISPLAY'){
       setDisplay(message.display,message.theme);
       reply({ok:true,display,theme});
