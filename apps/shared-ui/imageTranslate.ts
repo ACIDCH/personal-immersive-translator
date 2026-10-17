@@ -67,7 +67,7 @@ export function ocrLinesFromBlocks(blocks:unknown):OcrRegion[]{
     for(const paragraph of paragraphs.slice(0,150)){
       if(!Array.isArray(paragraph?.lines))continue;
       for(const line of paragraph.lines.slice(0,150)){
-        const text=String(line?.text||'').trim().replace(/\\s+/g,' ');
+        const text=String(line?.text||'').trim().replace(/\s+/g,' ');
         const bbox=line?.bbox;
         if(!text||text.length>4500||!bbox)continue;
         const {x0,y0,x1,y1}=bbox;
