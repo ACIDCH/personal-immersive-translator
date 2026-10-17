@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>PIT · 个人沉浸式翻译</title>
+<link rel="stylesheet" href="home.css"></head>
+<body class="pit-shell" data-view="popup">
+<div class="shell">
+<header class="topbar">
+  <div class="brand">
+    <img src="icons/icon48.png" alt="" width="42" height="42">
+    <div><div class="brand-name">PIT <span>TRANSLATE</span></div>
+      <div class="brand-note">PERSONAL IMMERSIVE TRANSLATOR</div></div>
+  </div>
+  <span class="build-pill">v0.5.0 · DEV</span>
+</header>
+<main>
+ <section class="hero">
+  <div class="eyebrow"><span class="status-dot"></span> 专属浏览器翻译工作台</div>
+  <h1>从网页到视频，<br><span>一个入口。</span></h1>
+  <p>网页双语翻译采用 KISS 引擎；字幕、语音、PDF/OCR 与一键诊断由 PIT 独立模块提供。</p>
+  <div class="target"><span class="target-mark">◎</span>
+    <span id="targetTab" class="target-text">正在检测当前网页…</span>
+    <span id="targetLabel" class="target-label">目标</span></div>
+ </section>
+ <section class="feature-grid" aria-label="PIT 自有功能模块">
+  <button id="webTranslate" class="feature focus-feature" type="button">
+    <span class="feature-icon">文</span><span class="feature-content"><strong>双语网页翻译</strong>
+    <small>原文对照 · KISS 成熟内核</small></span><span class="feature-arrow">↗</span></button>
+  <button id="videoControl" class="feature" type="button">
+    <span class="feature-icon purple">▶</span><span class="feature-content"><strong>视频字幕 / Whisper</strong>
+    <small>逐句字幕 · 本机听译 · SRT / VTT</small></span><span class="feature-arrow">↗</span></button>
+  <button id="fileTools" class="feature" type="button">
+    <span class="feature-icon cyan">▧</span><span class="feature-content"><strong>PDF / 图片 OCR</strong>
+    <small>文档布局 · 图片文字识别</small></span><span class="feature-arrow">↗</span></button>
+  <button id="githubReport" class="feature" type="button">
+    <span class="feature-icon amber">⌁</span><span class="feature-content"><strong>一键诊断并上传 GitHub</strong>
+    <small>检测当前网页 · 自动创建 Issue</small></span><span class="feature-arrow">↗</span></button>
+ </section>
+ <section class="configuration">
+  <div class="section-head"><h2>配置与引擎</h2><span>各模块仍独立配置</span></div>
+  <div class="quick-actions">
+    <button id="pitSettings" type="button"><span>⚙</span> PIT 翻译服务设置</button>
+    <button id="kissSettings" type="button"><span>◇</span> 网页翻译引擎详细设置</button>
+    <button id="openDashboard" type="button"><span>▤</span> 打开完整 PIT 控制台</button>
+  </div>
+ </section>
+ <p id="pitStatus" class="status-line" aria-live="polite" role="status">准备就绪。网页功能需在普通网站标签页中执行。</p>
+</main>
+<footer class="footer"><span>由 PIT 组合 · KISS Translator 2.1.1 (GPL-3.0)</span><span>实验版</span></footer>
+</div>
+<script type="module" src="home.js"></script>
+</body></html>
