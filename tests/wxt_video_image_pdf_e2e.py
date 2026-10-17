@@ -29,6 +29,37 @@ def pdf_fixture():
   pdf.extend(f'trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n'.encode())
   return bytes(pdf)
 
+
+def scanned_pdf_fixture():
+  # Build a real PDF image XObject and xref: it has NO extractable text.
+  # The WXT scanner must actually render its pixels and call Tesseract.
+  picture=Image.new('RGB',(1100,600),'white')
+  draw=ImageDraw.Draw(picture)
+  font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',66)
+  draw.text((40,220),'HELLO WORLD 2026',font=font,fill='black')
+  jpg=io.BytesIO();picture.save(jpg,format='JPEG',quality=95)
+  pixels=jpg.getvalue()
+  stream=b'q 612 0 0 792 0 0 cm /Img Do Q\n'
+  objects=[
+    b'<< /Type /Catalog /Pages 2 0 R >>',
+    b'<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
+    b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Img 5 0 R >> >> >>',
+    b'<< /Length '+str(len(stream)).encode()+b' >>\nstream\n'+stream+b'endstream',
+    b'<< /Type /XObject /Subtype /Image /Width 1100 /Height 600 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+
+      str(len(pixels)).encode()+b' >>\nstream\n'+pixels+b'\nendstream'
+  ]
+  buffer=bytearray(b'%PDF-1.4\n')
+  offsets=[0]
+  for i,obj in enumerate(objects,1):
+    offsets.append(len(buffer))
+    buffer.extend(f'{i} 0 obj\n'.encode()+obj+b'\nendobj\n')
+  start=len(buffer)
+  buffer.extend(f'xref\n0 {len(offsets)}\n0000000000 65535 f \n'.encode())
+  for offset in offsets[1:]:
+    buffer.extend(f'{offset:010} 00000 n \n'.encode())
+  buffer.extend(f'trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n'.encode())
+  return bytes(buffer)
+
 async def main():
   report={'runtime':'actual installed Chrome MV3 WXT','video_cues':'not_run',
     'video_stop':'not_run','ocr_translation_png':'not_run','pdfjs_preview':'not_run'}
@@ -148,6 +179,49 @@ async def main():
         await tools.locator('#pdfPreviewStatus').get_by_text('抽查',exact=False).wait_for(timeout=28000)
         assert await tools.locator('#pdfPreview canvas').count()==1
         report['pdfjs_preview']='pass'
+
+        # Actual WXT scanned PDF OCR -> provider -> raster bilingual PDF, then
+        # reopen the downloaded PDF with the extension's pinned PDF.js.
+        file_laboratory=await ctx.new_page()
+        await file_laboratory.goto(f'chrome-extension://{eid}/file-lab.html')
+        pdf_input=file_laboratory.locator('.pdf-bilingual-lab input[type=file]')
+        for kind,raw_pdf in [('digital',pdf_fixture()),('scanned',scanned_pdf_fixture())]:
+          await pdf_input.set_input_files({
+            'name':kind+'.pdf','mimeType':'application/pdf','buffer':raw_pdf
+          })
+          async with file_laboratory.expect_download(timeout=95000) as exported:
+            await file_laboratory.get_by_role('button',name='翻译并导出双语 PDF').click()
+          download=await exported.value
+          assert download.suggested_filename==kind+'-bilingual.pdf'
+          output=Path(await download.path()).read_bytes()
+          assert output.startswith(b'%PDF-')
+          assert len(output)>900
+          decoded=base64.b64encode(output).decode()
+          result=await file_laboratory.evaluate("""async(value)=>{
+            const raw=atob(value);
+            const data=new Uint8Array(raw.length);
+            for(let i=0;i<raw.length;i++)data[i]=raw.charCodeAt(i);
+            const pdfjs=await import(chrome.runtime.getURL('vendor/pdf.mjs'));
+            pdfjs.GlobalWorkerOptions.workerSrc=chrome.runtime.getURL('vendor/pdf.worker.mjs');
+            const task=pdfjs.getDocument({data,isEvalSupported:false});
+            try{
+              const document=await task.promise;
+              const page=await document.getPage(1);
+              const viewport=page.getViewport({scale:0.25});
+              const canvas=document.createElement('canvas');
+              canvas.width=Math.ceil(viewport.width);
+              canvas.height=Math.ceil(viewport.height);
+              await page.render({canvas,canvasContext:canvas.getContext('2d'),viewport}).promise;
+              return {pages:document.numPages,width:canvas.width,height:canvas.height};
+            }finally{await task.destroy();}
+          }""",decoded)
+          assert result['pages']==1 and result['width']>200 and result['height']>100,result
+          notice=await file_laboratory.locator('.pdf-bilingual-lab p[aria-live=polite]').inner_text()
+          if kind=='digital':assert '使用 OCR 0 页' in notice,notice
+          else:assert '使用 OCR 1 页' in notice,notice
+          report['pdf_'+kind+'_translation']='pass'
+          print('WXT '+kind.upper()+' PDF OCR/TRANSLATION/REOPEN: PASS',flush=True)
+        await file_laboratory.close()
         report['mock_translation_requests']=await sw.evaluate('()=>globalThis.__videoImageCalls')
         assert report['mock_translation_requests']>=2
         print('WXT REAL PDF.JS READER: PASS',flush=True)
