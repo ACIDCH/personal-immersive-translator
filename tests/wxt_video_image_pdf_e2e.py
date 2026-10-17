@@ -10,7 +10,7 @@ EXT=Path(__file__).resolve().parents[1]/'apps/wxt-ui/.output/chrome-mv3'
 VIDEO_URL='https://example.org/pit-video-fixture'
 def pdf_fixture():
   # A genuine 1-page PDF file with correct xref and Helvetica text.
-  stream=b'BT /F1 16 Tf 80 715 Td (Academic PDF Preview 2026) Tj ET\n'
+  stream=b'BT /F1 16 Tf 80 715 Td (Academic PDF Preview 2026 with selectable original text and multiple course finance concepts) Tj ET\n'
   objs=[
     b'<< /Type /Catalog /Pages 2 0 R >>',
     b'<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
