@@ -1,4 +1,4 @@
-"""Read French + Simplified Chinese fixture PNGs in installed Chrome MV3.
+"""Read French, Chinese, Japanese and Korean fixture PNGs in installed Chrome MV3.
 
 Real local Tesseract WASM, independently downloaded language data. Do not call
 this a language-quality pass unless the recognized text passes each threshold.
@@ -12,6 +12,8 @@ EXT=Path(__file__).resolve().parents[1]/'apps/wxt-ui/.output/chrome-mv3'
 SAMPLES=[
   ('fra','BONJOUR PARIS ÉTÉ 2026','/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',49),
   ('chi_sim','中文翻译测试','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',73),
+  ('jpn','東京の学校','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',72),
+  ('kor','한국어 번역 테스트','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',66),
 ]
 def png(text,font_name,size):
   image=Image.new('RGB',(1200,170),'white')
@@ -51,8 +53,12 @@ async def main():
             result['recognized']=recognized[:100]
             if lang=='fra':
               result['status']='pass' if 'BONJOUR' in normalized and 'PARIS' in normalized and '2026' in normalized else 'recognition_mismatch'
-            else:
+            elif lang=='chi_sim':
               result['status']='pass' if '中文翻译测试' in normalized else 'recognition_mismatch'
+            elif lang=='jpn':
+              result['status']='pass' if '東京' in normalized and '学校' in normalized else 'recognition_mismatch'
+            else:
+              result['status']='pass' if '한국어' in normalized and '번역' in normalized and '테스트' in normalized else 'recognition_mismatch'
             if not recognized:
               result['status']='model_or_worker_error'
               result['error']=(await page.locator('p[aria-live=polite]').inner_text())[:180]
