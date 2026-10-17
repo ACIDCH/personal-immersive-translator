@@ -11,6 +11,8 @@ const rootCss='pit-native.css';
 
 export function NativeWebControls(){
  const [mode,setMode]=useState<Mode>('standard');
+ const [captionFile,setCaptionFile]=useState<File|null>(null);
+ const [captionBusy,setCaptionBusy]=useState(false);
  const [status,setStatus]=useState('打开普通网页后点击翻译。');
  const [progress,setProgress]=useState<Progress|null>(null);
  const [working,setWorking]=useState(false);
@@ -87,6 +89,82 @@ export function NativeWebControls(){
      setStatus('授权失败：'+String(error instanceof Error?error.message:error));
    }
  }
+ async function captions(action:'start'|'stop'){
+   if(captionBusy)return;
+   if(action==='start' && mode==='ai' &&
+      !window.confirm('连续视频字幕将调用自选 AI，可能产生 API 费用。确认启动？'))return;
+   setCaptionBusy(true);
+   setStatus('正在检测可访问的视频及字幕…');
+   try{
+     const [tab]=await browser.tabs.query({active:true,currentWindow:true});
+     if(!tab?.id||!/^https?:\/\//.test(tab.url||''))throw Error('请打开视频所在的普通网页');
+     const tabId=tab.id;
+     const sessionKey='pit_caption_frame_'+tabId;
+     const former=await browser.storage.session.get(sessionKey);
+     const prior=former[sessionKey];
+     if(action==='stop'){
+       await browser.tabs.sendMessage(tabId,{type:'PIT_CAPTIONS_STOP'},{frameId:0}).catch(()=>{});
+       if(Number.isInteger(prior)&&prior>0)
+         await browser.tabs.sendMessage(tabId,{type:'PIT_CAPTIONS_STOP'},{frameId:prior}).catch(()=>{});
+       await browser.storage.session.remove(sessionKey);
+       setStatus('字幕观察已停止');
+       return;
+     }
+     if(Number.isInteger(prior)&&prior>0)
+       await browser.tabs.sendMessage(tabId,{type:'PIT_CAPTIONS_STOP'},{frameId:prior}).catch(()=>{});
+     await browser.storage.session.remove(sessionKey);
+     const scripts=['pit-caption-core.js','pit-platform-captions.js','pit-subtitles.js'];
+     const target={tabId,frameIds:[0]};
+     await browser.scripting.insertCSS({target,files:[rootCss]});
+     await browser.scripting.executeScript({target,files:scripts as never});
+     // The upstream file parser is intentionally used, not an unrelated parser.
+     let cues:unknown[]|undefined;
+     if(captionFile){
+       if(captionFile.size>2_000_000)throw Error('字幕文件超过 2 MiB');
+       await browser.scripting.executeScript({target:{tabId},files:['pit-subtitle-import.js' as never]});
+       const raw=await captionFile.text();
+       const parsed=await browser.scripting.executeScript({target,func:(source:string)=>{
+         const parser=(globalThis as unknown as {PITSubtitleImport?:{parseSubtitles:(s:string)=>unknown[]}}).PITSubtitleImport;
+         return parser?.parseSubtitles(source)||[];
+       },args:[raw]});
+       cues=parsed[0]?.result as unknown[];
+       if(!cues?.length)throw Error('SRT/VTT 文件没有可用的时间轴');
+     }
+     let response=await browser.tabs.sendMessage(tabId,
+       {type:'PIT_CAPTIONS_START',mode,cues},{frameId:0});
+     if(!response?.ok&&!cues?.length){
+       // For user-visible iframe players, only choose an exact HTTPS
+       // YouTube/Panopto iframe whose URL matches Chrome navigation frames.
+       const visible=await browser.scripting.executeScript({target,func:()=>{
+         return [...document.querySelectorAll('iframe')].filter(el=>{
+           const rect=el.getBoundingClientRect();
+           return rect.width>=240&&rect.height>=120 &&getComputedStyle(el).visibility!=='hidden';
+         }).map(el=>el.src).filter(Boolean).slice(0,20);
+       }});
+       const known=(visible[0]?.result||[]) as string[];
+       const frames=await browser.webNavigation.getAllFrames({tabId});
+       const allowed=(url:string)=>{try{
+         const u=new URL(url);u.hash='';
+         return u.protocol==='https:' &&
+           (/(^|\\.)(youtube\\.com|youtube-nocookie\\.com|panopto\\.com|panopto\\.eu)$/i.test(u.hostname))?
+           u.href:null;
+       }catch{return null;}};
+       const matches=(frames||[]).filter(f=>f.frameId>0 &&
+         known.some(url=>allowed(url)!==null&&allowed(url)===allowed(f.url)));
+       if(matches.length!==1)throw Error(response?.reason||'找不到唯一且可见的受支持视频播放器；请在原视频网站打开播放页');
+       const frame=matches[0];
+       const embedded={tabId,frameIds:[frame.frameId]};
+       await browser.scripting.insertCSS({target:embedded,files:[rootCss]});
+       await browser.scripting.executeScript({target:embedded,files:scripts as never});
+       response=await browser.tabs.sendMessage(tabId,
+         {type:'PIT_CAPTIONS_START',mode,expectedUrl:allowed(frame.url)},{frameId:frame.frameId});
+       if(response?.ok)await browser.storage.session.set({[sessionKey]:frame.frameId});
+     }
+     if(!response?.ok)throw Error(response?.reason||'当前播放器没有可读取字幕轨或可见原文字幕');
+     setStatus(response.reason||'视频字幕翻译已开启');
+   }catch(error){setStatus('字幕翻译失败：'+String(error instanceof Error?error.message:error));}
+   finally{setCaptionBusy(false);}
+ }
  return <div className="native-web">
    <div className="native-modes" role="group" aria-label="翻译模式">
      <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
@@ -99,6 +177,11 @@ export function NativeWebControls(){
      <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
      <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
      <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>打开本地 DOCX / 图片 OCR 实验台</button>
+     <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
+     <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
+     <label>可选：导入 SRT / VTT（限 2 MiB）
+       <input type="file" accept=".srt,.vtt,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
+     </label>
    </div>
    {siteAccessNeeded&&<button type="button" className="grant-site" onClick={()=>void authorizeCurrentSite()}>允许当前网站翻译</button>}
    {progress&&<p role="status" className="native-progress">正文覆盖 {progress.translated}/{progress.eligible}
@@ -107,6 +190,6 @@ export function NativeWebControls(){
     {progress.busy?' · 处理中':''}{progress.lastError?' · '+progress.lastError:''}
    </p>}
    <p role="status" aria-live="polite" className="native-status">{status}</p>
-   <p className="native-hint">本构建仅验证原生网页翻译接入。视频、图片、PDF 功能尚未迁入 WXT。</p>
+   <p className="native-hint">原生网页翻译、已获授权的字幕轨、DOCX 与图片 OCR 均可使用；字幕需视频提供可访问的原文轨或可见字幕，不能绕过 DRM。高保真 PDF 和复杂图像重绘仍需独立处理。</p>
  </div>;
 }
