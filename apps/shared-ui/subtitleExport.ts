@@ -1,18 +1,23 @@
 export type TimedCue={start:number;end:number;text:string};
 function parseTime(value:string):number{
- const parts=value.trim().replace(',','.').split(':').map(Number);
+ const cleaned=value.trim();
+ if(!/^(?:\d{1,3}:)?\d{2}:\d{2}[,.]\d{1,3}$/.test(cleaned))return NaN;
+ const parts=cleaned.replace(',','.').split(':').map(Number);
  if(parts.length<2||parts.length>3||parts.some(v=>!Number.isFinite(v)))return NaN;
+ if(parts.at(-2)!>59||parts.at(-1)!>=60)return NaN;
  const [h,m,s]=parts.length===3?parts:[0,...parts];
  return h*3600+m*60+s;
 }
 export function parseSubtitleFile(raw:string):TimedCue[]{
  if(raw.length>2_000_000)throw Error('字幕文件不得超过 2MB');
- const value=raw.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').replace(/^WEBVTT[^\n]*\n/,'');
+ const normalized=raw.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+ const value=normalized.replace(/^WEBVTT[^\n]*(?:\n|$)/,'');
  const cues:TimedCue[]=[];
  for(const block of value.split(/\n\s*\n/)){
    const lines=block.trim().split('\n');
+   if(/^(NOTE|STYLE|REGION)(?:[ \t]|$)/.test(lines[0]||''))continue;
    const index=lines.findIndex(l=>l.includes('-->'));
-   if(index<0)continue;
+   if(index<0||index>1)continue;
    const match=lines[index].match(/^\s*([\d:,.]+)\s*-->\s*([\d:,.]+)/);
    if(!match)continue;
    const start=parseTime(match[1]),end=parseTime(match[2]);
