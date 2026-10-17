@@ -12,6 +12,7 @@ on:
       - 'tests/ai-profiles.test.js'
       - '.github/workflows/multimodal-ui.yml'
       - 'tests/wxt_native_web_e2e.py'
+      - 'tests/wxt_web_coverage_matrix_e2e.py'
   workflow_dispatch:
 
 permissions:
@@ -100,3 +101,13 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Test real React + PIT web translation in installed MV3
         run: python tests/wxt_native_web_e2e.py
+      - name: Test editorial coverage, dynamic DOM, HTTP 429 and manual recovery
+        run: python tests/wxt_web_coverage_matrix_e2e.py
+      - name: Archive machine-readable browser coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multimodal-web-coverage-matrix
+          path: wxt-web-coverage-report.json
+          if-no-files-found: ignore
+          retention-days: 7
