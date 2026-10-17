@@ -18,7 +18,11 @@ const copies=[
  ['lib/settings.js','lib/settings.js'],
  ['lib/providers.js','lib/providers.js'],
  ['lib/cache.js','lib/cache.js'],
- ['lib/ai-profiles.js','lib/ai-profiles.js']
+ ['lib/ai-profiles.js','lib/ai-profiles.js'],
+ ['lib/caption-core.js','pit-caption-core.js'],
+ ['lib/platform-captions.js','pit-platform-captions.js'],
+ ['lib/subtitle-import.js','pit-subtitle-import.js'],
+ ['subtitles.js','pit-subtitles.js']
 ];
 for(const [src,dst] of copies){
  const path=join(source,src);
