@@ -1,5 +1,5 @@
 import {translateBatch, TranslationError} from './lib/providers.js';
-import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS} from './lib/settings.js';
+import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS, isStandardServiceConfigured} from './lib/settings.js';
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -204,7 +204,8 @@ async function handle(message, sender) {
       inputTranslate:settings.inputTranslate,inputTarget:settings.inputTarget,
       autoTranslateHosts:settings.autoTranslateHosts,
       // No API keys or provider auth tokens are returned to content scripts.
-      blockedHosts:settings.blockedHosts
+      blockedHosts:settings.blockedHosts,
+      standardReady:isStandardServiceConfigured(settings)
     }};
   }
   if (message.type === 'GET_SETTINGS') {
