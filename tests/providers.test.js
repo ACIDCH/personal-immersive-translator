@@ -98,3 +98,27 @@ test('hosted PIT M2M100 adapter uses user-configured HTTPS and bearer token',asy
    ...config,provider:'cloud',cloudEndpoint:'http://pit.example',
    cloudToken:'123456789abcdefghi'},fetcher),/HTTPS/);
 });
+
+test('immersive reading settings keep validated controls and never opt in to AI',()=>{
+ const settings=normalizeSettings({
+   webDisplay:'translation-only',webScope:'full',translationTheme:'highlight',
+   hoverTranslate:true,inputTranslate:true,inputTarget:'fr',
+   autoTranslateHosts:'docs.example.org',autoAI:true
+ });
+ assert.equal(settings.webDisplay,'translation-only');
+ assert.equal(settings.webScope,'full');
+ assert.equal(settings.translationTheme,'highlight');
+ assert.equal(settings.hoverTranslate,true);
+ assert.equal(settings.inputTranslate,true);
+ assert.equal(settings.inputTarget,'fr');
+ assert.equal(settings.autoTranslateHosts,'docs.example.org');
+ assert.equal(settings.autoAI,false);
+ const invalid=normalizeSettings({
+   webDisplay:'script',webScope:'everything',translationTheme:'rainbow',
+   inputTarget:'unknown'
+ });
+ assert.equal(invalid.webDisplay,'bilingual');
+ assert.equal(invalid.webScope,'smart');
+ assert.equal(invalid.translationTheme,'subtle');
+ assert.equal(invalid.inputTarget,'en');
+});
