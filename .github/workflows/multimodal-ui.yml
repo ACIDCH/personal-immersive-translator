@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'apps/**'
+      - 'cloudflare/multimodal-api/**'
       - 'src/lib/ai-profiles.js'
       - 'src/lib/providers.js'
       - 'src/lib/settings.js'
@@ -28,8 +29,11 @@ jobs:
           node --check src/lib/ai-profiles.js
           node --check src/lib/providers.js
           node --check src/options.js
-      - name: Universal AI profile tests
-        run: node --test tests/ai-profiles.test.js
+      - name: Universal AI profile and Worker contracts
+        run: |
+          node --test tests/ai-profiles.test.js
+          node --check cloudflare/multimodal-api/src/index.mjs
+          node --test cloudflare/multimodal-api/test/*.test.mjs
 
   ui-build:
     runs-on: ubuntu-latest
