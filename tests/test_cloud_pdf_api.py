@@ -20,7 +20,15 @@ def fixture(text="Financial networks and economic policy",pages=13):
     doc=fitz.open()
     for i in range(pages):
         page=doc.new_page()
-        page.insert_text((55,85),text+" number "+str(i))
+        if any(ord(ch)>127 for ch in text):
+            from pathlib import Path
+            font=Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
+            if not font.exists():
+                raise unittest.SkipTest("Actual CJK source text font not available")
+            page.insert_font(fontname="NotoCJK",fontfile=str(font))
+            page.insert_text((55,85),text+" number "+str(i),fontname="NotoCJK")
+        else:
+            page.insert_text((55,85),text+" number "+str(i))
     raw=doc.tobytes()
     doc.close()
     return raw
