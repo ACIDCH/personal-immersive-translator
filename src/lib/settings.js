@@ -71,3 +71,29 @@ export function hostIsBlocked(hostname, blockedHosts = '') {
     return host === rule || host.endsWith('.' + rule);
   });
 }
+
+/** Portable settings contain no API credentials, private service URLs,
+ * provider profiles, cache entries or conversation/translation history.
+ * Import only enumerated preferences and require a normal Save action.
+ */
+export const PORTABLE_PREF_KEYS=Object.freeze([
+ 'target','source','standardProvider','aiProvider','contextAI',
+ 'webDisplay','webScope','translationTheme','hoverTranslate','inputTranslate',
+ 'floatingControl','inputTarget','autoTranslateHosts','blockedHosts','glossary'
+]);
+export function portablePreferences(value={}){
+ const settings=normalizeSettings(value);
+ return {kind:'pit-preferences',version:1,
+  settings:Object.fromEntries(PORTABLE_PREF_KEYS.map(key=>[key,settings[key]]))};
+}
+export function applyPortablePreferences(current,data){
+ if(!data||typeof data!=='object'||Array.isArray(data)||
+    data.kind!=='pit-preferences'||data.version!==1||
+    !data.settings||typeof data.settings!=='object'||
+    Array.isArray(data.settings))throw Error('不是受支持的 PIT 偏好设置备份');
+ const imported={};
+ for(const key of PORTABLE_PREF_KEYS){
+  if(Object.hasOwn(data.settings,key))imported[key]=data.settings[key];
+ }
+ return normalizeSettings({...normalizeSettings(current),...imported});
+}
