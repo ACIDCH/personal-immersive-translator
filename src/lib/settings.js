@@ -7,8 +7,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   cloudToken: '',
   cloudPdfEndpoint: '',
   cloudPdfToken: '',
-  cloudPdfEndpoint: '',
-  cloudPdfToken: '',
   aiProvider: 'gemini',
   autoAI: false,
   contextAI: true,
@@ -26,7 +24,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   aiProfiles: [],
   activeAIProfileId: '',
   glossary: '',
-  blockedHosts: ''
+  blockedHosts: '',
+  webDisplay: 'bilingual',
+  webScope: 'smart',
+  hoverTranslate: false,
+  inputTranslate: false,
+  inputTarget: 'en',
+  autoTranslateHosts: '',
+  translationTheme: 'subtle'
 });
 export const STANDARD_PROVIDERS = ['cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
@@ -46,6 +51,13 @@ export function normalizeSettings(value = {}) {
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
+  if (!['bilingual','translation-only'].includes(clean.webDisplay)) clean.webDisplay='bilingual';
+  if (!['smart','full'].includes(clean.webScope)) clean.webScope='smart';
+  if (!['subtle','underline','highlight'].includes(clean.translationTheme)) clean.translationTheme='subtle';
+  if (!LANGUAGES.includes(clean.inputTarget)) clean.inputTarget='en';
+  clean.hoverTranslate=Boolean(clean.hoverTranslate);
+  clean.inputTranslate=Boolean(clean.inputTranslate);
+  clean.autoTranslateHosts=typeof clean.autoTranslateHosts==='string'?clean.autoTranslateHosts.slice(0,4000):'';
   clean.autoAI = false;
   clean.contextAI = Boolean(clean.contextAI);
   return clean;
