@@ -87,7 +87,7 @@
   function candidates() {
     const result=[];
     for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
-      if(!el.isConnected || isUnsafe(el) || !el.getClientRects().length)continue;
+      if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
       const record=processed.get(el);
@@ -106,7 +106,7 @@
   function coverage() {
     let eligible=0,translated=0;
     for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
-      if(!el.isConnected || isUnsafe(el) || !el.getClientRects().length)continue;
+      if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
       if(!translatable(el,original))continue;
