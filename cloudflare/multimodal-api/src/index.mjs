@@ -15,7 +15,7 @@ export function detectSource(text){
  const count=re=>(s.match(re)||[]).length;
  const cjk=count(/[\u3400-\u9fff]/g),kana=count(/[\u3040-\u30ff]/g),hangul=count(/[\uac00-\ud7af]/g);
  if(hangul>=2&&hangul>kana)return {language:'ko',confidence:'script'};
- if(kana>=2)return {language:'ja',confidence:'script'};
+ if(kana>=1)return {language:'ja',confidence:'script'};
  if(cjk>=2)return {language:'zh',confidence:'script'};
  return {language:'en',confidence:'latin-fallback-unverified'};
 }
