@@ -23,7 +23,7 @@
 <label>DeepL 账户层级<select name="deeplPlan"><option value="free">Free API</option><option value="pro">Pro API</option></select></label>
 <label>LibreTranslate 服务器地址（HTTPS）<input name="libreUrl" type="url" placeholder="https://your-translator.example"></label>
 <label>LibreTranslate 可选 API Key<input name="libreKey" type="password" autocomplete="off"></label></section>
-<section id="aiKeys" class="panel"><h2>AI 翻译凭据</h2><p class="muted">不会自动调用 AI，也不会将密钥保存到 GitHub 或 Google Drive。</p>
+<section class="panel" id="cloudPdfSettings"><h2>云端 PDF 翻译服务</h2><p class="muted">该服务是独立的 BabelDOC 云容器，不是 Worker 地址。尚未部署前不可用；使用云算力与翻译模型可能产生费用。</p><label>云端 PDF HTTPS 地址<input name="cloudPdfEndpoint" type="url" placeholder="https://your-pdf-worker.example"></label><label>PDF 云端访问令牌<input name="cloudPdfToken" type="password" autocomplete="off"></label></section><section id="aiKeys" class="panel"><h2>AI 翻译凭据</h2><p class="muted">不会自动调用 AI，也不会将密钥保存到 GitHub 或 Google Drive。</p>
 <label>Gemini API Key<input name="geminiKey" type="password" autocomplete="off"></label>
 <label>Gemini 模型名称<input name="geminiModel" type="text" spellcheck="false"></label>
 <label>DeepSeek API Key<input name="deepseekKey" type="password" autocomplete="off"></label>
