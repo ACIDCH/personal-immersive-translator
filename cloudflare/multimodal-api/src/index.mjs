@@ -49,7 +49,8 @@ export default {
    let wav;
    try{wav=new Uint8Array(await request.arrayBuffer());}
    catch{return json({error:'invalid_audio'},400);}
-   if(wav.length<44||wav.length>350000||
+   if(wav.length>350000)return json({error:'audio_too_large'},413);
+   if(wav.length<44||
       String.fromCharCode(...wav.slice(0,4))!=='RIFF'||
       String.fromCharCode(...wav.slice(8,12))!=='WAVE')
     return json({error:'invalid_wav'},400);
