@@ -122,3 +122,9 @@ test('immersive reading settings keep validated controls and never opt in to AI'
  assert.equal(invalid.translationTheme,'subtle');
  assert.equal(invalid.inputTarget,'en');
 });
+
+test('floating translation setting is opt-in and sanitized',()=>{
+ assert.equal(normalizeSettings({}).floatingControl,false);
+ assert.equal(normalizeSettings({floatingControl:true}).floatingControl,true);
+ assert.equal(normalizeSettings({floatingControl:0}).floatingControl,false);
+});
