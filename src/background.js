@@ -200,6 +200,7 @@ async function handle(message, sender) {
     return {preferences:{
       webDisplay:settings.webDisplay,webScope:settings.webScope,
       translationTheme:settings.translationTheme,hoverTranslate:settings.hoverTranslate,
+      floatingControl:settings.floatingControl,
       inputTranslate:settings.inputTranslate,inputTarget:settings.inputTarget,
       autoTranslateHosts:settings.autoTranslateHosts,
       // No API keys or provider auth tokens are returned to content scripts.
