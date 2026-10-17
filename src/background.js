@@ -10,6 +10,29 @@ chrome.runtime.onInstalled.addListener(async () => {
   } catch (error) { console.warn('PIT setup failed', error); }
 });
 chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});
+let freeMtLock=Promise.resolve();
+async function runLimitedFreeMT(texts,run){
+  const task=freeMtLock.then(async()=>{
+    // This local, no-content counter prevents PIT from silently issuing
+    // large numbers of anonymous requests past MyMemory's small daily quota.
+    // It is a soft guard, not a quota guarantee (provider may count other
+    // devices or IP traffic). UTC avoids a client clock ambiguity.
+    const day=new Date().toISOString().slice(0,10);
+    const key='pit_mymemory_usage_'+day;
+    let used=0;
+    try{const info=await chrome.storage.local.get(key);
+      used=Math.max(0,Number(info[key])||0);
+    }catch{}
+    const chars=texts.reduce((total,text)=>total+text.length,0);
+    if(chars+used>4500)throw new TranslationError(
+      '免费翻译接近每日匿名额度，已停止继续发送。请等待次日或切换正式翻译服务',429);
+    const translations=await run();
+    await chrome.storage.local.set({[key]:used+chars}).catch(()=>{});
+    return translations;
+  });
+  freeMtLock=task.catch(()=>{});
+  return task;
+}
 async function getSettings() {
   const item = await chrome.storage.local.get(SETTINGS_KEY);
   return normalizeSettings(item[SETTINGS_KEY]);
@@ -261,7 +284,8 @@ async function handle(message, sender) {
       if(count>=80)throw new TranslationError('本次实时 AI 字幕达到 80 次请求上限，请停止并明确重新启动');
       await chrome.storage.session.set({pit_live_ai_requests:count+1});
     }
-    const translations=await translateBatch(texts,{...settings,provider,source,target,context});
+    const translation=()=>translateBatch(texts,{...settings,provider,source,target,context});
+    const translations=provider==='mymemory'?await runLimitedFreeMT(texts,translation):await translation();
     return {translations,provider,cached:false,transient:true};
   }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
@@ -270,7 +294,11 @@ async function handle(message, sender) {
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
   if (missing.length) {
-    const newly = await translateBatch(missing.map(x=>x.text), {...settings, provider, source,target,context});
+    const requestTexts=missing.map(x=>x.text);
+    const translation=()=>translateBatch(requestTexts,{...settings,provider,source,target,context});
+    const newly=provider==='mymemory'
+      ?await runLimitedFreeMT(requestTexts,translation)
+      :await translation();
     for (let j=0;j<newly.length;j++) {
       const i=missing[j].index;
       values[i]=newly[j];
