@@ -94,7 +94,7 @@ async def main():
         font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',64)
         d.text((30,36),'HELLO WORLD 2026',font=font,fill='black')
         data=io.BytesIO();pic.save(data,format='PNG')
-        await filepage.locator('input[type=file]').set_input_files({
+        await filepage.locator('.document-lab').first.locator('input[type=file]').set_input_files({
           'name':'image-fixture.png','mimeType':'image/png','buffer':data.getvalue()})
         await filepage.get_by_role('button',name='开始本地读取 / 识别').click()
         await filepage.locator('.document-result').get_by_text('HELLO WORLD 2026',exact=False).wait_for(timeout=95000)
