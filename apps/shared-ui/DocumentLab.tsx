@@ -46,7 +46,7 @@ export function DocumentLab(){
   async function process(){
     if(!file||busy)return;
     if(file.size>MAX_BYTES)return setMessage('文件过大（最多 12 MiB）');
-    if(mode!=='ocr'&&!new RegExp('\\\\.'+mode+'
+    if(mode!=='ocr'&&!file.name.toLowerCase().endsWith('.'+mode))return setMessage('文件扩展名与所选格式不一致');
     if(mode==='ocr'&&!/\.(png|jpe?g|webp|bmp)$/i.test(file.name))return setMessage('请选择 PNG/JPG/WEBP/BMP 图片');
     setBusy(true);setText('');setMessage('正在本地处理文件…');
     try{
@@ -164,120 +164,6 @@ export function DocumentLab(){
       <p>Office 文字将发送至你配置的翻译服务，公式、图像等非文本部件保留。<strong>不保证复杂排版、单元格宽度或幻灯片文本框自动适配</strong>。</p>
     </>}
     {!extensionFileLab&&mode!=='ocr'&&<p>在 Chrome 插件「文件处理」页面可以使用翻译并导出功能；网页版仅提供本地读取。</p>}
-    {progress&&<p role="status">{progress}</p>}
-    <p aria-live="polite">{message}</p>
-    {text&&<><h3>提取结果（原文）</h3><pre className="document-result">{text}</pre></>}
-    <small>首次 OCR 会按需下载所选语言数据；WASM 和 Worker 已内置于插件。不会自动调用 AI 或将原文件上传到 Pages。</small>
-  </section>;
-}
-,'i').test(file.name))return setMessage('文件扩展名与所选格式不一致');
-    if(mode==='ocr'&&!/\.(png|jpe?g|webp|bmp)$/i.test(file.name))return setMessage('请选择 PNG/JPG/WEBP/BMP 图片');
-    setBusy(true);setText('');setMessage('正在本地处理文件…');
-    try{
-      if(mode==='docx'){
-        const mammoth=await import('mammoth/mammoth.browser');
-        const result=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
-        const extracted=result.value.trim();
-        setText(extracted);
-        setMessage(extracted?'DOCX 正文已提取。':'没有提取到可识别的 DOCX 正文。');
-      }else{
-        const {createWorker}=await import('tesseract.js');
-        const localPaths=runtime?.id&&runtime.getURL?{
-          workerPath:runtime.getURL('tesseract/worker.min.js'),
-          corePath:runtime.getURL('tesseract/core'),
-          workerBlobURL:false
-        }:undefined;
-        const worker=await createWorker(language,1,localPaths);
-        try{
-          const result=await worker.recognize(file);
-          setText(result.data.text.trim());
-          setMessage('OCR 本地识别结束。尚未执行翻译或图片修补。');
-        }finally{await worker.terminate();}
-      }
-    }catch(e){setMessage('处理失败：'+formatError(e));}
-    finally{setBusy(false);}
-  }
-  async function translateRecognizedImage(){
-    if(mode!=='ocr'||!file||!text.trim()||busy||!extensionFileLab||!runtime?.sendMessage)return;
-    if(translationMode==='ai'&&!confirm('将向自选 AI 模型发送图片识别文本，可能产生 API 费用。确认？'))return;
-    setBusy(true);setMessage('正在使用所选服务翻译识别文字…');
-    try{
-      const {splitOcrLines,bilingualImagePng}=await import('./imageTranslate');
-      const lines=splitOcrLines(text);
-      if(!lines.length)throw Error('没有可翻译的 OCR 文本');
-      const output:string[]=[];
-      for(let i=0;i<lines.length;i+=8){
-        const reply=await runtime.sendMessage({
-          type:'TRANSLATE_DOCUMENT',texts:lines.slice(i,i+8),mode:translationMode,userInitiated:true
-        });
-        if(!reply?.ok||!Array.isArray(reply.translations)||
-           reply.translations.length!==Math.min(8,lines.length-i))
-          throw Error(reply?.error||'OCR 翻译服务没有返回相同数量的译文');
-        output.push(...reply.translations);
-        setProgress('图片文字翻译 '+Math.min(i+8,lines.length)+'/'+lines.length+' 行');
-      }
-      const png=await bilingualImagePng(file,text,output);
-      const url=URL.createObjectURL(png);
-      const link=document.createElement('a');
-      link.href=url;link.download=file.name.replace(/\.[^.]+$/,'')+'-bilingual.png';
-      document.body.append(link);link.click();link.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
-      setMessage('双语图片已导出：左侧原图完全保留，右侧排版展示机器译文。此模式不擦除或修补原图片文字。');
-    }catch(error){setMessage('图片翻译失败：'+formatError(error));}
-    finally{setBusy(false);}
-  }
-  async function translateAndExport(){
-    if(!file||!extensionFileLab||!runtime?.sendMessage||busy||mode!=='docx')return;
-    if(translationMode==='ai'&&!confirm('将使用你选择的 AI 模型翻译 DOCX，可能产生 API 费用。确认开始吗？'))return;
-    setBusy(true);setProgress('准备 DOCX 翻译…');setMessage('翻译由你配置的服务处理；内容将发送给所选服务商。');
-    try{
-      const {translateDocx}=await import('./docxTranslate');
-      const result=await translateDocx(await file.arrayBuffer(),async texts=>{
-        const response=await runtime.sendMessage!({
-          type:'TRANSLATE_DOCUMENT',texts,mode:translationMode,userInitiated:true
-        });
-        if(!response?.ok||!Array.isArray(response.translations))
-          throw Error(response?.error||'翻译后台没有返回有效结果');
-        return response.translations;
-      },(done,total)=>setProgress('翻译进度 '+done+'/'+total+' 段'));
-      const base=file.name.replace(/\.docx$/i,'');
-      downloadFile(result,base+'-translated.docx');
-      setMessage('译文 DOCX 已生成。保留表格、图像和文档结构，但段落内混合字体、复杂排版可能改变；请核对导出文件。');
-    }catch(e){setMessage('DOCX 翻译未完成：'+formatError(e));}
-    finally{setBusy(false);}
-  }
-  return <section className="document-lab">
-    <h2>文件与图片处理</h2>
-    <p>DOCX 内容提取、初步结构保留翻译导出、图片 WASM OCR。复杂学术 PDF 高保真排版属于独立处理模块。</p>
-    <div className="native-modes">
-      <button type="button" aria-pressed={mode==='docx'} onClick={()=>{setMode('docx');setFile(null);setText('');setProgress('');}}>DOCX 文档</button>
-      <button type="button" aria-pressed={mode==='ocr'} onClick={()=>{setMode('ocr');setFile(null);setText('');setProgress('');}}>图片 OCR</button>
-    </div>
-    <label className="document-field">选择{mode==='docx'?' DOCX':'图片'}文件（最多 12 MiB）
-      <input key={mode} type="file" accept={mode==='docx'?'.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document':'image/png,image/jpeg,image/webp,image/bmp'} onChange={onSelect}/>
-    </label>
-    {mode==='ocr'&&<label className="document-field">识别语言
-      <select value={language} onChange={e=>setLanguage(e.target.value as OCRLanguage)}>
-        {Object.entries(languages).map(([id,title])=><option value={id} key={id}>{title}</option>)}
-      </select>
-    </label>}
-    <button type="button" disabled={!file||busy||file.size>MAX_BYTES} onClick={()=>void process()}>{busy?'处理中…':'开始本地读取 / 识别'}</button>
-    {mode==='ocr'&&extensionFileLab&&text.trim()&&<>
-      <div className="native-modes" aria-label="图片文字翻译服务">
-        <button type="button" aria-pressed={translationMode==='standard'} onClick={()=>setTranslationMode('standard')}>常规翻译</button>
-        <button type="button" aria-pressed={translationMode==='ai'} onClick={()=>setTranslationMode('ai')}>自选 AI 精译</button>
-      </div>
-      <button type="button" disabled={busy} onClick={()=>void translateRecognizedImage()}>翻译识别文本并导出双语 PNG</button>
-    </>}
-    {mode==='docx'&&extensionFileLab&&<>
-      <div className="native-modes" aria-label="DOCX 翻译服务">
-        <button type="button" aria-pressed={translationMode==='standard'} onClick={()=>setTranslationMode('standard')}>常规翻译</button>
-        <button type="button" aria-pressed={translationMode==='ai'} onClick={()=>setTranslationMode('ai')}>自选 AI 精译</button>
-      </div>
-      <button type="button" disabled={!file||busy||file.size>MAX_BYTES} onClick={()=>void translateAndExport()}>翻译并导出 DOCX</button>
-      <p>DOCX 内容将发送至你在插件设置中选择的翻译服务。导出保留原文件结构与表格，但<strong>不保证段落内混合字体与复杂排版完全一致</strong>。</p>
-    </>}
-    {!extensionFileLab&&mode==='docx'&&<p>在 Chrome 插件「文件处理」页面可以使用翻译并导出功能；网页版仅提供本地读取。</p>}
     {progress&&<p role="status">{progress}</p>}
     <p aria-live="polite">{message}</p>
     {text&&<><h3>提取结果（原文）</h3><pre className="document-result">{text}</pre></>}
