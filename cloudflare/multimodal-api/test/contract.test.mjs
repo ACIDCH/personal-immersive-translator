@@ -47,7 +47,10 @@ test('distinguishes CJK script auto detection from uncertain Latin text',async()
  assert.deepEqual(detectSource('这是中文金融市场'),{language:'zh',confidence:'script'});
  assert.equal(detectSource('日本語の授業').language,'ja');
  assert.equal(detectSource('한국어 강의').language,'ko');
- assert.equal(detectSource('Bonjour je suis étudiant').confidence,'latin-fallback-unverified');
+ assert.equal(detectSource('Bonjour je suis étudiant').language,'fr');
+ assert.equal(detectSource('Die Wirtschaft und der Markt sind stabil').language,'de');
+ assert.equal(detectSource('Hola las universidades son importantes para estudiantes').language,'es');
+ assert.equal(detectSource('English word').confidence,'latin-fallback-unverified');
  const x=await api.fetch(request('/v1/translate','POST',{
   texts:['Bonjour je suis étudiant'],source:'auto',target:'zh'}),env);
  assert.equal((await x.json()).autoWarning,true);
