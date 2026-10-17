@@ -27,6 +27,17 @@ async def probe_one(context,popup,url):
             return result
         await page.bring_to_front()
         await popup.get_by_role('button',name='翻译当前网页').click()
+        # A directly opened popup test page does not have the same activeTab
+        # grant as an extension toolbar click. Exercise our explicit fallback.
+        await asyncio.sleep(0.5)
+        if await popup.locator('.grant-site').is_visible():
+            result['authorization']='explicit_per_origin'
+            await popup.get_by_role('button',name='允许当前网站翻译').click()
+            grant_status=await popup.locator('.native-status').inner_text()
+            if '已授权' not in grant_status:
+                result['status']='site_access_not_granted'
+                return result
+            await popup.get_by_role('button',name='翻译当前网页').click()
         started=time.monotonic()
         last=None
         while time.monotonic()-started<28:
@@ -45,6 +56,12 @@ async def probe_one(context,popup,url):
                 if last.get("failedBatches",0)>0:
                     result["status"]="engine_or_permission_failure"
                     break
+            # A permission/injection error is actionable, not a timeout.
+            popup_status=await popup.locator('.native-status').inner_text()
+            if popup_status.startswith('操作失败：') or '尚未授权' in popup_status:
+                result["status"]="extension_permission_or_injection_error"
+                result["error_class"]="site_access" if ('权限' in popup_status or 'access' in popup_status.lower() or 'permission' in popup_status.lower()) else "other"
+                break
             await asyncio.sleep(0.9)
         if result["status"]=="unverified":
             result["status"]="timeout_or_no_eligible_blocks"
