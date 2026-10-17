@@ -104,13 +104,20 @@ async function flush(c){
     }
   }
 }
+function isValidCloudAsrUrl(value){
+ try{
+  const url=new URL(value);
+  return url.protocol==='https:'&&!url.username&&!url.password&&
+    !url.search&&!url.hash&&url.pathname.endsWith('/v1/asr');
+ }catch{return false;}
+}
 async function start({streamId,tabId,token,sessionId,asrBackend='local',cloudEndpoint=''}){
   await stop();
   const generation=++epoch;
   if(typeof token!=='string'||token.length<16||!Number.isInteger(tabId)||!streamId ||
      typeof sessionId!=='string'||!/^[0-9a-f-]{36}$/i.test(sessionId)||
      !['local','cloud'].includes(asrBackend)||
-     (asrBackend==='cloud'&&!/^https://[^?#]+/v1/asr$/.test(cloudEndpoint)))
+     (asrBackend==='cloud'&&!isValidCloudAsrUrl(cloudEndpoint)))
     throw Error('本地 ASR 会话参数不完整');
   let stream=null,context=null,c=null;
   try {
