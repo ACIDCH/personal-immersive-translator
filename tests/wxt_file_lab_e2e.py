@@ -5,6 +5,7 @@ import json
 import tempfile
 import time
 import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from PIL import Image,ImageDraw,ImageFont
 from playwright.async_api import async_playwright
@@ -149,10 +150,17 @@ async def main():
           assert origin.read('word/_rels/document.xml.rels')==output.read('word/_rels/document.xml.rels')
           xml=output.read('word/document.xml').decode('utf8')
           header=output.read('word/header1.xml').decode('utf8')
-          assert '译文:Bold financial report overview' in xml,xml[:400]
+          ns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+          doc=ET.fromstring(xml)
+          paragraphs=doc.findall('.//w:p',ns)
+          first_runs=paragraphs[0].findall('.//w:t',ns)
+          assert len(first_runs)==2,xml[:450]
+          assert all((node.text or '').strip() for node in first_runs),'Styled runs should not be discarded'
+          assert ''.join(node.text or '' for node in first_runs)=='译文:Bold financial report overview'
+          assert doc.find('.//w:b',ns) is not None,'Original bold property was lost'
           assert '译文:Annual income table value' in xml,xml[:400]
           assert '译文:Private finance header' in header,header[:400]
-          assert '<w:tbl>' in xml and '<w:b' in xml
+          assert '<w:tbl>' in xml
         report['docx_tables_header_media']='pass'
         print('WXT DOCX COMPLEX STRUCTURE: PASS (table/header/media preserved; inline run format caveat)',flush=True)
         for kind,label,fixture,xml_part,needle,media in [
