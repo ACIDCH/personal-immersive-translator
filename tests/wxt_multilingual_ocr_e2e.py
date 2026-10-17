@@ -38,8 +38,8 @@ async def main():
           result={'language':lang,'expected':original,'status':'pending'}
           t=time.monotonic()
           try:
-            await page.locator('.document-lab select').select_option(lang)
-            await page.locator('.document-lab input[type=file]').set_input_files({
+            await page.locator('.document-lab').first.locator('select').select_option(lang)
+            await page.locator('.document-lab').first.locator('input[type=file]').set_input_files({
               'name':'sample-'+lang+'.png','mimeType':'image/png',
               'buffer':png(original,font,fontsize)})
             await page.get_by_role('button',name='开始本地读取 / 识别').click()
