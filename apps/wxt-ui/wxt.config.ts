@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react';
 // Native PIT web translation runs inside this separate integration build.
 // Media/ASR/OCR remain on the original experimental track and are not claimed.
 export default defineConfig({
+  // Existing PIT JavaScript uses a parameter named storage; disabling
+  // WXT auto-imports prevents an erroneous wxt/utils/storage import.
+  imports:false,
   manifest:{
     name:'多模态翻译 — 网页集成测试',
     short_name:'多模态翻译',
@@ -18,8 +21,12 @@ export default defineConfig({
       'https://generativelanguage.googleapis.com/*',
       'https://api.deepseek.com/*'
     ],
-    optional_host_permissions:['https://*/*'],
-    options_page:'pit-options.html'
+    optional_host_permissions:['https://*/*']
+  },
+  hooks:{
+    'build:manifestGenerated': (_wxt,manifest)=>{
+      manifest.options_page='pit-options.html';
+    }
   },
   vite:()=>({plugins:[react()]})
 });
