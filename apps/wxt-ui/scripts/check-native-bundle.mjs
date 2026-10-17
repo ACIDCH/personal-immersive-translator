@@ -13,8 +13,10 @@ assert.equal(manifest.options_page,'pit-options.html','Functional native options
 assert.equal(manifest.action.default_popup,'popup.html');
 assert.equal(manifest.background.service_worker,'pit-background.js');
 assert.equal(manifest.background.type,'module');
+assert(manifest.content_security_policy?.extension_pages?.includes('wasm-unsafe-eval'),
+  'Packaged Tesseract requires MV3 wasm-unsafe-eval, not remote code');
 for(const f of ['pit-native.js','pit-native.css','pit-options.html','options.js',
-  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','file-lab.html','pit-background.js','popup.html']){
+  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','file-lab.html','tesseract/worker.min.js','tesseract/core/tesseract-core.wasm.js','tesseract/core/tesseract-core-simd.wasm.js','tesseract/core/tesseract-core-lstm.wasm.js','tesseract/core/tesseract-core-simd-lstm.wasm.js','pit-background.js','popup.html']){
   assert(existsSync(join(dist,f)), 'Missing bundled native runtime asset: '+f);
 }
 assert.equal(
