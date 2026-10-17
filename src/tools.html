@@ -17,7 +17,7 @@
 <label>本机服务令牌（仅本页本次使用）<input id="token" type="password" autocomplete="off" placeholder="PIT_BRIDGE_TOKEN"></label>
 <button id="checkLocalEngines" type="button">检查本机 OCR / PDF / Whisper 引擎</button><p id="localEnginesStatus" role="status"></p>
 <button id="pdfTranslate" class="primary">开始高保真翻译并下载 PDF</button>
-<p id="pdfStatus" role="status"></p><p class="muted">本机服务：127.0.0.1:8765。需要 Python、BabelDOC、OCRmyPDF 与独立设置的 DeepSeek API Key。不能使用 Supabase Edge Functions 直接运行这种高内存文档处理任务。</p>
+<p id="pdfStatus" role="status"></p><p class="muted">本机服务：127.0.0.1:8765。需要 Python、BabelDOC、OCRmyPDF 与本机独立配置的兼容 OpenAI 协议的 API Key / 模型地址。不能使用 Supabase Edge Functions 直接运行这种高内存文档处理任务。</p>
 <p><a href="https://github.com/ACIDCH/personal-immersive-translator/blob/feat/initial-video-ocr-pdf-modules/docs/PDF_OCR_SETUP.md" target="_blank" rel="noopener noreferrer">查看 BabelDOC / OCR 安装说明</a></p>
 </section></div>
 </main><script type="module" src="tools.js"></script></body></html>

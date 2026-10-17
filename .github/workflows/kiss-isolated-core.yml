@@ -1,0 +1,71 @@
+name: GPL KISS isolated source build and MV3 smoke
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/upstream/kiss-build-report.mjs'
+      - 'tests/kiss_upstream_mv3_smoke.py'
+      - 'tests/kiss_translation_matrix_e2e.py'
+      - '.github/workflows/kiss-isolated-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: kiss-isolated-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upstream-kiss:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.14.4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch exact GPL-3.0 upstream commit to an isolated workspace
+        run: |
+          mkdir -p upstream/kiss
+          git -C upstream/kiss init -q
+          git -C upstream/kiss remote add origin https://github.com/fishjar/kiss-translator.git
+          git -C upstream/kiss fetch --depth 1 origin 7a7e2957ce2084d374f802b3537f2e0ca87cd7b8
+          git -C upstream/kiss checkout --detach FETCH_HEAD
+          test -f upstream/kiss/LICENSE
+          git -C upstream/kiss rev-parse HEAD
+      - name: Install KISS dependencies using upstream pinned lockfile
+        working-directory: upstream/kiss
+        run: pnpm install --frozen-lockfile
+      - name: Produce real upstream Chrome extension from source
+        working-directory: upstream/kiss
+        run: pnpm run build:chrome
+        env:
+          CI: 'false'
+          NODE_OPTIONS: --max-old-space-size=5120
+      - name: Verify compiled GPL source identity and Chrome MV3 bundle
+        run: node scripts/upstream/kiss-build-report.mjs upstream/kiss
+      - name: Install Chromium for isolated runtime smoke
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Load compiled KISS extension in actual Chromium
+        run: python tests/kiss_upstream_mv3_smoke.py upstream/kiss/build/chrome
+      - name: Execute pinned KISS translation engine on a real Chromium webpage
+        run: python tests/kiss_translation_matrix_e2e.py upstream/kiss/build/chrome
+      - name: Retain only results, not unmodified GPL binaries or source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiss-pinned-build-smoke-report
+          path: |
+            kiss-build-report.json
+            kiss-browser-smoke-report.json
+            kiss-translation-benchmark.json
+          if-no-files-found: ignore
+          retention-days: 7

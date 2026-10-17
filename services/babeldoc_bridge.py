@@ -1,6 +1,6 @@
 """Local-only PDF bridge: OCRmyPDF (if scanned) -> BabelDOC layout-preserving translation.
 
-Set PIT_BRIDGE_TOKEN and DEEPSEEK_API_KEY environment variables. This bridge
+Set PIT_BRIDGE_TOKEN and PIT_PDF_API_KEY/PIT_PDF_MODEL/PIT_PDF_BASE_URL (or legacy DEEPSEEK_API_KEY). This bridge
 must not be exposed to the internet, reverse-proxied or run with elevated rights.
 BabelDOC is AGPL-3.0; use a separately installed, license-compliant release.
 """
@@ -26,6 +26,10 @@ except ModuleNotFoundError:
     from faster_whisper_backend import model_available, model_loaded, transcribe_local
 from PIL import Image, ImageOps, UnidentifiedImageError
 try:
+    from services.pdf_provider_profile import resolve_pdf_provider
+except ModuleNotFoundError:
+    from pdf_provider_profile import resolve_pdf_provider
+try:
     from services.babeldoc_preflight import inspect_babeldoc_cli
 except ModuleNotFoundError:
     from babeldoc_preflight import inspect_babeldoc_cli
@@ -35,7 +39,7 @@ from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
 TOKEN=os.environ.get("PIT_BRIDGE_TOKEN","")
-KEY=os.environ.get("DEEPSEEK_API_KEY","")
+KEY=os.environ.get("PIT_PDF_API_KEY") or os.environ.get("DEEPSEEK_API_KEY","")
 MAX_BYTES=25*1024*1024
 # Never launch two memory-heavy layout/OCR translation jobs simultaneously.
 pdf_lock=asyncio.Lock()
@@ -78,7 +82,7 @@ def scanned_pdf(path):
         raise ValueError("PDF 文件无法解析") from exc
 
 def run_pipeline(source, dest, source_lang, target_lang, ocr):
-    if not KEY: raise RuntimeError("服务端尚未设置 DEEPSEEK_API_KEY")
+    pdf_profile=resolve_pdf_provider({**os.environ,"PIT_PDF_API_KEY":os.environ.get("PIT_PDF_API_KEY") or KEY})
     if not shutil.which("babeldoc"): raise RuntimeError("未安装 BabelDOC CLI")
     input_file=source
     if scanned_pdf(source):
@@ -91,9 +95,9 @@ def run_pipeline(source, dest, source_lang, target_lang, ocr):
         input_file=searchable
     # Save provider credentials in a private temporary file rather than process args.
     config=dest/"babeldoc.toml"
-    settings={"openai":True,"openai-model":"deepseek-chat",
-        "openai-base-url":"https://api.deepseek.com/v1",
-        "openai-api-key":KEY,"lang-in":source_lang,"lang-out":target_lang,
+    settings={"openai":True,"openai-model":pdf_profile["model"],
+        "openai-base-url":pdf_profile["base_url"],
+        "openai-api-key":pdf_profile["api_key"],"lang-in":source_lang,"lang-out":target_lang,
         "output":str(dest),"no-mono":True,"qps":2}
     # The config contains a user-owned API key. Create it as private from
     # the first byte: chmod AFTER writing briefly exposes a mode-0644 file.
