@@ -5,6 +5,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   standardProvider: 'cloud',
   cloudEndpoint: '',
   cloudToken: '',
+  cloudPdfEndpoint: '',
+  cloudPdfToken: '',
   aiProvider: 'gemini',
   autoAI: false,
   contextAI: true,
