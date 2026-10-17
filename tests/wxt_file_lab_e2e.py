@@ -101,6 +101,31 @@ def epub_fixture():
     z.writestr('OEBPS/Images/art.png',b'epub-original-picture-bytes')
   return out.getvalue()
 
+def long_pdf_fixture(pages=13):
+  """Real multi-page PDF bytes with valid cross-reference, no OCR required."""
+  stream=b'BT /F1 14 Tf 48 710 Td (Financial markets and network capacity economics lecture report sample) Tj ET\n'
+  objects=[
+    b'<< /Type /Catalog /Pages 2 0 R >>',
+    b'<< /Type /Pages /Count '+str(pages).encode()+b' /Kids ['+
+      b' '.join(f'{4+2*i} 0 R'.encode() for i in range(pages))+b'] >>',
+    b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  ]
+  for i in range(pages):
+    number=5+2*i
+    objects.append(b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] '+
+      b'/Resources << /Font << /F1 3 0 R >> >> /Contents '+str(number).encode()+b' 0 R >>')
+    objects.append(b'<< /Length '+str(len(stream)).encode()+b' >>\nstream\n'+stream+b'endstream')
+  out=bytearray(b'%PDF-1.4\n')
+  offsets=[0]
+  for idx,obj in enumerate(objects,1):
+    offsets.append(len(out))
+    out.extend(f'{idx} 0 obj\n'.encode()+obj+b'\nendobj\n')
+  start=len(out)
+  out.extend(f'xref\n0 {len(offsets)}\n0000000000 65535 f \n'.encode())
+  for offset in offsets[1:]:out.extend(f'{offset:010} 00000 n \n'.encode())
+  out.extend(f'trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n'.encode())
+  return bytes(out)
+
 async def main():
   report={"application":"installed WXT Chrome MV3 file-lab","docx":"not_run","ocr":"not_run"}
   with tempfile.TemporaryDirectory(prefix="wxt-doc-file-") as profile:
@@ -332,6 +357,29 @@ async def main():
           assert translated=='译文:One more financial note',translated
         report['mixed_pdf_and_text_zip']='pass'
         print('WXT MIXED PDF+TXT BILINGUAL ZIP: PASS',flush=True)
+
+        # 13-page input must no longer fail at the former hard-coded 8-page
+        # limit. It is divided into 12+1-page documents inside nested ZIP.
+        # Also test UTF-16LE with BOM and original CRLF preservation.
+        await page.locator('.batch-file-lab input[type=file]').set_input_files([
+          {'name':'long-finance.pdf','mimeType':'application/pdf',
+           'buffer':long_pdf_fixture(13)},
+          {'name':'utf16-notes.txt','mimeType':'text/plain',
+           'buffer':'Revenue forecast\r\nInvestment returns'.encode('utf-16')}
+        ])
+        async with page.expect_download(timeout=180000) as large_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await large_event.value).path()) as bundle:
+          inner=bundle.read('translated/01-long-finance-translated.zip')
+          with zipfile.ZipFile(io.BytesIO(inner)) as parts:
+            names=[name for name in parts.namelist() if name.endswith('.pdf')]
+            assert len(names)==2,names
+            assert all(parts.read(name).startswith(b'%PDF-') for name in names)
+          utf16=bundle.read('translated/02-utf16-notes-translated.txt')
+          assert utf16[:2]==b'\xff\xfe',utf16[:2]
+          assert utf16.decode('utf-16')=='译文:Revenue forecast\r\n译文:Investment returns'
+        report['pdf_13_pages_and_utf16_bom']='pass'
+        print('WXT 13-PAGE PDF PARTS + UTF-16 BOM CRLF: PASS',flush=True)
 
         # Browser drag/drop must use the identical MIME/size validator and
         # translation pipeline as the multiple-select file picker.
