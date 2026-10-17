@@ -2,6 +2,25 @@ import JSZip from 'jszip';
 import type {BatchTranslate,DocxProgress} from './docxTranslate';
 
 export type OfficeKind='pptx'|'xlsx';
+/** Keep DrawingML style runs independently editable. Paragraph text is
+ * translated as one context unit then distributed proportionally among
+ * existing a:t nodes; semantic emphasis matching still needs alignment.
+ */
+function fillStyledNodes(nodes:Element[],translated:string):void{
+ const lengths=nodes.map(n=>Array.from(n.textContent||'').length);
+ const total=lengths.reduce((a,b)=>a+b,0);
+ if(!total)return;
+ const chars=Array.from(translated);
+ let used=0,sourceOffset=0;
+ for(let i=0;i<nodes.length;i++){
+   sourceOffset+=lengths[i];
+   const end=i===nodes.length-1?chars.length:
+     Math.min(chars.length,Math.max(used,Math.round(chars.length*sourceOffset/total)));
+   nodes[i].textContent=chars.slice(used,end).join('');
+   if(nodes[i].textContent)nodes[i].setAttribute('xml:space','preserve');
+   used=end;
+ }
+}
 type Part={name:string,doc:Document,nodes:Element[][],strings:string[]};
 const MAX_SIZE=12*1024*1024;
 const MAX_XML=15*1024*1024;
@@ -78,9 +97,7 @@ export async function translateOffice(
   const serializer=new XMLSerializer();
   for(const part of parts){
     for(const nodes of part.nodes){
-      nodes[0].textContent=results[offset++];
-      nodes[0].setAttribute('xml:space','preserve');
-      for(const n of nodes.slice(1))n.textContent='';
+      fillStyledNodes(nodes,results[offset++]);
     }
     if(part.nodes.length)zip.file(part.name,serializer.serializeToString(part.doc));
   }
