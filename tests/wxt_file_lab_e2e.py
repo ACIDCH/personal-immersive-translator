@@ -59,6 +59,21 @@ def structured_docx():
     z.writestr('word/media/image1.png',b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOaQSLQAAAAASUVORK5CYII='))
   return out.getvalue()
 
+def pptx_fixture():
+  o=io.BytesIO()
+  with zipfile.ZipFile(o,'w',zipfile.ZIP_DEFLATED) as z:
+    z.writestr('ppt/presentation.xml','<?xml version="1.0"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>')
+    z.writestr('ppt/slides/slide1.xml','<?xml version="1.0"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Strategic planning presentation</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
+    z.writestr('ppt/media/image1.png',b'unchanged-fixture-media')
+  return o.getvalue()
+def xlsx_fixture():
+  o=io.BytesIO()
+  with zipfile.ZipFile(o,'w',zipfile.ZIP_DEFLATED) as z:
+    z.writestr('xl/workbook.xml','<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>')
+    z.writestr('xl/sharedStrings.xml','<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Income and investment</t></si></sst>')
+    z.writestr('xl/worksheets/sheet1.xml','<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>1+2</f><v>3</v></c><c r="C1" t="inlineStr"><is><t>Forecast notes</t></is></c></row></sheetData></worksheet>')
+  return o.getvalue()
+
 async def main():
   report={"application":"installed WXT Chrome MV3 file-lab","docx":"not_run","ocr":"not_run"}
   with tempfile.TemporaryDirectory(prefix="wxt-doc-file-") as profile:
@@ -108,7 +123,7 @@ async def main():
           };
         }""")
         async with page.expect_download(timeout=25000) as download_event:
-          await page.get_by_role('button',name='翻译并导出 DOCX').click()
+          await page.get_by_role('button',name='翻译并导出 Office').click()
         download=await download_event.value
         assert download.suggested_filename=='fixture-translated.docx',download.suggested_filename
         output=await download.path()
@@ -127,7 +142,7 @@ async def main():
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'buffer':source})
         async with page.expect_download(timeout=26000) as event:
-          await page.get_by_role('button',name='翻译并导出 DOCX').click()
+          await page.get_by_role('button',name='翻译并导出 Office').click()
         structured_export=await (await event.value).path()
         with zipfile.ZipFile(io.BytesIO(source)) as origin,zipfile.ZipFile(structured_export) as output:
           assert origin.read('word/media/image1.png')==output.read('word/media/image1.png')
@@ -140,6 +155,29 @@ async def main():
           assert '<w:tbl>' in xml and '<w:b' in xml
         report['docx_tables_header_media']='pass'
         print('WXT DOCX COMPLEX STRUCTURE: PASS (table/header/media preserved; inline run format caveat)',flush=True)
+        for kind,label,fixture,xml_part,needle,media in [
+          ('pptx','PPTX 演示文稿',pptx_fixture(),'ppt/slides/slide1.xml',
+             '译文:Strategic planning presentation','ppt/media/image1.png'),
+          ('xlsx','XLSX 表格',xlsx_fixture(),'xl/sharedStrings.xml',
+             '译文:Income and investment',None)
+        ]:
+          await page.get_by_role('button',name=label).click()
+          await page.locator('.document-lab input[type="file"]').set_input_files({
+            'name':'fixture.'+kind,'mimeType':'application/octet-stream','buffer':fixture})
+          await page.get_by_role('button',name='开始本地读取 / 识别').click()
+          await page.locator('.document-result').wait_for(timeout=16000)
+          async with page.expect_download(timeout=22000) as ev:
+            await page.get_by_role('button',name='翻译并导出 Office').click()
+          saved=await (await ev.value).path()
+          with zipfile.ZipFile(io.BytesIO(fixture)) as original,zipfile.ZipFile(saved) as generated:
+            assert needle in generated.read(xml_part).decode('utf8')
+            if media:assert original.read(media)==generated.read(media)
+            if kind=='xlsx':
+              sheet=generated.read('xl/worksheets/sheet1.xml').decode('utf8')
+              assert '译文:Forecast notes' in sheet
+              assert '<f>1+2</f>' in sheet and '<v>3</v>' in sheet
+          report[kind+'_translation_export']='pass'
+          print('WXT '+kind.upper()+' TRANSLATION + STRUCTURE: PASS',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
