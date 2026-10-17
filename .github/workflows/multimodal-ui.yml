@@ -39,7 +39,7 @@ jobs:
         app: [wxt-ui, portal]
     defaults:
       run:
-        working-directory: apps/${{ matrix.app }}
+        working-directory: apps
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,15 +49,15 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Prepare WXT types
         if: matrix.app == 'wxt-ui'
-        run: npx wxt prepare
+        run: npm exec -w wxt-ui wxt prepare
       - name: TypeScript check
-        run: npm run check
+        run: npm run check --workspace ${{ matrix.app }}
       - name: Build UI artifact
-        run: npm run build
+        run: npm run build --workspace ${{ matrix.app }}
       - name: Confirm output exists
         run: |
           if [ "${{ matrix.app }}" = "wxt-ui" ]; then
-            test -f .output/chrome-mv3/manifest.json
+            test -f wxt-ui/.output/chrome-mv3/manifest.json
           else
-            test -f dist/index.html
+            test -f portal/dist/index.html
           fi
