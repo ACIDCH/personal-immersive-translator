@@ -122,7 +122,7 @@ async def main():
               globalThis.__fileRequestLengths.push(data.length);
               if(globalThis.__delayNextFetch){
                 globalThis.__delayNextFetch=false;
-                await new Promise(resolve=>setTimeout(resolve,1300));
+                await new Promise(resolve=>setTimeout(resolve,3200));
               }
               if(globalThis.__simulateOne429){
                 globalThis.__simulateOne429=false;
@@ -281,7 +281,14 @@ async def main():
         ])
         await sw.evaluate('()=>{globalThis.__delayNextFetch=true}')
         await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
-        await page.get_by_role('button',name='取消批量处理').click()
+        await page.get_by_role('button',name='取消批量处理').wait_for(state='visible',timeout=2500)
+        clicked=await page.evaluate("""()=>{
+          const button=[...document.querySelectorAll('.batch-file-lab button')]
+            .find(b=>b.textContent?.trim()==='取消批量处理');
+          if(!button)return false;
+          button.click();return true;
+        }""")
+        assert clicked,'Cancellation must be available while the task is active'
         await page.locator('.batch-file-lab p[aria-live=polite]').get_by_text('用户已取消',exact=False).wait_for(timeout=12000)
         assert not await page.get_by_role('button',name='取消批量处理').count()
         report['batch_user_cancel']='pass'
