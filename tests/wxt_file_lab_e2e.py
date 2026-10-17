@@ -276,7 +276,7 @@ async def main():
         async with page.expect_download(timeout=55000) as portable_event:
           await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
         with zipfile.ZipFile(await (await portable_event.value).path()) as package:
-          names=set(package.namelist())
+          names={name for name in package.namelist() if not name.endswith('/')}
           assert len(names)==4,names
           with zipfile.ZipFile(io.BytesIO(package.read('translated/01-book-translated.epub'))) as book:
             assert book.namelist()[0]=='mimetype',book.namelist()
