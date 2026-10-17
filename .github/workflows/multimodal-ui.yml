@@ -17,6 +17,7 @@ on:
       - 'tests/portal_real_image_ocr_e2e.py'
       - 'tests/pit_translation_matrix_e2e.py'
       - 'tests/wxt_file_lab_e2e.py'
+      - 'tests/wxt_multilingual_ocr_e2e.py'
   workflow_dispatch:
 
 concurrency:
@@ -172,5 +173,42 @@ jobs:
         with:
           name: multimodal-real-image-ocr
           path: portal-ocr-browser-result.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  multilingual-ocr:
+    # Model language packs arrive over public network; this is a separate
+    # observed quality gate, not disguised as production language support.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build real WXT extension with local executable OCR worker
+        working-directory: apps
+        run: |
+          npm install --no-audit --no-fund
+          npm run build --workspace wxt-ui
+          node wxt-ui/scripts/check-native-bundle.mjs
+      - name: Install French/Chinese font fixture and Chromium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-noto-cjk
+          python -m pip install 'playwright==1.55.0' 'Pillow>=11,<13'
+          python -m playwright install --with-deps chromium
+      - name: Execute French and Simplified Chinese image recognition
+        run: python tests/wxt_multilingual_ocr_e2e.py
+      - name: Archive language recognition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multilingual-ocr-evidence
+          path: wxt-multilingual-ocr-report.json
           if-no-files-found: ignore
           retention-days: 7
