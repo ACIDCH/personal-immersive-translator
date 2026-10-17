@@ -19,7 +19,9 @@ export function inspectMediaFrame(){
     '.ytp-caption-segment',
     '.player-timedtext [data-uia="subtitle-text"]',
     '.player-timedtext-text-container',
-    '.captionText','.caption-text','.transcript-text'
+    '.captionText','.caption-text','.transcript-text',
+    // Bilibili player markup may change, these are diagnostics heuristics.
+    '.bpx-player-subtitle-panel-text','.bpx-player-subtitle-content'
   ];
   // Only count matching visible elements, never access their textContent.
   let candidateCount=0;
@@ -53,8 +55,9 @@ export function inspectMediaFrame(){
   };
 }
 
-const CHECKS=['video','sourceCaptions','translatedCaptions','fullscreen','audioAsr'];
-const PLATFORMS=new Set(['O2B','Panopto','YouTube','Netflix','Other']);
+const CHECKS=['video','sourceCaptions','translatedCaptions','fullscreen','audioAsr',
+ 'webTranslation','imageOcr','pdfPreview','pdfLayout'];
+const PLATFORMS=new Set(['O2B','Panopto','YouTube','Bilibili','Miss AV','Netflix','Other']);
 const VERDICTS=new Set(['pass','fail','not-tested']);
 const num=(value,max=999)=>Number.isFinite(Number(value))
   ?Math.max(0,Math.min(max,Math.floor(Number(value)))):0;

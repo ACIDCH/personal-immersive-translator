@@ -32,6 +32,17 @@ async def main():
           popup=await browser.new_page()
           popup.on("pageerror",lambda e:errors.append(str(e)))
           await popup.goto(origin+"/popup.html")
+          display=await popup.evaluate("""()=>{
+            const m=chrome.runtime.getManifest();
+            return {name:m.name,version:m.version,version_name:m.version_name,
+              title:m.action?.default_title,icon:m.icons?.['128']};
+          }""")
+          assert display["name"]=="PIT 沉浸式翻译（测试版）",display
+          assert display["version"]=="2.1.1",display
+          assert display["version_name"]=="PIT v0.4.9 (KISS 2.1.1)",display
+          assert display["title"]=="PIT 沉浸式翻译 · v0.4.9",display
+          assert display["icon"]=="pit/icons/icon128.png",display
+          print("PASS: Chrome extension identity displays PIT brand and KISS core attribution",flush=True)
           await popup.locator("#pit-multimodal-links a").first.wait_for(timeout=10000)
           hrefs=await popup.locator("#pit-multimodal-links a").evaluate_all(
             "(els)=>els.map(el=>el.getAttribute('href'))")
@@ -169,6 +180,52 @@ async def main():
                              "Owned subtitle fixture","local-test-token"):
             assert sensitive not in serialized,sensitive
           print("PASS: opt-in real-site diagnostic report has no URL, captions or credentials",flush=True)
+
+          # Verify ONE CLICK performs a fresh site scan and an actual
+          # issue-creation API call with only whitelist data. This mock is
+          # installed in the trusted extension page itself. There is no
+          # external GitHub request, login or paid API in this CI test.
+          await control.locator("#diagPlatform").select_option("Bilibili")
+          await control.locator("#diagWebTranslation").select_option("fail")
+          await control.locator("#diagImageOcr").select_option("pass")
+          await control.locator("#diagGithubToken").fill(
+            "github_pat_FAKE_ISSUES_ONLY_CI_1234567890")
+          await control.locator("#diagGithubSave").click()
+          await control.locator("#diagGithubStatus").get_by_text(
+            "已配置",exact=False).wait_for(timeout=5000)
+          assert await control.locator("#diagGithubToken").input_value()==""
+          await control.evaluate("""()=>{
+            globalThis.__githubIssuePost=null;
+            globalThis.fetch=async(url,opts)=>{
+              if(url!=='https://api.github.com/repos/ACIDCH/personal-immersive-translator/issues')
+                throw Error('Unexpected GitHub destination: '+url);
+              globalThis.__githubIssuePost={
+                url,method:opts.method,auth:opts.headers.Authorization,
+                payload:JSON.parse(opts.body)
+              };
+              return new Response(JSON.stringify({number:7421}),{
+                status:201,headers:{'Content-Type':'application/json'}
+              });
+            };
+          }""")
+          await control.locator("#diagUpload").click()
+          await control.locator("#diagIssueLink").get_by_text(
+            "Issue #7421",exact=False).wait_for(timeout=10000)
+          assert await control.locator("#diagIssueLink").get_attribute(
+            "href")=="https://github.com/ACIDCH/personal-immersive-translator/issues/7421"
+          issued=await control.evaluate("globalThis.__githubIssuePost")
+          assert issued["method"]=="POST"
+          assert issued["auth"]=="Bearer github_pat_FAKE_ISSUES_ONLY_CI_1234567890"
+          payload=issued["payload"]
+          assert "Bilibili" in payload["title"]
+          content=payload["body"]
+          assert '"webTranslation": "fail"' in content
+          assert '"imageOcr": "pass"' in content
+          for secret in ("PRIVATE COURSE","pit-upstream-fixture.example",
+            "Owned subtitle fixture","github_pat_FAKE","local-test-token",
+            "PRIVATE", "COOKIE"):
+            assert secret not in content,secret
+          print("PASS: one-click GitHub diagnostic creates safe issue via authenticated fake API",flush=True)
           await fixture.close()
           tools=await browser.new_page()
           tools.on("pageerror",lambda e:errors.append(str(e)))
