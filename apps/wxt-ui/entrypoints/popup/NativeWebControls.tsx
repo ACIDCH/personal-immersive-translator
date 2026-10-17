@@ -98,6 +98,7 @@ export function NativeWebControls(){
      <button type="button" disabled={working} onClick={()=>void run('PIT_SELECTION')}>翻译选中内容</button>
      <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
      <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
+     <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('file-lab.html')})}>打开本地 DOCX / 图片 OCR 实验台</button>
    </div>
    {siteAccessNeeded&&<button type="button" className="grant-site" onClick={()=>void authorizeCurrentSite()}>允许当前网站翻译</button>}
    {progress&&<p role="status" className="native-progress">正文覆盖 {progress.translated}/{progress.eligible}
