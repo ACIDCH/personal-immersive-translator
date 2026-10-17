@@ -12,7 +12,7 @@
 ## 二、前端技术栈
 
 - **浏览器界面**：WXT + React + TypeScript + Vite，原生 Chrome/Edge 扩展 API，后续迁入弹窗/设置/文件处理/字幕控制。
-- **Cloudflare Pages 控制台**：React + TypeScript + Vite，分享 `apps/wxt-ui/shared/` 中的设计组件和 token。
+- **Cloudflare Pages 控制台**：React + TypeScript + Vite，分享 `apps/shared-ui/` 中的设计组件和 token。
 - `apps/wxt-ui/`、`apps/portal/` 是可构建的**设计预览**；其现有按钮不构成翻译功能的验收证据。生产扩展当前仍沿用 `src/`，直到分模块迁移通过真实测试。
 - 不把 API Key 写进 Pages 静态构建产物；云端密钥只配置为 Workers Secrets。用户自带模型的 Key 目前仅保存在用户的 `chrome.storage.local`（不是加密保险箱）。
 
@@ -67,14 +67,14 @@ npm run check
 node --test tests/ai-profiles.test.js
 
 # WXT UI 设计预览（不会包含原生翻译核心）
-cd apps/wxt-ui
+cd apps
 npm install
-npm run build
+npm run check --workspace wxt-ui
+npm run build --workspace wxt-ui
 
 # Cloudflare Pages React 设计预览
-cd ../portal
-npm install
-npm run build
+npm run check --workspace portal
+npm run build --workspace portal
 ```
 
 Cloudflare Pages Git 项目未来配置：root=`apps/portal`、build=`npm run build`、output=`dist`。尚未创建项目或域名。生产版前端接口授权和 CSP 仍待复验。
