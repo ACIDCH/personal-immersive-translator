@@ -61,3 +61,40 @@ test('rejects unsupported language, oversize batch and malformed model output',a
  assert.equal((await api.fetch(request('/v1/translate','POST',
   {texts:['hello'],source:'en',target:'zh'}),broken)).status,502);
 });
+
+test('hosted Whisper uses real Workers AI binding with actual PCM WAV bytes',async()=>{
+ const wav=new Uint8Array(32044);
+ wav.set([82,73,70,70],0);wav.set([87,65,86,69],8);
+ const calls=[];
+ const config={PIT_ACCESS_TOKEN:secret,AI:{run:async(name,params)=>{
+  calls.push({name,params});return {text:'This is a transcribed lecture'};
+ }}};
+ const req=new Request('https://demo.workers.dev/v1/asr',{
+  method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'audio/wav'},
+  body:wav
+ });
+ const response=await api.fetch(req,config);
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).text,'This is a transcribed lecture');
+ assert.equal(calls[0].name,'@cf/openai/whisper-large-v3-turbo');
+ assert.equal(calls[0].params.task,'transcribe');
+ assert.equal(typeof calls[0].params.audio,'string');
+ assert.ok(calls[0].params.audio.length>1000);
+ assert.equal((await api.fetch(new Request('https://demo.workers.dev/v1/asr',{
+  method:'POST',headers:{'content-type':'audio/wav'},body:wav}),config)).status,401);
+});
+test('hosted Whisper rejects oversized and invalid audio without inference',async()=>{
+ let calls=0;
+ const config={PIT_ACCESS_TOKEN:secret,AI:{run:async()=>{calls++;return {text:'bad'};}}};
+ const bad=new Request('https://demo.workers.dev/v1/asr',{
+  method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'audio/wav'},
+  body:new Uint8Array(200)
+ });
+ assert.equal((await api.fetch(bad,config)).status,400);
+ const oversize=new Request('https://demo.workers.dev/v1/asr',{
+  method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'audio/wav'},
+  body:new Uint8Array(350001)
+ });
+ assert.equal((await api.fetch(oversize,config)).status,413);
+ assert.equal(calls,0);
+});
