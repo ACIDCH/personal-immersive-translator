@@ -41,6 +41,10 @@ test('live Whisper AI requires UI consent, matches ASR session and stops after 8
     }
   };
   globalThis.fetch=async(url,init)=>{
+    if(url==='http://127.0.0.1:8765/health'){
+      assert.equal(init.headers['X-PIT-Token'],'fixture-token-123456');
+      return {ok:true,json:async()=>({speech_asr:true,speech_asr_requires_risk_ack:false})};
+    }
     if(!url.startsWith('https://generativelanguage.googleapis.com/'))
       throw Error('unexpected remote provider');
     calls++;
