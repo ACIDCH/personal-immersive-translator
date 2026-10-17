@@ -269,6 +269,20 @@
     try{const result=await request([text],requestedMode,'');toast(result[0]);}
     catch(error){toast('翻译失败：'+String(error.message||error));}
   }
+  function mountFloatingControl(){
+    if(document.getElementById('pit-floating-translate'))return;
+    const button=document.createElement('button');
+    button.id='pit-floating-translate';
+    button.type='button';
+    button.textContent='译';
+    button.title='PIT：翻译此网页 / 恢复原文';
+    button.setAttribute('aria-label','PIT：翻译当前网页或恢复原文');
+    document.documentElement.append(button);
+    button.addEventListener('click',()=>{
+      if(active)restore();
+      else start('standard',{scope,display,theme});
+    });
+  }
   // Opt-in paragraph hover, only after an explicit Shift+pointer gesture.
   // Passwords, forms, buttons, code and hidden page sections stay excluded.
   async function translateHovered(el){
@@ -330,6 +344,7 @@
   void chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES'}).then(answer=>{
     if(!answer?.ok||!answer.preferences)return;
     const p=answer.preferences;
+    if(p.floatingControl===true)mountFloatingControl();
     hoverEnabled=p.hoverTranslate===true;
     inputEnabled=p.inputTranslate===true;
     scope=p.webScope==='full'?'full':'smart';
