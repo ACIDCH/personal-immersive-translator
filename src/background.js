@@ -18,6 +18,18 @@ function ensureSource(sender, type) {
   if (sender.id !== chrome.runtime.id) throw new TranslationError('无效的消息来源');
   if (type === 'TRANSLATE_BATCH' && !sender.tab) throw new TranslationError('网页翻译请求必须来自当前网页');
 }
+// MV3 options pages normally open as their own browser tabs. sender.tab is
+// therefore NOT a security boundary: only sender.url identifies the exact
+// extension-owned page, unlike messages from a regular page content script.
+function isTrustedOptionsPage(sender) {
+  return sender.url === chrome.runtime.getURL('src/options.html') ||
+         sender.url === chrome.runtime.getURL('pit-options.html');
+}
+function isTrustedExtensionPage(sender) {
+  return typeof sender.url === 'string' &&
+         sender.url.startsWith(chrome.runtime.getURL('')) &&
+         !sender.url.includes('/../');
+}
 // Serialize user START/STOP, automatic track-end and tab lifecycle actions.
 // Without this lock, concurrent extension popups can close a newer capture.
 let asrTransition=Promise.resolve();
@@ -119,15 +131,15 @@ async function handle(message, sender) {
     return {forwarded:true};
   }
   if (message.type === 'GET_SETTINGS') {
-    if (sender.tab) throw new TranslationError('网页不允许读取 API 配置');
+    if (!isTrustedExtensionPage(sender)) throw new TranslationError('网页不允许读取 API 配置');
     return {settings: await getSettings()};
   }
   if (message.type === 'CLEAR_CACHE') {
-    if (sender.tab) throw new TranslationError('仅设置界面可以清除缓存');
+    if (!isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可以清除缓存');
     await clearTranslations(chrome.storage.local); return {ok:true};
   }
   if (message.type !== 'TRANSLATE_BATCH' && message.type !== 'TEST_PROVIDER') throw new TranslationError('不支持的请求');
-  if (message.type === 'TEST_PROVIDER' && sender.tab) throw new TranslationError('仅设置界面可测试 API');
+  if (message.type === 'TEST_PROVIDER' && !isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可测试 API');
   const settings = await getSettings();
   if (sender.tab) {
     // In a cross-origin video iframe, sender.tab.url is the LMS parent, while
