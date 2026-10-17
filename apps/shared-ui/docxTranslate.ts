@@ -8,9 +8,26 @@ const MAX_PARAGRAPHS=1500;
 const MAX_TEXT_CHARS=180000;
 
 // Keep OOXML package assets, styles, tables, numbering, header/footer and images.
-// Paragraph-wide translation necessarily loses *within-paragraph* run styling:
-// only the first original w:t keeps the translated paragraph, others are emptied.
-// This is a structural preservation prototype, NOT high-fidelity typography.
+// Translate each paragraph once for coherent context, then spread text across
+// existing run boundaries proportionally. This preserves w:rPr nodes and avoids
+// collapsing all translated text into the first styled run. It cannot infer
+// semantic emphasis alignment or guarantee Word's final rendered line breaks.
+function preserveStyledRuns(nodes:Element[],translation:string){
+  const source=nodes.map(n=>n.textContent||'');
+  const total=source.reduce((n,s)=>n+Array.from(s).length,0);
+  if(!total)return;
+  const chars=Array.from(translation);
+  let used=0;
+  let sourceSeen=0;
+  nodes.forEach((node,i)=>{
+    sourceSeen+=Array.from(source[i]).length;
+    const boundary=i===nodes.length-1?chars.length:
+      Math.min(chars.length,Math.max(used,Math.round(chars.length*sourceSeen/total)));
+    node.textContent=chars.slice(used,boundary).join('');
+    if(node.textContent)node.setAttribute('xml:space','preserve');
+    used=boundary;
+  });
+}
 export async function translateDocx(
   buffer:ArrayBuffer, translator:BatchTranslate,progress:DocxProgress=()=>{}
 ):Promise<Uint8Array>{
@@ -59,9 +76,7 @@ export async function translateDocx(
       throw Error('翻译服务返回的段落数量不正确，DOCX 未导出');
     for(let i=0;i<chunk.length;i++){
       const entry=chunk[i];
-      entry.nodes[0].textContent=translations[i];
-      entry.nodes[0].setAttribute('xml:space','preserve');
-      for(const node of entry.nodes.slice(1))node.textContent='';
+      preserveStyledRuns(entry.nodes,translations[i]);
     }
     done+=chunk.length;progress(done,entries.length);
   }
