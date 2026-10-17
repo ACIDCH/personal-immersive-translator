@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import type {ChangeEvent} from 'react';
+import type {OcrRegion} from './imageTranslate';
 
 const MAX_BYTES=12*1024*1024;
 type Engine='docx'|'pptx'|'xlsx'|'ocr';
@@ -34,12 +35,14 @@ export function DocumentLab(){
   const [busy,setBusy]=useState(false);
   const [translationMode,setTranslationMode]=useState<TranslationMode>('standard');
   const [progress,setProgress]=useState('');
+  const [ocrRegions,setOcrRegions]=useState<OcrRegion[]>([]);
+  const [imageLayout,setImageLayout]=useState<'side'|'overlay'>('side');
   const runtime=currentRuntime();
   const extensionFileLab=Boolean(runtime?.id&&location.protocol==='chrome-extension:'&&
     location.pathname==='/file-lab.html');
   function onSelect(event:ChangeEvent<HTMLInputElement>){
     const selected=event.target.files?.[0]??null;
-    setFile(selected);setText('');setProgress('');
+    setFile(selected);setText('');setProgress('');setOcrRegions([]);
     if(selected&&selected.size>MAX_BYTES)setMessage('文件超过 12 MiB 限制');
     else setMessage(selected?'已选择文件，等待你点击开始处理':'请选择文件');
   }
@@ -48,7 +51,7 @@ export function DocumentLab(){
     if(file.size>MAX_BYTES)return setMessage('文件过大（最多 12 MiB）');
     if(mode!=='ocr'&&!file.name.toLowerCase().endsWith('.'+mode))return setMessage('文件扩展名与所选格式不一致');
     if(mode==='ocr'&&!/\.(png|jpe?g|webp|bmp)$/i.test(file.name))return setMessage('请选择 PNG/JPG/WEBP/BMP 图片');
-    setBusy(true);setText('');setMessage('正在本地处理文件…');
+    setBusy(true);setText('');setOcrRegions([]);setMessage('正在本地处理文件…');
     try{
       if(mode==='docx'){
         const mammoth=await import('mammoth/mammoth.browser');
@@ -70,9 +73,14 @@ export function DocumentLab(){
         }:undefined;
         const worker=await createWorker(language,1,localPaths);
         try{
-          const result=await worker.recognize(file);
+          const result=await worker.recognize(file,{}, {blocks:true});
+          const {ocrLinesFromBlocks}=await import('./imageTranslate');
+          const regions=ocrLinesFromBlocks(result.data.blocks);
+          setOcrRegions(regions);
           setText(result.data.text.trim());
-          setMessage('OCR 本地识别结束。尚未执行翻译或图片修补。');
+          setMessage(regions.length
+            ?'OCR 识别结束，含 '+regions.length+' 个原文文字区域，可选择原位文字覆盖或双栏译文。'
+            :'OCR 完成但没有可靠文字坐标，只能使用双栏译文。');
         }finally{await worker.terminate();}
       }
     }catch(e){setMessage('处理失败：'+formatError(e));}
@@ -83,8 +91,10 @@ export function DocumentLab(){
     if(translationMode==='ai'&&!confirm('将向自选 AI 模型发送图片识别文本，可能产生 API 费用。确认？'))return;
     setBusy(true);setMessage('正在使用所选服务翻译识别文字…');
     try{
-      const {splitOcrLines,bilingualImagePng}=await import('./imageTranslate');
-      const lines=splitOcrLines(text);
+      const {splitOcrLines,bilingualImagePng,inplaceImagePng}=await import('./imageTranslate');
+      const overlay=imageLayout==='overlay';
+      if(overlay&&!ocrRegions.length)throw Error('缺少 OCR 坐标，无法原位覆盖；请改用双栏导出');
+      const lines=overlay?ocrRegions.map(x=>x.text):splitOcrLines(text);
       if(!lines.length)throw Error('没有可翻译的 OCR 文本');
       const output:string[]=[];
       for(let i=0;i<lines.length;i+=8){
@@ -97,13 +107,15 @@ export function DocumentLab(){
         output.push(...reply.translations);
         setProgress('图片文字翻译 '+Math.min(i+8,lines.length)+'/'+lines.length+' 行');
       }
-      const png=await bilingualImagePng(file,text,output);
+      const png=overlay?await inplaceImagePng(file,ocrRegions,output):await bilingualImagePng(file,text,output);
       const url=URL.createObjectURL(png);
       const link=document.createElement('a');
-      link.href=url;link.download=file.name.replace(/\.[^.]+$/,'')+'-bilingual.png';
+      link.href=url;link.download=file.name.replace(/\.[^.]+$/,'')+(overlay?'-overlay.png':'-bilingual.png');
       document.body.append(link);link.click();link.remove();
       setTimeout(()=>URL.revokeObjectURL(url),60000);
-      setMessage('双语图片已导出：左侧原图完全保留，右侧排版展示机器译文。此模式不擦除或修补原图片文字。');
+      setMessage(overlay
+        ?'原位译文 PNG 已导出：仅覆盖 OCR 文字框，适用于颜色基本均匀的背景；并非照片级修复。'
+        :'双语图片已导出：左侧原图保留，右侧展示译文。');
     }catch(error){setMessage('图片翻译失败：'+formatError(error));}
     finally{setBusy(false);}
   }
@@ -153,7 +165,11 @@ export function DocumentLab(){
         <button type="button" aria-pressed={translationMode==='standard'} onClick={()=>setTranslationMode('standard')}>常规翻译</button>
         <button type="button" aria-pressed={translationMode==='ai'} onClick={()=>setTranslationMode('ai')}>自选 AI 精译</button>
       </div>
-      <button type="button" disabled={busy} onClick={()=>void translateRecognizedImage()}>翻译识别文本并导出双语 PNG</button>
+      <div className="native-modes" role="group" aria-label="图片译文排版">
+        <button type="button" aria-pressed={imageLayout==='side'} onClick={()=>setImageLayout('side')}>左右双栏（保留原图）</button>
+        <button type="button" aria-pressed={imageLayout==='overlay'} disabled={!ocrRegions.length} onClick={()=>setImageLayout('overlay')}>原位覆盖（纯色背景）</button>
+      </div>
+      <button type="button" disabled={busy} onClick={()=>void translateRecognizedImage()}>翻译识别文本并导出 PNG</button>
     </>}
     {mode!=='ocr'&&extensionFileLab&&<>
       <div className="native-modes" aria-label="Office 翻译服务">
