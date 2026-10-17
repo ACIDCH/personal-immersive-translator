@@ -13,6 +13,17 @@ assert.equal(manifest.options_page,'pit-options.html','Functional native options
 assert.equal(manifest.action.default_popup,'popup.html');
 assert.equal(manifest.background.service_worker,'pit-background.js');
 assert.equal(manifest.background.type,'module');
+assert(manifest.content_scripts?.some(entry=>
+  entry.matches?.includes('https://*/*') &&
+  entry.js?.includes('pit-native.js') &&
+  entry.css?.includes('pit-native.css') &&
+  entry.run_at==='document_idle'
+),'Opt-in hover/input and per-site reading must have a passive registered script');
+assert.deepEqual(
+  Object.keys(manifest.commands||{}).sort(),
+  ['pit-toggle-translation','pit-translate-whole-page'],
+  'Both immersive-style keyboard shortcuts must be wired into Chrome');
+
 assert(manifest.content_security_policy?.extension_pages?.includes('wasm-unsafe-eval'),
   'Packaged Tesseract requires MV3 wasm-unsafe-eval, not remote code');
 for(const f of ['pit-native.js','pit-native.css','pit-options.html','options.js',
