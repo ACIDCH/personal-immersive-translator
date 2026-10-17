@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import type {ChangeEvent} from 'react';
 import type {OcrRegion} from './imageTranslate';
 
@@ -40,6 +40,35 @@ export function DocumentLab(){
   const runtime=currentRuntime();
   const extensionFileLab=Boolean(runtime?.id&&location.protocol==='chrome-extension:'&&
     location.pathname==='/file-lab.html');
+  useEffect(()=>{
+    if(!extensionFileLab)return;
+    let mounted=true;
+    const session=(globalThis as {chrome?:{storage?:{session?:{
+      get:(key:string)=>Promise<Record<string,unknown>>;
+      remove:(key:string)=>Promise<void>;
+    }}}}).chrome?.storage?.session;
+    if(!session)return;
+    void (async()=>{
+      const key='pit_ocr_screenshot';
+      const stored=await session.get(key);
+      const encoded=stored?.[key];
+      if(typeof encoded!=='string'||!encoded.startsWith('data:image/png;base64,')||
+         encoded.length>6_000_000)return;
+      await session.remove(key);
+      const raw=atob(encoded.slice(encoded.indexOf(',')+1));
+      const bytes=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      if(!mounted)return;
+      setMode('ocr');
+      setFile(new File([bytes],'captured-webpage.png',{type:'image/png'}));
+      setOcrRegions([]);
+      setText('');
+      setMessage('已载入当前网页的可见区域截图，请选择 OCR 语言并点击开始识别。');
+    })().catch(error=>{
+      if(mounted)setMessage('截图加载失败：'+formatError(error));
+    });
+    return ()=>{mounted=false;};
+  },[extensionFileLab]);
   function onSelect(event:ChangeEvent<HTMLInputElement>){
     const selected=event.target.files?.[0]??null;
     setFile(selected);setText('');setProgress('');setOcrRegions([]);
