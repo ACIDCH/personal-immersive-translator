@@ -23,6 +23,18 @@ export function NativeWebControls(){
  const latest=useRef(0);
 
  useEffect(()=>{
+   let active=true;
+   void browser.runtime.sendMessage({type:'GET_SETTINGS'}).then(answer=>{
+     const settings=answer?.settings;
+     if(!active||!settings)return;
+     if(settings.standardProvider==='cloud'&&
+       (!settings.cloudEndpoint||!settings.cloudToken)){
+       setStatus('云端翻译未部署/配置。请先在「配置翻译服务」填写已部署的 PIT Worker 地址与访问令牌；当前没有可用的默认翻译引擎。');
+     }
+   }).catch(()=>{});
+   return()=>{active=false;};
+ },[]);
+ useEffect(()=>{
    if(tabId===null)return;
    let alive=true;
    let count=0;
@@ -44,6 +56,20 @@ export function NativeWebControls(){
    if(working)return;
    if(mode==='ai' && (action==='PIT_START'||action==='PIT_SELECTION')){
      if(!window.confirm('此操作会使用你配置的 AI 模型，可能消耗额度或产生费用。继续吗？'))return;
+   }
+   // A CLI/build pass must not be mistaken for available online MT.
+   // Fail before injecting any site scripts if the default remote
+   // provider is not configured on this browser.
+   if(mode==='standard'&&(action==='PIT_START'||action==='PIT_SELECTION')){
+     try{
+       const response=await browser.runtime.sendMessage({type:'GET_SETTINGS'});
+       const settings=response?.settings;
+       if(settings?.standardProvider==='cloud'&&
+          (!settings.cloudEndpoint||!settings.cloudToken)){
+         setStatus('PIT 云端翻译目前未配置，无法运行。先在插件设置中部署/填写云端 Worker，或切换到你已有 Key 的其他机器翻译服务。');
+         return;
+       }
+     }catch{}
    }
    const token=++latest.current;
    setWorking(true);setStatus('正在与网页通信…');setSiteAccessNeeded(false);
