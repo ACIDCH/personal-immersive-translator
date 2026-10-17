@@ -48,7 +48,9 @@ export function NativeWebControls(){
      if(action==='PIT_START'||action==='PIT_SELECTION'||action==='PIT_RESTORE'||action==='PIT_CONTINUE'){
        // activeTab permits only the currently selected site. No blanket page access.
        await browser.scripting.insertCSS({target:{tabId:tab.id},files:[rootCss]});
-       await browser.scripting.executeScript({target:{tabId:tab.id},files:[rootFile]});
+       // WXT's generated pathname union enumerates listed entrypoints only;
+       // this static public asset is verified byte-for-byte by the output test.
+       await browser.scripting.executeScript({target:{tabId:tab.id},files:[rootFile as never]});
      }
      const answer=await browser.tabs.sendMessage(tab.id,{type:action,mode});
      if(!answer?.ok)throw Error(answer?.reason||'原生翻译核心未接受请求');
