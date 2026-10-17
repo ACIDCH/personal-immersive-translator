@@ -4,8 +4,8 @@ import JSZip from 'jszip';
 import {bilingualImagePng,splitOcrLines} from './imageTranslate';
 
 type Mode='standard'|'ai';
-type Lang='eng'|'fra'|'chi_sim'|'jpn'|'kor';
-const MAX_FILES=8,MAX_FILE=12*1024*1024,MAX_BATCH=48*1024*1024;
+type Lang='auto'|'eng'|'fra'|'chi_sim'|'jpn'|'kor';
+const MAX_FILES=20,MAX_FILE=48*1024*1024,MAX_BATCH=160*1024*1024;
 const accepted=/\.(docx|pptx|xlsx|epub|txt|md|html?|pdf|png|jpe?g|webp|bmp)$/i;
 type ChromeRuntime={
  id?:string;
@@ -29,18 +29,18 @@ export function BatchFileLab(){
    location.protocol==='chrome-extension:'&&location.pathname==='/file-lab.html');
  const [items,setItems]=useState<File[]>([]);
  const [mode,setMode]=useState<Mode>('standard');
- const [lang,setLang]=useState<Lang>('eng');
+ const [lang,setLang]=useState<Lang>('auto');
  const [busy,setBusy]=useState(false);
  const currentAbort=useRef<AbortController|null>(null);
  const [progress,setProgress]=useState('');
- const [status,setStatus]=useState('一次最多 8 个文件，合计不超过 48 MiB，单个不超过 12 MiB。');
+ const [status,setStatus]=useState('一次最多 20 个文件，合计 160 MiB，单个 48 MiB。');
  if(!available)return null;
  const acceptFiles=(files:File[])=>{
    const total=files.reduce((sum,file)=>sum+file.size,0);
    if(!files.length){setItems([]);setStatus('请选择文件');return;}
    if(files.length>MAX_FILES||total>MAX_BATCH||files.some(f=>!accepted.test(f.name)||f.size>MAX_FILE)){
      setItems([]);
-     setStatus('文件数量、类型或大小超出上限。批量 PDF 也限 12 MiB/份与 8 页；BabelDOC 需本机独立工具。');
+     setStatus('文件数量、类型或大小超出上限。PDF 最多 300 页，长文档会分卷。');
    }else{
      setItems(files);setStatus('已选择 '+files.length+' 个文件。');
    }
@@ -90,8 +90,9 @@ export function BatchFileLab(){
          const {translateBilingualPdf}=await import('./pdfBilingual');
          const output=await translateBilingualPdf(file,translate,lang,(done,total,stage)=>
            setProgress('文件 '+(i+1)+'/'+items.length+'：PDF '+done+'/'+total+' 页 · '+stage),controller.signal);
-         result=output.pdf;
-         ext='pdf';
+         result=output.archive||output.pdf||new Uint8Array();
+         if(!result.byteLength)throw Error('PDF 输出为空');
+         ext=output.archive?'zip':'pdf';
        }else if(['epub','txt','md','html','htm'].includes(type)){
          const {translatePortable}=await import('./portableDocumentTranslate');
          result=await translatePortable(await file.arrayBuffer(),type as 'epub'|'txt'|'md'|'html'|'htm',translate,(done,total)=>
@@ -103,7 +104,8 @@ export function BatchFileLab(){
              workerPath:runtime.getURL('tesseract/worker.min.js'),
              corePath:runtime.getURL('tesseract/core'),workerBlobURL:false
            }:undefined;
-           ocrWorker=await createWorker(lang,1,paths);
+           ocrWorker=await createWorker(lang==='auto'
+             ? ['eng','fra','chi_sim','jpn','kor']:lang,1,paths);
          }
          const ocr=await ocrWorker.recognize(file);
          const lines=splitOcrLines(ocr.data.text.trim());
@@ -133,10 +135,10 @@ export function BatchFileLab(){
  }
  return <section className="document-lab batch-file-lab">
    <h2>批量多格式翻译</h2>
-   <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML、图片及小型 PDF 批量输入和 ZIP 下载。PDF 每份最多 8 页，双栏栅格输出；需要可编辑的高保真排版请使用本机 BabelDOC 工具。</p>
+   <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML、图片及PDF 批量输入和 ZIP 下载。PDF 最高 300 页、48 MiB，超过 12 页分卷输出；自动多语言 OCR；复杂 PDF 高保真云端引擎尚未上线。</p>
    <div className="document-drop" role="group" aria-label="选择或拖入批量文件"
         onDragOver={event=>event.preventDefault()} onDrop={onDrop}>
-     <label className="document-field">选择文件（最多 8 个），或把文件拖入此区域
+     <label className="document-field">选择文件（最多 20 个），或把文件拖入此区域
        <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,.pdf,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
      </label>
    </div>
@@ -146,7 +148,7 @@ export function BatchFileLab(){
    </div>
    <label className="document-field">批量图片的 OCR 语言
      <select value={lang} onChange={e=>setLang(e.target.value as Lang)}>
-       <option value="eng">英语</option><option value="fra">法语</option>
+       <option value="auto">自动识别（多语种 OCR）</option><option value="eng">英语</option><option value="fra">法语</option>
        <option value="chi_sim">简体中文</option><option value="jpn">日语</option>
        <option value="kor">韩语</option>
      </select>
