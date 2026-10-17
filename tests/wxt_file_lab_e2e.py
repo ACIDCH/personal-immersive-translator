@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from PIL import Image,ImageDraw,ImageFont
 from playwright.async_api import async_playwright
+from wxt_video_image_pdf_e2e import pdf_fixture
 
 ROOT=Path(__file__).resolve().parents[1]
 PACKAGE=ROOT/"apps/wxt-ui/.output/chrome-mv3"
@@ -311,6 +312,26 @@ async def main():
           assert '<strong>' in html and 'originalCode()' in html
         report['epub_html_markdown_txt_batch']='pass'
         print('WXT EPUB/TXT/MD/HTML STRUCTURE + ZIP BATCH: PASS',flush=True)
+
+
+        # The same multi-file picker must accept both a genuine extractable
+        # PDF and an ordinary TXT in one atomic ZIP, without requiring a
+        # separate PDF-only upload step.
+        await page.locator('.batch-file-lab input[type=file]').set_input_files([
+          {'name':'finance.pdf','mimeType':'application/pdf','buffer':pdf_fixture()},
+          {'name':'notes.txt','mimeType':'text/plain','buffer':b'One more financial note'}
+        ])
+        async with page.expect_download(timeout=85000) as mixed_pdf_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await mixed_pdf_event.value).path()) as bundle:
+          entries={name for name in bundle.namelist() if not name.endswith('/')}
+          assert len(entries)==2,entries
+          bilingual=bundle.read('translated/01-finance-translated.pdf')
+          assert bilingual.startswith(b'%PDF-') and len(bilingual)>1500
+          translated=bundle.read('translated/02-notes-translated.txt').decode('utf8')
+          assert translated=='译文:One more financial note',translated
+        report['mixed_pdf_and_text_zip']='pass'
+        print('WXT MIXED PDF+TXT BILINGUAL ZIP: PASS',flush=True)
 
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'lecture.vtt','mimeType':'text/vtt',
