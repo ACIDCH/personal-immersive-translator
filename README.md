@@ -11,6 +11,9 @@ An independently implemented, privacy-conscious, Manifest V3 Chrome/Edge bilingu
 - YUNPAN has a dedicated `Personal-Immersive-Translator` folder for documents, releases and backups.
 - Never commit API keys or credentials.
 
+## Optional OpenRouter AI channel
+The Options page supports **OpenRouter** as a manually selected AI provider alongside Gemini and DeepSeek. Enter your own API key and an exact model ID (for example a provider/model ending in `:free`). Availability, quotas and pricing are controlled by OpenRouter and can change; this is **not** an unlimited free translation service. AI calls always require an explicit confirmation, and failures never invoke another model automatically. No OpenRouter key is packaged in the extension.
+
 ## Local installation
 
 1. Download the source archive from the [YUNPAN Alpha release](https://drive.google.com/file/d/1N27Jjvi2rxZrvfHAncU_TsVHkRwEEDOp/view?usp=drivesdk) and extract it.

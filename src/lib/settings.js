@@ -17,11 +17,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   geminiModel: 'gemini-2.5-flash',
   deepseekKey: '',
   deepseekModel: 'deepseek-chat',
+  openrouterKey: '',
+  openrouterModel: '',
   glossary: '',
   blockedHosts: ''
 });
 export const STANDARD_PROVIDERS = ['microsoft', 'google', 'deepl', 'libre'];
-export const AI_PROVIDERS = ['gemini', 'deepseek'];
+export const AI_PROVIDERS = ['gemini', 'deepseek', 'openrouter'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
 export function normalizeSettings(value = {}) {

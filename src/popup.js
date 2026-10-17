@@ -5,7 +5,7 @@ let settings=normalizeSettings();
 function show() {
   $('standard').classList.toggle('selected',mode==='standard');
   $('ai').classList.toggle('selected',mode==='ai');
-  $('modeHint').textContent=mode==='standard'?'常规服务优先，不消耗 Gemini / DeepSeek Token。':'AI 按需翻译，可能产生模型调用费用。';
+  $('modeHint').textContent=mode==='standard'?'常规服务优先，不消耗 Gemini / DeepSeek / OpenRouter AI 额度。':'AI 按需翻译，可能产生模型调用费用。';
   $('providerInfo').textContent='当前翻译服务：'+(mode==='standard'? settings.standardProvider:settings.aiProvider);
 }
 function status(msg) {$('status').textContent=msg;}

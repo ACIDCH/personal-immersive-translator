@@ -4,7 +4,7 @@
 <label>目标语言<select name="target"><option value="zh">简体中文</option><option value="en">English</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
 <label>原文语言<select name="source"><option value="auto">自动识别</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ko">한국어</option></select></label>
 <label>默认机器翻译服务<select name="standardProvider"><option value="microsoft">Microsoft Translator</option><option value="google">Google Cloud Translation</option><option value="deepl">DeepL</option><option value="libre">LibreTranslate (自有服务)</option></select></label>
-<label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option></select></label>
+<label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="openrouter">OpenRouter（可选免费模型）</option></select></label>
 <label class="inline"><input type="checkbox" name="contextAI">AI 翻译时包含相邻段落作为上下文</label></section>
 <section class="panel"><h2>常规翻译凭据</h2>
 <label>Microsoft Key<input name="microsoftKey" type="password" autocomplete="off" placeholder="仅存于本地浏览器"></label>
@@ -19,6 +19,9 @@
 <label>Gemini 模型名称<input name="geminiModel" type="text" spellcheck="false"></label>
 <label>DeepSeek API Key<input name="deepseekKey" type="password" autocomplete="off"></label>
 <label>DeepSeek 模型名称<input name="deepseekModel" type="text" spellcheck="false"></label>
+<label>OpenRouter API Key<input name="openrouterKey" type="password" autocomplete="off"></label>
+<label>OpenRouter 模型 ID<input name="openrouterModel" type="text" spellcheck="false" placeholder="provider/model:free"></label>
+<p class="muted">OpenRouter 免费模型有每日请求限制，模型及计费情况会变化。请选择带 :free 的模型才可能使用免费路由；插件不会自动切换到其他模型。</p>
 <label>专业术语提示（AI 可用）<textarea name="glossary" rows="4" placeholder="yield curve = 收益率曲线"></textarea></label></section>
 <section class="panel"><h2>隐私及站点规则</h2>
 <label>禁止翻译的域名（每行一个，包含子域名）<textarea name="blockedHosts" rows="4" placeholder="example.com&#10;banking.example"></textarea></label>

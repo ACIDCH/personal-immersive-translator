@@ -49,7 +49,7 @@ async function handle(message, sender) {
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
   const source = settings.source;
   const target = settings.target;
-  const model = isAI ? (provider === 'gemini' ? settings.geminiModel : settings.deepseekModel) : '';
+  const model = isAI ? ({gemini: settings.geminiModel, deepseek: settings.deepseekModel, openrouter: settings.openrouterModel}[provider] || '') : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p)));

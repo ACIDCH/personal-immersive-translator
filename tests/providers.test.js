@@ -44,6 +44,20 @@ test('DeepSeek sends JSON object mode with bearer auth',async()=>{
   });
   assert.deepEqual(await translateBatch(['English'],{...config,provider:'deepseek',deepseekKey:'secret'},f),['中文']);
 });
+test('OpenRouter is explicit AI with model selection and no silent paid fallback',async()=>{
+  const f=mockResponse({choices:[{message:{content:'{"translations":["翻译结果"]}'}}]},(url,init)=>{
+    assert.equal(url,'https://openrouter.ai/api/v1/chat/completions');
+    assert.equal(init.headers.Authorization,'Bearer test-openrouter-key');
+    const body=JSON.parse(init.body);
+    assert.equal(body.model,'qwen/qwen3-example:free');
+    assert.equal(body.stream,false);
+    assert.deepEqual(body.messages.map(m=>m.role),['system','user']);
+  });
+  assert.deepEqual(await translateBatch(['Example'],{...config,provider:'openrouter',
+    openrouterKey:'test-openrouter-key',openrouterModel:'qwen/qwen3-example:free'},f),['翻译结果']);
+  await assert.rejects(translateBatch(['Example'],{...config,provider:'openrouter',openrouterKey:'key',openrouterModel:'bad model'},f),/格式无效/);
+  await assert.rejects(translateBatch(['Example'],{...config,provider:'openrouter',openrouterModel:'qwen/another:free'},f),/OpenRouter API Key/);
+});
 test('LibreTranslate only permits HTTPS and translates one at a time',async()=>{
   let count=0;
   const f=mockResponse({translatedText:'ok'},(url)=>{assert.equal(url,'https://host.example/translate');count++;});
@@ -65,6 +79,7 @@ test('remote HTTP errors are sanitized to avoid leaking server data',async()=>{
 test('sanitize settings and block nested sensitive hosts',()=>{
   assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'microsoft');
   assert.equal(normalizeSettings({autoAI:true}).autoAI,false);
+  assert.equal(normalizeSettings({aiProvider:'openrouter'}).aiProvider,'openrouter');
   assert.equal(hostIsBlocked('payments.example.com','example.com'),true);
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
 });
