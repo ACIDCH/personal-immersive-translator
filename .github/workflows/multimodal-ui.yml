@@ -62,6 +62,9 @@ jobs:
         run: npm exec -w wxt-ui wxt prepare
       - name: TypeScript check
         run: npm run check --workspace ${{ matrix.app }}
+      - name: Verify DOCX text extraction from a real synthetic OOXML archive
+        if: matrix.app == 'portal'
+        run: npm run test --workspace portal
       - name: Build UI artifact
         run: npm run build --workspace ${{ matrix.app }}
       - name: Confirm output exists
