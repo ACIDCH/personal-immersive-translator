@@ -9,11 +9,14 @@ const source=resolve(here,'../../../src');
 const output=resolve(here,'../public');
 const copies=[
  ['content.js','pit-native.js'],
+ ['background.js','pit-background.js'],
  ['content.css','pit-native.css'],
  ['options.html','pit-options.html'],
  ['options.js','options.js'],
  ['ui.css','ui.css'],
  ['lib/settings.js','lib/settings.js'],
+ ['lib/providers.js','lib/providers.js'],
+ ['lib/cache.js','lib/cache.js'],
  ['lib/ai-profiles.js','lib/ai-profiles.js']
 ];
 for(const [src,dst] of copies){
