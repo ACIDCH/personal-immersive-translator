@@ -10,8 +10,10 @@ const expected=['activeTab','scripting','storage'];
 for(const permission of expected)assert(manifest.permissions.includes(permission),'Missing permission: '+permission);
 assert.equal(manifest.options_page,'pit-options.html','Functional native options page must be used');
 assert.equal(manifest.action.default_popup,'popup.html');
+assert.equal(manifest.background.service_worker,'pit-background.js');
+assert.equal(manifest.background.type,'module');
 for(const f of ['pit-native.js','pit-native.css','pit-options.html','options.js',
-  'lib/settings.js','lib/ai-profiles.js','background.js','popup.html']){
+  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','pit-background.js','popup.html']){
   assert(existsSync(join(dist,f)), 'Missing bundled native runtime asset: '+f);
 }
 assert.equal(
@@ -24,7 +26,8 @@ assert.equal(
   readFileSync(resolve(root,'../../src/options.js'),'utf8'),
   'Settings handler diverged from tested implementation'
 );
-const bg=readFileSync(join(dist,'background.js'),'utf8');
+const bg=readFileSync(join(dist,'pit-background.js'),'utf8');
+assert.equal(bg,readFileSync(resolve(root,'../../src/background.js'),'utf8'));
 assert(bg.includes('TRANSLATE_BATCH'),'Native provider routing not bundled');
 const popup=readFileSync(join(dist,'popup.html'),'utf8');
 assert(!popup.includes('pit-native.js'),'Content scripts must be injected only after explicit popup action');
