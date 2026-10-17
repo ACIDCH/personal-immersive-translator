@@ -106,14 +106,16 @@ export function NativeWebControls(){
    }catch(e){setStatus('网页截图失败：'+String(e instanceof Error?e.message:e));}
    finally{setWorking(false);}
  }
- async function liveAsr(action:'start'|'stop'){
+ async function liveAsr(action:'start'|'stop',backend:'local'|'cloud'='cloud'){
    if(captionBusy)return;
    if(action==='start' && !window.confirm(
-     '将捕获当前标签页声音并发送到本机 Whisper 服务。'+
+     (backend==='cloud'
+       ?'本次会将当前标签页短音频片段上传至你配置的 PIT 云端 Whisper 服务，可能消耗云端 AI 额度。'
+       :'本次音频只发送到本机 Whisper 服务。')+
      (mode==='ai'?'本次将使用已配置的 AI 翻译 API，可能计费，每次会话最多 80 次请求。':
        '将使用常规翻译服务，不自动启用付费 AI。')+
      '仅保留统计指标，不保存录音。确认启动？'))return;
-   if(action==='start' && asrToken.trim().length<16){
+   if(action==='start' && backend==='local' && asrToken.trim().length<16){
      setStatus('请填写本机 Whisper 服务令牌（至少 16 字符）');return;
    }
    setCaptionBusy(true);setStatus('正在连接本机语音识别服务…');
@@ -130,7 +132,8 @@ export function NativeWebControls(){
        tabId:action==='start'?tab?.id:undefined,
        token:action==='start'?asrToken.trim():undefined,
        mode:action==='start'?mode:undefined,
-       userInitiated:action==='start'&&mode==='ai'
+       userInitiated:action==='start'&&(mode==='ai'||backend==='cloud'),
+       asrBackend:action==='start'?backend:undefined
      });
      if(!res?.ok)throw Error(res?.error||'本机 ASR 请求失败');
      setStatus(action==='start'?'本机 Whisper 音频字幕已启动；可随时停止。':'本机 Whisper 音频字幕已停止');
@@ -237,7 +240,8 @@ export function NativeWebControls(){
        <input type="password" autoComplete="off" placeholder="PIT_BRIDGE_TOKEN" value={asrToken}
           onChange={event=>setAsrToken(event.target.value)}/>
      </label>
-     <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start')}>启动本机实时音频字幕</button>
+     <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','cloud')}>启动云端 Whisper 实时音频字幕</button>
+     <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','local')}>使用本机 Whisper（可选）</button>
      <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('stop')}>停止本机实时音频字幕</button>
    </div>
    {siteAccessNeeded&&<button type="button" className="grant-site" onClick={()=>void authorizeCurrentSite()}>允许当前网站翻译</button>}
