@@ -247,7 +247,7 @@ async def main():
         assert bundle.suggested_filename=='multimodal-translated-batch.zip'
         with zipfile.ZipFile(await bundle.path()) as pack:
           names=[name for name in pack.namelist() if not name.endswith('/')]
-          assert len(names)==4,names
+          assert len(names)==5,names
           for part,entry,expected in [
             ('translated/01-batch-translated.docx','word/document.xml','译文:My finance DOCX document'),
             ('translated/02-batch-translated.pptx','ppt/slides/slide1.xml','译文:Strategic planning presentation'),
@@ -267,11 +267,14 @@ async def main():
           {'name':'book.epub','mimeType':'application/epub+zip','buffer':epub_fixture()},
           {'name':'note.txt','mimeType':'text/plain','buffer':b'Plain document line\r\nSecond line'},
           {'name':'chapter.md','mimeType':'text/markdown','buffer':(
-            b'# Finance chapter\n\n- Investment overview\n' +
-            b'```python\nprint("stay")\n```\n[External link](https://example.org)\n')},
+            b'# Finance chapter\n\n- Investment overview\n'+
+            b'**Market** trends and [External link](https://example.org) with `fixed-code`.\n'+
+            b'```python\nprint("stay")\n```\n')},
           {'name':'story.html','mimeType':'text/html','buffer':(
             b'<!DOCTYPE html><html><body><p>HTML greeting <strong>business reader</strong></p>'+
-            b'<script>originalCode()</script></body></html>')}
+            b'<script>originalCode()</script></body></html>')},
+          {'name':'long.txt','mimeType':'text/plain',
+           'buffer':('Long economics paragraph. '*240).encode('utf8')}
         ])
         async with page.expect_download(timeout=55000) as portable_event:
           await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
@@ -298,7 +301,10 @@ async def main():
           assert '# 译文:Finance chapter' in markdown,markdown
           assert '- 译文:Investment overview' in markdown,markdown
           assert 'print("stay")' in markdown
-          assert '[External link](https://example.org)' in markdown
+          assert '](https://example.org)' in markdown and '**' in markdown
+          assert '`fixed-code`' in markdown
+          long_line=package.read('translated/05-long-translated.txt').decode('utf8')
+          assert long_line.count('译文:')>=2 and 'Long economics paragraph' in long_line
           html=package.read('translated/04-story-translated.html').decode('utf8')
           assert '译文:HTML greeting business reader' in ''.join(ET.fromstring(
             html[html.index('<html'):]).itertext())
