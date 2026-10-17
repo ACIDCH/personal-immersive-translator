@@ -14,7 +14,7 @@ assert.equal(manifest.action.default_popup,'popup.html');
 assert.equal(manifest.background.service_worker,'pit-background.js');
 assert.equal(manifest.background.type,'module');
 for(const f of ['pit-native.js','pit-native.css','pit-options.html','options.js',
-  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','pit-background.js','popup.html']){
+  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','file-lab.html','pit-background.js','popup.html']){
   assert(existsSync(join(dist,f)), 'Missing bundled native runtime asset: '+f);
 }
 assert.equal(
