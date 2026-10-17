@@ -53,6 +53,27 @@ async function stopLiveAsr() {
     await chrome.tabs.sendMessage(session.pit_live_asr_tab,{type:'PIT_ASR_VIEW_STOP',sessionId:session.pit_live_asr_session}).catch(()=>{});
   }
 }
+async function verifyLocalAsr(token){
+  let response;
+  try{
+    response=await fetch('http://127.0.0.1:8765/health',{
+      headers:{'X-PIT-Token':token},redirect:'error',
+      signal:AbortSignal.timeout(3000)
+    });
+  }catch{
+    throw new TranslationError('无法连接本机 Whisper 8765 服务；请先启动并加载模型');
+  }
+  if(!response.ok)throw new TranslationError(
+    response.status===401?'本机 Whisper 服务令牌不匹配':'本机 Whisper 健康检查失败');
+  let status;
+  try{status=await response.json();}catch{
+    throw new TranslationError('本机 Whisper 健康检查返回了无效数据');
+  }
+  if(!status || typeof status!=='object' || status.speech_asr!==true)
+    throw new TranslationError('本机 Whisper 模型尚未就绪，请检查 /health 中的 speech_asr');
+  if(status.speech_asr_requires_risk_ack)
+    throw new TranslationError('当前本机 Whisper 服务使用未经批准的实验模式');
+}
 async function startLiveAsr(message){
   const token=String(message.token||'');
   if(token.length<16) throw new TranslationError('缺少本机 Whisper 服务令牌');
@@ -61,6 +82,10 @@ async function startLiveAsr(message){
     throw new TranslationError('本机实时字幕使用 AI 必须明确确认计费风险');
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
   if(!tab?.id || tab.id!==message.tabId || !/^https?:\/\//.test(tab.url||'')) throw new TranslationError('只有当前活动视频标签页才能启动录音');
+  // Establish actual local model readiness before opening any audio track.
+  // A configured port or a successfully created recorder is not proof that
+  // Whisper inference can run. This is only a readiness gate, not a quality test.
+  await verifyLocalAsr(token);
   await stopLiveAsr();
   await chrome.offscreen.createDocument({url:'src/offscreen.html',reasons:['USER_MEDIA'],
     justification:'用户明确启动的本机实时音频字幕识别'});
