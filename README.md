@@ -1,6 +1,11 @@
-# Personal Immersive Translator
+# 多模态翻译 · Multimodal Translate
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
+
+**New platform direction:** WXT + React + TypeScript frontend foundation, Cloudflare Pages React control panel, user-managed multi-provider BYOK AI profiles. The UI shells in `apps/` are **design/build previews only** and do not replace the functional extension. See [new platform architecture](docs/MULTIMODAL_PLATFORM_VISION_zh-CN.md).
+
+The original GitHub repository slug is intentionally unchanged until GitHub Actions and pending PRs are migrated. Production-grade KISS integration, archived Immersive Translate reuse and live cloud deployments require separate licensing/quality gates.
+
 
 **Version under development:** 0.4.4 — release candidate preparation, **not production or real-account verified**.
 
