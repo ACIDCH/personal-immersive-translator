@@ -17,7 +17,7 @@ export default defineConfig({
     content_security_policy:{
       extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     },
-    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture'],
+    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture','contextMenus'],
     // A translator must work on arbitrary normal sites, not just API
     // provider domains. One install-time permission avoids per-site prompts.
     // Browser internal pages remain restricted.
