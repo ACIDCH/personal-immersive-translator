@@ -1,0 +1,234 @@
+import JSZip from 'jszip';
+import type {BatchTranslate,DocxProgress} from './docxTranslate';
+
+export type PortableKind='txt'|'md'|'html'|'htm'|'epub';
+type Unit={source:string;apply:(translated:string)=>void};
+const MAX_FILE=12*1024*1024;
+const MAX_UNPACKED=18*1024*1024;
+const MAX_CHAPTERS=180;
+const MAX_SEGMENTS=2500;
+const MAX_CHARS=250000;
+const BLOCKS='title,h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,dt,dd';
+const EXCLUDE='script,style,noscript,template,pre,code,svg,math,textarea,select,button,[hidden],[aria-hidden="true"],[translate="no"],[contenteditable="true"]';
+
+function ensureFile(buffer:ArrayBuffer){
+  if(!buffer.byteLength||buffer.byteLength>MAX_FILE)throw Error('当前文件大小限制为 1 字节至 12 MiB');
+}
+function utf8(buffer:ArrayBuffer):string{
+  // Never silently corrupt a non-UTF-8 book: invalid encodings need an
+  // explicitly selected decoder, not a lossy replacement-character export.
+  return new TextDecoder('utf-8',{fatal:true}).decode(buffer);
+}
+function xml(raw:string):Document{
+  const doc=new DOMParser().parseFromString(raw,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length)throw Error('XML/XHTML 文件结构不正确');
+  return doc;
+}
+function add(units:Unit[],source:string,apply:(text:string)=>void){
+  if(!source.trim())return;
+  if(source.length>4500)throw Error('单个文本块超过 4500 字符，请先拆分段落');
+  units.push({source,apply});
+}
+function guard(units:Unit[]){
+  if(units.length>MAX_SEGMENTS||units.reduce((n,u)=>n+u.source.length,0)>MAX_CHARS)
+    throw Error('当前最多支持 2500 个文本块、25 万字符');
+}
+function fillTextNodes(nodes:Text[],translated:string){
+  const lengths=nodes.map(n=>Array.from(n.data).length);
+  const total=lengths.reduce((a,b)=>a+b,0);
+  if(!total)return;
+  const chars=Array.from(translated);
+  let used=0,seen=0;
+  for(let i=0;i<nodes.length;i++){
+    seen+=lengths[i];
+    const end=i===nodes.length-1?chars.length:
+      Math.min(chars.length,Math.max(used,Math.round(chars.length*seen/total)));
+    nodes[i].data=chars.slice(used,end).join('');
+    used=end;
+  }
+}
+function textNodes(element:Element):Text[]{
+  const nodes:Text[]=[];
+  function visit(node:Node){
+    if(node.nodeType===3){
+      const text=node as Text;
+      if(text.data.trim())nodes.push(text);
+      return;
+    }
+    if(node.nodeType!==1)return;
+    const current=node as Element;
+    if(current.matches(EXCLUDE))return;
+    for(const child of Array.from(current.childNodes))visit(child);
+  }
+  visit(element);
+  return nodes;
+}
+function markupUnits(doc:Document):Unit[]{
+  const units:Unit[]=[];
+  for(const item of Array.from(doc.querySelectorAll(BLOCKS))){
+    if(item.closest(EXCLUDE))continue;
+    // Prefer the innermost text block to avoid translating nested
+    // paragraphs twice (notably EPUB lists and HTML block quotes).
+    if(item.querySelector(BLOCKS))continue;
+    const nodes=textNodes(item);
+    const source=nodes.map(node=>node.data).join('');
+    add(units,source,(translation)=>fillTextNodes(nodes,translation));
+  }
+  if(!units.length){
+    const root=doc.querySelector('body');
+    if(root&&!root.querySelector(BLOCKS)){
+      const nodes=textNodes(root);
+      add(units,nodes.map(node=>node.data).join(''),(t)=>fillTextNodes(nodes,t));
+    }
+  }
+  guard(units);
+  return units;
+}
+function plaintextUnits(source:string,markdown:boolean):{units:Unit[];write:()=>string}{
+  // Retain exact original newline delimiters, including CRLF.
+  const parts=source.split(/(\r\n|\r|\n)/);
+  const units:Unit[]=[];
+  let fenced='',frontmatter=false;
+  for(let i=0;i<parts.length;i+=2){
+    const line=parts[i];
+    if(markdown){
+      if(i===0&&line.trim()==='---'){frontmatter=true;continue;}
+      if(frontmatter){if(/^(---|\.\.\.)\s*$/.test(line))frontmatter=false;continue;}
+      const fence=line.match(/^\s{0,3}(\x60{3,}|~{3,})/);
+      if(fence){
+        if(!fenced)fenced=fence[1];
+        else if(fence[1][0]===fenced[0]&&fence[1].length>=fenced.length)fenced='';
+        continue;
+      }
+      if(fenced||/^( {4}|\t| {0,3}!\[| {0,3}\[[^\]]+\]:| {0,3}(?:---+|___+|\*\*\*+)\s*$)/.test(line))continue;
+      // Preserve link targets, inline code, raw tags, URLs and table syntax
+      // verbatim; they need an AST parser before safe inline editing.
+      if(/(\x60|!?\[[^\]]+\]\(|https?:\/\/|<\/?[a-z][^>]*>|\|)/i.test(line))continue;
+    }
+    const prefix=markdown?(line.match(/^(\s*(?:(?:#{1,6}|>|[-+*]|\d+[.)])\s+))(.*)$/)||[]):[];
+    const original=prefix.length?prefix[2]:line;
+    if(!original.trim()||/^\s*[\d\W_]+\s*$/.test(original))continue;
+    add(units,original,(translated)=>{parts[i]=(prefix.length?prefix[1]:'')+translated;});
+  }
+  guard(units);
+  return {units,write:()=>parts.join('')};
+}
+async function translateUnits(units:Unit[],translator:BatchTranslate,progress:DocxProgress){
+  guard(units);
+  let done=0;progress(0,units.length);
+  while(done<units.length){
+    const batch:Unit[]=[];let chars=0;
+    for(let i=done;i<units.length&&batch.length<8;i++){
+      const unit=units[i];
+      if(batch.length&&chars+unit.source.length>10500)break;
+      batch.push(unit);chars+=unit.source.length;
+    }
+    const translations=await translator(batch.map(u=>u.source));
+    if(!Array.isArray(translations)||translations.length!==batch.length||
+      translations.some(t=>typeof t!=='string'||!t.trim()))
+      throw Error('翻译文本数量不匹配，文件未输出');
+    batch.forEach((unit,i)=>unit.apply(translations[i]));
+    done+=batch.length;progress(done,units.length);
+  }
+}
+function safePath(path:string):string{
+  // Paths are always ZIP-internal. No remote resource loading or filesystem
+  // traversal, even when EPUB manifest hrefs have encoded traversal.
+  if(!path||/^[\/\\]/.test(path)||/^[a-z][a-z\d+.-]*:/i.test(path)||
+      /[?#\\\0]/.test(path))throw Error('EPUB 存在不安全的资源路径');
+  let decoded:string;
+  try{decoded=decodeURIComponent(path);}catch{throw Error('EPUB 路径编码无效');}
+  if(decoded.includes('\\')||decoded.startsWith('/')||decoded.includes('\0'))
+    throw Error('EPUB 存在不安全的资源路径');
+  const segments:string[]=[];
+  for(const bit of decoded.split('/')){
+    if(!bit||bit==='.')continue;
+    if(bit==='..'){if(!segments.length)throw Error('EPUB 资源路径越界');segments.pop();}
+    else segments.push(bit);
+  }
+  if(!segments.length)throw Error('EPUB 路径不可为空');
+  return segments.join('/');
+}
+function bookChapterNames(zip:JSZip,container:Document):string[]{
+  const root=Array.from(container.getElementsByTagNameNS('*','rootfile'))[0];
+  const opfPath=safePath(root?.getAttribute('full-path')||'');
+  const opfFile=zip.file(opfPath);
+  if(!opfFile)throw Error('EPUB 缺少 OPF 包描述文件');
+  // This lookup is async at the callsite to keep ZIP reads bounded.
+  return [opfPath];
+}
+async function epubParts(zip:JSZip):Promise<string[]>{
+  const mime=zip.file('mimetype');
+  if(!mime||(await mime.async('string')).trim()!=='application/epub+zip')
+    throw Error('未识别为标准 EPUB 包');
+  const first=Object.keys(zip.files).find(k=>!zip.files[k].dir);
+  if(first!=='mimetype')throw Error('EPUB 必须把未压缩的 mimetype 放在首项');
+  const containerFile=zip.file('META-INF/container.xml');
+  if(!containerFile)throw Error('EPUB 缺少 META-INF/container.xml');
+  const container=xml(await containerFile.async('string'));
+  const opfPath=bookChapterNames(zip,container)[0];
+  const packageXml=xml(await zip.file(opfPath)!.async('string'));
+  const byId=new Map<string,string>();
+  const directory=opfPath.includes('/')?opfPath.slice(0,opfPath.lastIndexOf('/')+1):'';
+  for(const item of Array.from(packageXml.getElementsByTagNameNS('*','item'))){
+    const id=item.getAttribute('id');
+    const href=item.getAttribute('href');
+    const media=item.getAttribute('media-type');
+    if(!id||!href||!['application/xhtml+xml','text/html'].includes(media||''))continue;
+    byId.set(id,safePath(directory+href));
+  }
+  const chapters:string[]=[];
+  for(const item of Array.from(packageXml.getElementsByTagNameNS('*','itemref'))){
+    const name=byId.get(item.getAttribute('idref')||'');
+    if(name&&!chapters.includes(name)){
+      if(!zip.file(name))throw Error('EPUB 正文资源不存在：'+name);
+      chapters.push(name);
+    }
+  }
+  if(!chapters.length)throw Error('EPUB 阅读顺序中没有 XHTML 章节');
+  if(chapters.length>MAX_CHAPTERS)throw Error('EPUB 超出 180 章限制');
+  return chapters;
+}
+export async function translatePortable(
+  buffer:ArrayBuffer,kind:PortableKind,translator:BatchTranslate,
+  progress:DocxProgress=()=>{}
+):Promise<Uint8Array>{
+  ensureFile(buffer);
+  const encoder=new TextEncoder();
+  if(kind==='txt'||kind==='md'){
+    const parsed=plaintextUnits(utf8(buffer),kind==='md');
+    await translateUnits(parsed.units,translator,progress);
+    return encoder.encode(parsed.write());
+  }
+  if(kind==='html'||kind==='htm'){
+    const original=utf8(buffer);
+    const doc=new DOMParser().parseFromString(original,'text/html');
+    const units=markupUnits(doc);
+    await translateUnits(units,translator,progress);
+    return encoder.encode((/^\s*<!doctype/i.test(original)?'<!DOCTYPE html>\n':'')+
+      doc.documentElement.outerHTML);
+  }
+  if(kind!=='epub')throw Error('不支持的便携文件类型');
+  const zip=await JSZip.loadAsync(buffer,{checkCRC32:true});
+  const chapters=await epubParts(zip);
+  type Part={path:string;doc:Document;units:Unit[]};
+  const parts:Part[]=[];
+  let unpacked=0;
+  for(const path of chapters){
+    const raw=await zip.file(path)!.async('string');
+    unpacked+=raw.length;
+    if(unpacked>MAX_UNPACKED)throw Error('EPUB 解压正文超过 18 MiB 限制');
+    const doc=xml(raw);
+    const units=markupUnits(doc);
+    parts.push({path,doc,units});
+  }
+  const units=parts.flatMap(p=>p.units);
+  await translateUnits(units,translator,progress);
+  for(const part of parts){
+    if(part.units.length)
+      zip.file(part.path,new XMLSerializer().serializeToString(part.doc));
+  }
+  // EPUB specification: first ZIP member must remain uncompressed mimetype.
+  zip.file('mimetype','application/epub+zip',{compression:'STORE'});
+  return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
+}
