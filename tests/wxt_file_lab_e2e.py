@@ -202,7 +202,7 @@ async def main():
         bundle=await batch_event.value
         assert bundle.suggested_filename=='multimodal-translated-batch.zip'
         with zipfile.ZipFile(await bundle.path()) as pack:
-          names=pack.namelist()
+          names=[name for name in pack.namelist() if not name.endswith('/')]
           assert len(names)==4,names
           for part,entry,expected in [
             ('translated/01-batch-translated.docx','word/document.xml','译文:My finance DOCX document'),
