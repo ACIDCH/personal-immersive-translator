@@ -42,16 +42,54 @@ async def main():
         page=await context.new_page()
         page.on("pageerror",lambda e:print("FILELAB PAGE ERROR:",str(e)[:300],flush=True))
         await page.goto(f'chrome-extension://{eid}/file-lab.html',wait_until='domcontentloaded',timeout=20000)
-        await page.get_by_role('heading',name='文件与图片解析实验台').wait_for(timeout=15000)
+        await page.get_by_role('heading',name='文件与图片处理').wait_for(timeout=15000)
         await page.locator('.document-lab input[type="file"]').set_input_files({
           'name':'fixture.docx',
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'buffer':ooxml_docx()
         })
-        await page.get_by_role('button',name='开始本地处理').click()
+        await page.get_by_role('button',name='开始本地读取 / 识别').click()
         await page.locator('.document-result').get_by_text('My finance DOCX document').wait_for(timeout=15000)
         report['docx']='pass'
         print("WXT DOCUMENT LAB DOCX: PASS",flush=True)
+        # Actual document translation MUST go through PIT's native provider,
+        # not a client-side simulated translation function.
+        options=await context.new_page()
+        await options.goto(f'chrome-extension://{eid}/pit-options.html')
+        await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
+        await options.locator('[name="standardProvider"]').select_option('microsoft')
+        await options.locator('[name="microsoftKey"]').fill('file-fixture-only')
+        await options.get_by_role('button',name='保存设置').click()
+        await options.get_by_text('设置已保存。').wait_for(timeout=8000)
+        await sw.evaluate("""()=>{
+          const original=globalThis.fetch.bind(globalThis);
+          globalThis.__fileDocxCalls=0;
+          globalThis.fetch=async(input,opts)=>{
+            const url=String(input?.url||input);
+            if(url.startsWith('https://api.cognitive.microsofttranslator.com/')){
+              globalThis.__fileDocxCalls++;
+              const data=JSON.parse(opts.body);
+              return new Response(JSON.stringify(data.map(x=>({
+                translations:[{text:'译文:'+x.Text}]
+              }))),{status:200,headers:{'content-type':'application/json'}});
+            }
+            return original(input,opts);
+          };
+        }""")
+        async with page.expect_download(timeout=25000) as download_event:
+          await page.get_by_role('button',name='翻译并导出 DOCX').click()
+        download=await download_event.value
+        assert download.suggested_filename=='fixture-translated.docx',download.suggested_filename
+        output=await download.path()
+        assert output
+        with zipfile.ZipFile(output) as z:
+          text=z.read('word/document.xml').decode('utf8')
+          assert '译文:My finance DOCX document' in text,text[:500]
+          assert '[Content_Types].xml' in z.namelist()
+        report['docx_export']='pass'
+        report['docx_provider_calls']=await sw.evaluate('()=>globalThis.__fileDocxCalls')
+        assert report['docx_provider_calls']==1,report
+        print('WXT DOCX TRANSLATION + DOWNLOAD: PASS',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
@@ -62,7 +100,7 @@ async def main():
           'name':'fixture.png','mimeType':'image/png','buffer':f.getvalue()
         })
         started=time.monotonic()
-        await page.get_by_role('button',name='开始本地处理').click()
+        await page.get_by_role('button',name='开始本地读取 / 识别').click()
         await page.wait_for_function("""()=>{
           const msg=document.querySelector('.document-lab p[aria-live="polite"]')?.textContent||'';
           const content=document.querySelector('.document-result')?.textContent||'';
