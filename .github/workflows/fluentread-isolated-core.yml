@@ -1,0 +1,65 @@
+name: GPL FluentRead isolated source build and Chromium boot
+on:
+  pull_request:
+    paths:
+      - 'scripts/upstream/fluentread-build-report.mjs'
+      - 'tests/fluentread_mv3_smoke.py'
+      - 'tests/fluentread_translation_matrix_e2e.py'
+      - '.github/workflows/fluentread-isolated-core.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fluentread-upstream-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  upstream-fluentread:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Checkout immutable GPL upstream into an isolated workspace
+        run: |
+          git clone --no-checkout --filter=blob:none https://github.com/FluentRead/FluentRead.git upstream/fluentread
+          git -C upstream/fluentread fetch --depth 1 origin 877ee77b5e3c905f6cc016db63633342dceb2419
+          git -C upstream/fluentread checkout --detach 877ee77b5e3c905f6cc016db63633342dceb2419
+          git -C upstream/fluentread rev-parse HEAD
+      - name: Install upstream locked dependencies
+        working-directory: upstream/fluentread
+        run: pnpm install --frozen-lockfile
+      - name: Run upstream official Chrome production build
+        working-directory: upstream/fluentread
+        run: pnpm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+          FLUENTREAD_DISABLE_BROWSER_RUNNER: '1'
+      - name: Verify GPL source, real Chrome MV3 output and JS
+        run: node scripts/upstream/fluentread-build-report.mjs upstream/fluentread
+      - name: Install Chromium for real extension boot
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Boot FluentRead service worker and popup in Chromium
+        run: python tests/fluentread_mv3_smoke.py upstream/fluentread/.output/chrome-mv3
+      - name: Execute native FluentRead webpage translation with mock Microsoft MT
+        run: python tests/fluentread_translation_matrix_e2e.py upstream/fluentread/.output/chrome-mv3
+      - name: Archive independent evidence only (no GPL binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fluentread-upstream-ci-reports
+          path: |
+            fluentread-build-report.json
+            fluentread-browser-report.json
+            fluentread-translation-benchmark.json
+          if-no-files-found: ignore
+          retention-days: 7

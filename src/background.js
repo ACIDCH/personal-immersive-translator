@@ -25,6 +25,9 @@ function isTrustedOptionsPage(sender) {
   return sender.url === chrome.runtime.getURL('src/options.html') ||
          sender.url === chrome.runtime.getURL('pit-options.html');
 }
+function isTrustedDocumentPage(sender) {
+  return sender.url === chrome.runtime.getURL('file-lab.html');
+}
 function isTrustedExtensionPage(sender) {
   return typeof sender.url === 'string' &&
          sender.url.startsWith(chrome.runtime.getURL('')) &&
@@ -138,8 +141,10 @@ async function handle(message, sender) {
     if (!isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可以清除缓存');
     await clearTranslations(chrome.storage.local); return {ok:true};
   }
-  if (message.type !== 'TRANSLATE_BATCH' && message.type !== 'TEST_PROVIDER') throw new TranslationError('不支持的请求');
+  if (!['TRANSLATE_BATCH','TEST_PROVIDER','TRANSLATE_DOCUMENT'].includes(message.type)) throw new TranslationError('不支持的请求');
   if (message.type === 'TEST_PROVIDER' && !isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可测试 API');
+  if (message.type === 'TRANSLATE_DOCUMENT' && !isTrustedDocumentPage(sender))
+    throw new TranslationError('仅插件文件处理页允许翻译本地文件');
   const settings = await getSettings();
   if (sender.tab) {
     // In a cross-origin video iframe, sender.tab.url is the LMS parent, while

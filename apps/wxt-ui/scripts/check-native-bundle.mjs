@@ -6,15 +6,17 @@ import assert from 'node:assert/strict';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'.output','chrome-mv3');
 const manifest=JSON.parse(readFileSync(join(dist,'manifest.json'),'utf8'));
-const expected=['activeTab','scripting','storage'];
+const expected=['activeTab','scripting','storage','webNavigation','offscreen','tabCapture'];
 for(const permission of expected)assert(manifest.permissions.includes(permission),'Missing permission: '+permission);
 for(const origin of ['https://*/*','http://*/*'])assert(manifest.host_permissions.includes(origin),'Missing ordinary webpage access: '+origin);
 assert.equal(manifest.options_page,'pit-options.html','Functional native options page must be used');
 assert.equal(manifest.action.default_popup,'popup.html');
 assert.equal(manifest.background.service_worker,'pit-background.js');
 assert.equal(manifest.background.type,'module');
+assert(manifest.content_security_policy?.extension_pages?.includes('wasm-unsafe-eval'),
+  'Packaged Tesseract requires MV3 wasm-unsafe-eval, not remote code');
 for(const f of ['pit-native.js','pit-native.css','pit-options.html','options.js',
-  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','pit-background.js','popup.html']){
+  'lib/settings.js','lib/ai-profiles.js','lib/providers.js','lib/cache.js','file-lab.html','tesseract/worker.min.js','tesseract/core/tesseract-core.wasm.js','tesseract/core/tesseract-core-simd.wasm.js','tesseract/core/tesseract-core-lstm.wasm.js','tesseract/core/tesseract-core-simd-lstm.wasm.js','pit-background.js','popup.html','pit-caption-core.js','pit-platform-captions.js','pit-subtitle-import.js','pit-subtitles.js','pit-tools.html','tools.js','lib/vision.js','pdf-preview.js','vendor/pdf.mjs','vendor/pdf.worker.mjs','vendor/PDFJS-LICENSE.txt','src/offscreen.html','src/offscreen.js','src/audio-capture-worklet.js','src/live-captions.js','src/lib/wav.js','src/lib/live-pipeline.js']){
   assert(existsSync(join(dist,f)), 'Missing bundled native runtime asset: '+f);
 }
 assert.equal(
