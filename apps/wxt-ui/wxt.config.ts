@@ -12,6 +12,10 @@ export default defineConfig({
     short_name:'多模态翻译',
     description:'PIT native webpage translation through the WXT React control panel. Video/PDF not enabled in this build.',
     minimum_chrome_version:'125',
+    // MV3 permits packaged WASM evaluation, not remote executable code.
+    content_security_policy:{
+      extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    },
     permissions:['activeTab','scripting','storage','tabs'],
     // A translator must work on arbitrary normal sites, not just API
     // provider domains. One install-time permission avoids per-site prompts.
