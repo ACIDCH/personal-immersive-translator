@@ -12,7 +12,6 @@
     ".wxt/wxt.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    "../../shared-ui/**/*.d.ts",
     "../shared-ui/**/*.d.ts"
   ]
 }
