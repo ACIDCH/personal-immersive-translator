@@ -18,6 +18,7 @@ const copies=[
  ['lib/settings.js','lib/settings.js'],
  ['lib/providers.js','lib/providers.js'],
  ['lib/language-detect.js','lib/language-detect.js'],
+ ['lib/preference-export.js','lib/preference-export.js'],
  ['lib/cache.js','lib/cache.js'],
  ['lib/ai-profiles.js','lib/ai-profiles.js'],
  ['lib/caption-core.js','pit-caption-core.js'],
