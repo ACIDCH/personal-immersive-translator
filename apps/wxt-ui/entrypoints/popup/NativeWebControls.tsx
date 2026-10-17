@@ -109,7 +109,10 @@ export function NativeWebControls(){
  async function liveAsr(action:'start'|'stop'){
    if(captionBusy)return;
    if(action==='start' && !window.confirm(
-     '将开始捕获当前标签页声音，发送到你本机的 Whisper 服务；只保存推断指标、不保存录音。确认启动？'))return;
+     '将捕获当前标签页声音并发送到本机 Whisper 服务。'+
+     (mode==='ai'?'本次将使用已配置的 AI 翻译 API，可能计费，每次会话最多 80 次请求。':
+       '将使用常规翻译服务，不自动启用付费 AI。')+
+     '仅保留统计指标，不保存录音。确认启动？'))return;
    if(action==='start' && asrToken.trim().length<16){
      setStatus('请填写本机 Whisper 服务令牌（至少 16 字符）');return;
    }
@@ -125,7 +128,9 @@ export function NativeWebControls(){
      const res=await browser.runtime.sendMessage({
        type:action==='start'?'PIT_ASR_START':'PIT_ASR_STOP',
        tabId:action==='start'?tab?.id:undefined,
-       token:action==='start'?asrToken.trim():undefined
+       token:action==='start'?asrToken.trim():undefined,
+       mode:action==='start'?mode:undefined,
+       userInitiated:action==='start'&&mode==='ai'
      });
      if(!res?.ok)throw Error(res?.error||'本机 ASR 请求失败');
      setStatus(action==='start'?'本机 Whisper 音频字幕已启动；可随时停止。':'本机 Whisper 音频字幕已停止');
