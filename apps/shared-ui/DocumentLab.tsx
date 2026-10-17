@@ -73,6 +73,35 @@ export function DocumentLab(){
     }catch(e){setMessage('处理失败：'+formatError(e));}
     finally{setBusy(false);}
   }
+  async function translateRecognizedImage(){
+    if(mode!=='ocr'||!file||!text.trim()||busy||!extensionFileLab||!runtime?.sendMessage)return;
+    if(translationMode==='ai'&&!confirm('将向自选 AI 模型发送图片识别文本，可能产生 API 费用。确认？'))return;
+    setBusy(true);setMessage('正在使用所选服务翻译识别文字…');
+    try{
+      const {splitOcrLines,bilingualImagePng}=await import('./imageTranslate');
+      const lines=splitOcrLines(text);
+      if(!lines.length)throw Error('没有可翻译的 OCR 文本');
+      const output:string[]=[];
+      for(let i=0;i<lines.length;i+=8){
+        const reply=await runtime.sendMessage({
+          type:'TRANSLATE_DOCUMENT',texts:lines.slice(i,i+8),mode:translationMode,userInitiated:true
+        });
+        if(!reply?.ok||!Array.isArray(reply.translations)||
+           reply.translations.length!==Math.min(8,lines.length-i))
+          throw Error(reply?.error||'OCR 翻译服务没有返回相同数量的译文');
+        output.push(...reply.translations);
+        setProgress('图片文字翻译 '+Math.min(i+8,lines.length)+'/'+lines.length+' 行');
+      }
+      const png=await bilingualImagePng(file,text,output);
+      const url=URL.createObjectURL(png);
+      const link=document.createElement('a');
+      link.href=url;link.download=file.name.replace(/\.[^.]+$/,'')+'-bilingual.png';
+      document.body.append(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setMessage('双语图片已导出：左侧原图完全保留，右侧排版展示机器译文。此模式不擦除或修补原图片文字。');
+    }catch(error){setMessage('图片翻译失败：'+formatError(error));}
+    finally{setBusy(false);}
+  }
   async function translateAndExport(){
     if(!file||!extensionFileLab||!runtime?.sendMessage||busy||mode!=='docx')return;
     if(translationMode==='ai'&&!confirm('将使用你选择的 AI 模型翻译 DOCX，可能产生 API 费用。确认开始吗？'))return;
@@ -109,6 +138,13 @@ export function DocumentLab(){
       </select>
     </label>}
     <button type="button" disabled={!file||busy||file.size>MAX_BYTES} onClick={()=>void process()}>{busy?'处理中…':'开始本地读取 / 识别'}</button>
+    {mode==='ocr'&&extensionFileLab&&text.trim()&&<>
+      <div className="native-modes" aria-label="图片文字翻译服务">
+        <button type="button" aria-pressed={translationMode==='standard'} onClick={()=>setTranslationMode('standard')}>常规翻译</button>
+        <button type="button" aria-pressed={translationMode==='ai'} onClick={()=>setTranslationMode('ai')}>自选 AI 精译</button>
+      </div>
+      <button type="button" disabled={busy} onClick={()=>void translateRecognizedImage()}>翻译识别文本并导出双语 PNG</button>
+    </>}
     {mode==='docx'&&extensionFileLab&&<>
       <div className="native-modes" aria-label="DOCX 翻译服务">
         <button type="button" aria-pressed={translationMode==='standard'} onClick={()=>setTranslationMode('standard')}>常规翻译</button>
