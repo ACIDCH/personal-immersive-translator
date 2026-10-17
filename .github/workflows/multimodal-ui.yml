@@ -18,6 +18,8 @@ on:
       - 'tests/pit_translation_matrix_e2e.py'
       - 'tests/wxt_file_lab_e2e.py'
       - 'tests/wxt_multilingual_ocr_e2e.py'
+      - 'services/pdf-layout/**'
+      - 'tests/test_pdf2zh_adapter.py'
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +46,8 @@ jobs:
           node --test tests/ai-profiles.test.js
           node --check cloudflare/multimodal-api/src/index.mjs
           node --test cloudflare/multimodal-api/test/*.test.mjs
+      - name: Test local PDFMathTranslate subprocess adapter (offline contract only)
+        run: python3 -m unittest discover -s tests -p test_pdf2zh_adapter.py -v
 
   ui-build:
     runs-on: ubuntu-latest
