@@ -98,3 +98,15 @@ test('hosted Whisper rejects oversized and invalid audio without inference',asyn
  assert.equal((await api.fetch(oversize,config)).status,413);
  assert.equal(calls,0);
 });
+
+test('real extension cross-origin CORS preflight permits bearer and JSON',async()=>{
+ const preflight=await api.fetch(new Request('https://demo.workers.dev/v1/translate',{
+  method:'OPTIONS',
+  headers:{Origin:'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
+   'Access-Control-Request-Method':'POST',
+   'Access-Control-Request-Headers':'authorization,content-type'}}),env);
+ assert.equal(preflight.status,204);
+ assert.match(preflight.headers.get('access-control-allow-headers'),/Authorization/);
+ assert.match(preflight.headers.get('access-control-allow-methods'),/POST/);
+ assert.equal(preflight.headers.get('access-control-allow-origin'),'*');
+});
