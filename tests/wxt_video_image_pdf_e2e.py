@@ -205,14 +205,14 @@ async def main():
             pdfjs.GlobalWorkerOptions.workerSrc=chrome.runtime.getURL('vendor/pdf.worker.mjs');
             const task=pdfjs.getDocument({data,isEvalSupported:false});
             try{
-              const document=await task.promise;
-              const page=await document.getPage(1);
+              const pdfDoc=await task.promise;
+              const page=await pdfDoc.getPage(1);
               const viewport=page.getViewport({scale:0.25});
               const canvas=document.createElement('canvas');
               canvas.width=Math.ceil(viewport.width);
               canvas.height=Math.ceil(viewport.height);
               await page.render({canvas,canvasContext:canvas.getContext('2d'),viewport}).promise;
-              return {pages:document.numPages,width:canvas.width,height:canvas.height};
+              return {pages:pdfDoc.numPages,width:canvas.width,height:canvas.height};
             }finally{await task.destroy();}
           }""",decoded)
           assert result['pages']==1 and result['width']>200 and result['height']>100,result
