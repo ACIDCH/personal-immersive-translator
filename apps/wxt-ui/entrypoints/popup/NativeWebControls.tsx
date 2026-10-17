@@ -101,7 +101,7 @@ export function NativeWebControls(){
      const tabId=tab.id;
      const sessionKey='pit_caption_frame_'+tabId;
      const former=await browser.storage.session.get(sessionKey);
-     const prior=former[sessionKey];
+     const prior=typeof former[sessionKey]==='number' ? former[sessionKey] as number : -1;
      if(action==='stop'){
        await browser.tabs.sendMessage(tabId,{type:'PIT_CAPTIONS_STOP'},{frameId:0}).catch(()=>{});
        if(Number.isInteger(prior)&&prior>0)
