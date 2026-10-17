@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {translateBatch,parseAIResponse,decodeEntities,TranslationError} from '../src/lib/providers.js';
-import {normalizeSettings,hostIsBlocked,portablePreferences,applyPortablePreferences} from '../src/lib/settings.js';
+import {normalizeSettings,hostIsBlocked,portablePreferences,applyPortablePreferences,isStandardServiceConfigured} from '../src/lib/settings.js';
 
 function mockResponse(output,check) {return async (url,init) => {check?.(url,init);return {ok:true,status:200,json:async()=>output};};}
 const config = {target:'zh', source:'en'};
@@ -163,4 +163,14 @@ test('portable preference import is allowlisted and version checked',()=>{
  assert.equal(restored.cloudToken,'keep-secret');
  assert.deepEqual(restored.aiProfiles,[]);
  assert.equal(restored.standardProvider,'cloud');
+});
+
+test('site auto-translate only activates with a configured standard MT engine',()=>{
+ assert.equal(isStandardServiceConfigured({}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'123'}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'http://pit.example',cloudToken:'long-fake-token-12345'}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'long-fake-token-12345'}),true);
+ assert.equal(isStandardServiceConfigured({standardProvider:'google',googleKey:'abcdef'}),true);
+ assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'http://localhost:5000'}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'https://mt.example'}),true);
 });
