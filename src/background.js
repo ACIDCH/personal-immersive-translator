@@ -305,6 +305,41 @@ async function handleKeyboardCommand(command){
       display:settings.webDisplay,theme:settings.translationTheme});
  }catch{}
 }
+
+// Chrome-owned context menus provide native discoverability without copying
+// another translator's UI and never read selection through an extension page.
+const PIT_CONTEXT_ACTIONS=[
+ ['pit-context-page','PIT · Translate page',['page']],
+ ['pit-context-selection','PIT · Translate selection',['selection']],
+ ['pit-context-restore','PIT · Restore original text',['page']]
+];
+function registerTranslationMenus(){
+ if(!chrome.contextMenus?.create)return;
+ for(const [id,title,contexts] of PIT_CONTEXT_ACTIONS){
+  chrome.contextMenus.create({id,title,contexts,documentUrlPatterns:[
+   'http://*/*','https://*/*'
+  ]},()=>{void chrome.runtime.lastError;});
+ }
+}
+chrome.runtime.onInstalled.addListener(registerTranslationMenus);
+chrome.contextMenus?.onClicked?.addListener((info,tab)=>{
+ if(!PIT_CONTEXT_ACTIONS.some(item=>item[0]===info.menuItemId))return;
+ void (async()=>{
+  if(!tab?.id||!/^https?:\/\//.test(tab.url||''))return;
+  const settings=await getSettings();
+  if(hostIsBlocked(new URL(tab.url).hostname,settings.blockedHosts))return;
+  if(info.menuItemId!=='pit-context-restore'&&
+    settings.standardProvider==='cloud'&&
+    (!settings.cloudEndpoint||!settings.cloudToken))return;
+  await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+  const payload=info.menuItemId==='pit-context-restore'?{type:'PIT_RESTORE'}:
+    info.menuItemId==='pit-context-selection'?{type:'PIT_SELECTION',mode:'standard'}:
+    {type:'PIT_START',mode:'standard',scope:settings.webScope,
+      display:settings.webDisplay,theme:settings.translationTheme};
+  await chrome.tabs.sendMessage(tab.id,payload);
+ })().catch(()=>{});
+});
 chrome.commands?.onCommand?.addListener(command=>{
  void handleKeyboardCommand(command).catch(()=>{});
 });
