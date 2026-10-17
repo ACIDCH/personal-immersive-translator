@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useRef,useState} from 'react';
 import type {ChangeEvent} from 'react';
 import type {PdfOcrLanguage,PdfTranslationMode} from './pdfBilingual';
 
@@ -14,6 +14,7 @@ export function PdfBilingualLab(){
  const [ocrLang,setOcrLang]=useState<PdfOcrLanguage>('eng');
  const [mode,setMode]=useState<PdfTranslationMode>('standard');
  const [busy,setBusy]=useState(false);
+ const currentAbort=useRef<AbortController|null>(null);
  const [progress,setProgress]=useState('');
  const [status,setStatus]=useState('使用 PDF.js 提取文本；扫描页自动使用本机 Tesseract WASM。');
  if(!available)return null;
@@ -23,6 +24,7 @@ export function PdfBilingualLab(){
  async function run(){
    if(!file||busy||!runtime?.sendMessage)return;
    if(mode==='ai'&&!confirm('将把提取的 PDF 文字发送给所选 AI 模型，可能产生费用。确认？'))return;
+   const controller=new AbortController();currentAbort.current=controller;
    setBusy(true);setStatus('正在处理 PDF…');
    try{
      const {translateBilingualPdf}=await import('./pdfBilingual');
@@ -34,8 +36,9 @@ export function PdfBilingualLab(){
        if(!response.ok||!Array.isArray(response.translations))
          throw Error(response.error||'PDF 翻译服务未返回译文');
        return response.translations;
-     },{onRetry:info=>setProgress('PDF 翻译暂时限流/超时，重试 '+info.attempt+' 次')});
-     const result=await translateBilingualPdf(file,translate,ocrLang,(done,total,stage)=>setProgress(`${done}/${total} 页 · ${stage}`));
+     },{signal:controller.signal,onRetry:info=>setProgress('PDF 翻译暂时限流/超时，重试 '+info.attempt+' 次')});
+     const result=await translateBilingualPdf(file,translate,ocrLang,(done,total,stage)=>setProgress(`${done}/${total} 页 · ${stage}`),controller.signal);
+     if(controller.signal.aborted)throw Error('用户已取消 PDF 翻译');
      const copy=new Uint8Array(result.pdf.byteLength);copy.set(result.pdf);
      const url=URL.createObjectURL(new Blob([copy],{type:'application/pdf'}));
      const a=document.createElement('a');
@@ -46,7 +49,7 @@ export function PdfBilingualLab(){
        ' 页。原页视觉保留，译文排在右侧；输出为栅格页面而非可编辑原版。');
    }catch(error){
      setStatus('PDF 处理失败：'+String(error instanceof Error?error.message:error));
-   }finally{setBusy(false);}
+   }finally{currentAbort.current=null;setBusy(false);}
  }
  return <section className="document-lab pdf-bilingual-lab">
    <h2>浏览器内 PDF / 扫描件双语翻译</h2>
@@ -68,6 +71,7 @@ export function PdfBilingualLab(){
    <button type="button" disabled={!file||busy} onClick={()=>void run()}>
      {busy?'正在处理…':'翻译并导出双语 PDF'}
    </button>
+   {busy&&<button type="button" onClick={()=>{currentAbort.current?.abort();setStatus('取消请求已提交，当前 OCR / API 操作结束后停止。');}}>取消 PDF 处理</button>}
    {progress&&<p role="status">{progress}</p>}
    <p aria-live="polite">{status}</p>
  </section>;
