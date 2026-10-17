@@ -6,7 +6,7 @@
   if (globalThis.__PIT_TRANSLATOR_V1__) return;
   globalThis.__PIT_TRANSLATOR_V1__ = true;
 
-  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
+  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast,.pit-selection-card';
   const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
   let scope='smart',display='bilingual',theme='subtle';
@@ -167,10 +167,10 @@
   function ownedMutation(mutation) {
     const element=mutation.target.nodeType===1
       ? mutation.target : mutation.target.parentElement;
-    if(element?.closest?.('.pit-translation,.pit-toast'))return true;
+    if(element?.closest?.('.pit-translation,.pit-toast,.pit-selection-card'))return true;
     if(mutation.type==='childList' && mutation.addedNodes.length){
       return [...mutation.addedNodes].every(node=>
-        node.nodeType===1 && node.matches?.('.pit-translation,.pit-toast'));
+        node.nodeType===1 && node.matches?.('.pit-translation,.pit-toast,.pit-selection-card'));
     }
     if(mutation.type==='childList' && mutation.removedNodes.length){
       return [...mutation.removedNodes].every(node=>
@@ -233,7 +233,7 @@
       root.querySelectorAll('.pit-source-block').forEach(node=>
         node.classList.remove('pit-source-block','pit-original-concealed'));
     }
-    document.querySelectorAll('.pit-toast').forEach(node=>node.remove());
+    document.querySelectorAll('.pit-toast,.pit-selection-card').forEach(node=>node.remove());
     processed=new WeakMap();aiCount=0;standardSpent=0;standardBudget=STANDARD_STEP;
     failedBatches=0;succeededBatches=0;lastError='';
   }
@@ -260,13 +260,74 @@
     }
     void translateContent(id);
   }
+  function showSelectionCard(original,translated,rect){
+    document.querySelector('.pit-selection-card')?.remove();
+    const card=document.createElement('aside');
+    card.className='pit-selection-card';
+    card.setAttribute('role','dialog');
+    card.setAttribute('aria-label','PIT 划词翻译');
+    const title=document.createElement('strong');
+    title.textContent='PIT · 划词翻译';
+    const close=document.createElement('button');
+    close.type='button';close.textContent='关闭';
+    close.setAttribute('aria-label','关闭划词翻译');
+    close.addEventListener('click',()=>card.remove());
+    const heading=document.createElement('div');
+    heading.className='pit-selection-header';
+    heading.append(title,close);
+    const source=document.createElement('p');source.className='pit-selection-source';
+    source.textContent=original;
+    const output=document.createElement('p');output.className='pit-selection-result';
+    output.textContent=translated;
+    const actions=document.createElement('div');actions.className='pit-selection-actions';
+    const button=(label,run)=>{
+      const el=document.createElement('button');
+      el.type='button';el.textContent=label;el.addEventListener('click',run);
+      actions.append(el);
+    };
+    button('复制译文',()=>{
+      void navigator.clipboard?.writeText(translated)
+        .then(()=>toast('译文已复制'))
+        .catch(()=>toast('复制失败，请手动选择译文'));
+    });
+    button('朗读原文',()=>{
+      if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
+        toast('此浏览器未提供语音朗读功能');return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(original);
+      window.speechSynthesis.speak(utterance);
+    });
+    button('朗读译文',()=>{
+      if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
+        toast('此浏览器未提供语音朗读功能');return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(translated);
+      window.speechSynthesis.speak(utterance);
+    });
+    card.append(heading,source,output,actions);
+    document.documentElement.append(card);
+    const box=rect&&Number.isFinite(rect.left)?rect:null;
+    const left=box?box.left:window.innerWidth/2-160;
+    const top=box?box.bottom+9:70;
+    card.style.left=Math.max(8,Math.min(left,window.innerWidth-340))+'px';
+    card.style.top=Math.max(8,Math.min(top,window.innerHeight-180))+'px';
+  }
   async function translateSelection(requestedMode) {
     const selection=window.getSelection();
     const text=selection?.toString().trim()||'';
     if(!text || text.length>5000){toast('请选中 1–5000 字符的正文');return;}
     const anchor=selection.anchorNode?.parentElement;
     if(anchor && isUnsafe(anchor)){toast('无法翻译编辑框或受保护区域');return;}
-    try{const result=await request([text],requestedMode,'');toast(result[0]);}
+    let rectangle=null;
+    try{
+      if(selection.rangeCount)rectangle=selection.getRangeAt(0).getBoundingClientRect();
+    }catch{}
+    try{
+      const result=await request([text],requestedMode,'');
+      showSelectionCard(text,result[0],rectangle);
+    }
     catch(error){toast('翻译失败：'+String(error.message||error));}
   }
   function mountFloatingControl(){
