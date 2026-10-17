@@ -13,6 +13,7 @@ on:
       - '.github/workflows/multimodal-ui.yml'
       - 'tests/wxt_native_web_e2e.py'
       - 'tests/wxt_web_coverage_matrix_e2e.py'
+      - 'tests/wxt_public_site_probe.py'
   workflow_dispatch:
 
 permissions:
@@ -109,5 +110,17 @@ jobs:
         with:
           name: multimodal-web-coverage-matrix
           path: wxt-web-coverage-report.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Probe public websites in real Chromium (network-dependent, not provider quality)
+        id: real_site_probe
+        continue-on-error: true
+        run: python tests/wxt_public_site_probe.py
+      - name: Archive non-gating public-site probe observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multimodal-public-site-probe
+          path: wxt-public-site-probe.json
           if-no-files-found: ignore
           retention-days: 7
