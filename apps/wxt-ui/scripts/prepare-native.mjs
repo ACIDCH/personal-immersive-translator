@@ -25,7 +25,13 @@ const copies=[
  ['subtitles.js','pit-subtitles.js'],
  ['tools.html','pit-tools.html'],
  ['tools.js','tools.js'],
- ['lib/vision.js','lib/vision.js']
+ ['lib/vision.js','lib/vision.js'],
+ ['offscreen.html','src/offscreen.html'],
+ ['offscreen.js','src/offscreen.js'],
+ ['audio-capture-worklet.js','src/audio-capture-worklet.js'],
+ ['live-captions.js','src/live-captions.js'],
+ ['lib/wav.js','src/lib/wav.js'],
+ ['lib/live-pipeline.js','src/lib/live-pipeline.js']
 ];
 for(const [src,dst] of copies){
  const path=join(source,src);
