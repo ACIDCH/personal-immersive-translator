@@ -26,6 +26,9 @@ export default defineConfig({
   hooks:{
     'build:manifestGenerated': (_wxt,manifest)=>{
       manifest.options_page='pit-options.html';
+      // A first-party module service worker is copied without Vite rewriting
+      // cache/storage logic. React UI remains built and managed by WXT.
+      manifest.background={service_worker:'pit-background.js',type:'module'};
     }
   },
   vite:()=>({plugins:[react()]})
