@@ -46,3 +46,35 @@
 }
 #pit-floating-translate:focus-visible{outline:3px solid #f9bc45 !important;outline-offset:3px !important}
 @media print {#pit-floating-translate {display:none !important}}
+
+/* Persistent selection card: real controls remain usable after the toast timer.
+   The page's original text is never replaced by this interaction. */
+.pit-selection-card {
+ position:fixed !important;z-index:2147483645 !important;
+ width:min(320px,calc(100vw - 16px)) !important;max-height:60vh !important;
+ overflow:auto !important;margin:0 !important;padding:14px !important;
+ box-sizing:border-box !important;border-radius:12px !important;
+ color:#eaf4ff !important;background:#14243a !important;
+ border:1px solid #4c739e !important;
+ box-shadow:0 8px 32px rgba(0,0,0,.35) !important;
+ font:13px/1.5 system-ui,sans-serif !important;
+ text-align:left !important;white-space:normal !important;
+}
+.pit-selection-card *{box-sizing:border-box !important}
+.pit-selection-card .pit-selection-header{
+ display:flex !important;justify-content:space-between !important;
+ align-items:center !important;gap:8px !important;
+}
+.pit-selection-card .pit-selection-header strong{font-size:13px !important;color:white !important}
+.pit-selection-card p{margin:9px 0 !important;line-height:1.6 !important;overflow-wrap:anywhere !important}
+.pit-selection-card .pit-selection-source{color:#aabbd0 !important}
+.pit-selection-card .pit-selection-result{color:white !important;font-weight:600 !important}
+.pit-selection-card .pit-selection-actions{display:flex !important;gap:6px !important;flex-wrap:wrap !important}
+.pit-selection-card button{
+ border:1px solid #648eb5 !important;border-radius:7px !important;
+ background:#254469 !important;color:white !important;
+ padding:6px 9px !important;font:12px/1.35 system-ui,sans-serif !important;
+ cursor:pointer !important;
+}
+.pit-selection-card button:focus-visible{outline:2px solid #f4c556 !important}
+@media print {.pit-selection-card{display:none !important}}
