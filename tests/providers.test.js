@@ -65,7 +65,7 @@ test('remote HTTP errors are sanitized to avoid leaking server data',async()=>{
   await assert.rejects(translateBatch(['x'],{...config,provider:'microsoft',microsoftKey:'secret'},async()=>({ok:false,status:429})),e=>e.status===429 && !e.message.includes('secret'));
 });
 test('sanitize settings and block nested sensitive hosts',()=>{
-  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'microsoft');
+  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'cloud');
   assert.equal(normalizeSettings({autoAI:true}).autoAI,false);
   assert.equal(hostIsBlocked('payments.example.com','example.com'),true);
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
@@ -76,7 +76,25 @@ test('Corrupted settings reset safely without enabling AI',()=>{
   for(const input of [null,42,'broken',[]]){
     const settings=normalizeSettings(input);
     assert.equal(settings.autoAI,false);
-    assert.equal(settings.standardProvider,'microsoft');
+    assert.equal(settings.standardProvider,'cloud');
     assert.equal(settings.target,'zh');
   }
+});
+
+test('hosted PIT M2M100 adapter uses user-configured HTTPS and bearer token',async()=>{
+ const fetcher=mockResponse({translations:['金融市场']},(url,init)=>{
+   assert.equal(url,'https://pit-translation.example.workers.dev/v1/translate');
+   assert.equal(init.headers.Authorization,'Bearer 123456789abcdefghi');
+   assert.deepEqual(JSON.parse(init.body),{texts:['Financial markets'],source:'auto',target:'zh'});
+ });
+ const answer=await translateBatch(['Financial markets'],{
+   ...config,source:'auto',provider:'cloud',
+   cloudEndpoint:'https://pit-translation.example.workers.dev',
+   cloudToken:'123456789abcdefghi'},fetcher);
+ assert.deepEqual(answer,['金融市场']);
+ await assert.rejects(translateBatch(['Hi'],{
+   ...config,provider:'cloud'},fetcher),/HTTPS 地址/);
+ await assert.rejects(translateBatch(['Hi'],{
+   ...config,provider:'cloud',cloudEndpoint:'http://pit.example',
+   cloudToken:'123456789abcdefghi'},fetcher),/HTTPS/);
 });
