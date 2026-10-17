@@ -12,7 +12,7 @@ export default defineConfig({
     short_name:'多模态翻译',
     description:'PIT native webpage translation through the WXT React control panel. Video/PDF not enabled in this build.',
     minimum_chrome_version:'125',
-    permissions:['activeTab','scripting','storage'],
+    permissions:['activeTab','scripting','storage','tabs'],
     host_permissions:[
       'https://api.cognitive.microsofttranslator.com/*',
       'https://translation.googleapis.com/*',
@@ -21,7 +21,7 @@ export default defineConfig({
       'https://generativelanguage.googleapis.com/*',
       'https://api.deepseek.com/*'
     ],
-    optional_host_permissions:['https://*/*']
+    optional_host_permissions:['https://*/*','http://*/*']
   },
   hooks:{
     'build:manifestGenerated': (_wxt,manifest)=>{
