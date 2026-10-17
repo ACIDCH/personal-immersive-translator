@@ -28,7 +28,11 @@ async def main():
           origin="/".join(worker.url.split("/")[:3])
           assert origin.startswith("chrome-extension://"),worker.url
           print("PASS: KISS MV3 background worker is active",origin,flush=True)
-          display=await worker.evaluate("""()=>{
+          errors=[]
+          popup=await browser.new_page()
+          popup.on("pageerror",lambda e:errors.append(str(e)))
+          await popup.goto(origin+"/popup.html")
+          display=await popup.evaluate("""()=>{
             const m=chrome.runtime.getManifest();
             return {name:m.name,version:m.version,version_name:m.version_name,
               title:m.action?.default_title,icon:m.icons?.['128']};
@@ -39,10 +43,6 @@ async def main():
           assert display["title"]=="PIT 沉浸式翻译 · v0.4.9",display
           assert display["icon"]=="pit/icons/icon128.png",display
           print("PASS: Chrome extension identity displays PIT brand and KISS core attribution",flush=True)
-          errors=[]
-          popup=await browser.new_page()
-          popup.on("pageerror",lambda e:errors.append(str(e)))
-          await popup.goto(origin+"/popup.html")
           await popup.locator("#pit-multimodal-links a").first.wait_for(timeout=10000)
           hrefs=await popup.locator("#pit-multimodal-links a").evaluate_all(
             "(els)=>els.map(el=>el.getAttribute('href'))")
