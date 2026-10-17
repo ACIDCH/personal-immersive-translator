@@ -33,9 +33,11 @@ async def main():
               window.pitListeners=[];
               window.chrome={runtime:{
                 onMessage:{addListener: fn=>window.pitListeners.push(fn)},
-                sendMessage: async msg=>({
-                  ok:true,translations:msg.texts.map(t=>'译文:'+t)
-                })
+                sendMessage: async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+                  ? {ok:true,preferences:{hoverTranslate:true,inputTranslate:true,
+                    webScope:'smart',webDisplay:'bilingual',
+                    translationTheme:'subtle',autoTranslateHosts:'',blockedHosts:''}}
+                  : {ok:true,translations:msg.texts.map(t=>'译文:'+t)}
               }};
               window.pitAction=(type,mode='standard')=>new Promise(resolve=>{
                 for(const fn of window.pitListeners)fn({type,mode},{},resolve);
@@ -75,6 +77,37 @@ async def main():
             await page.locator('#div-only + .pit-translation').get_by_text(
               '译文:Div-only financial summary').wait_for(timeout=9000)
             print("PASS: actual browser short CJK, short Latin and div-only article segments")
+            await page.evaluate("""()=>{
+              const container=document.createElement('section');
+              container.innerHTML='<p id="hover-target">Hover interaction for finance readers</p>'+
+                '<input id="input-target" type="text" value="Financial markets" />'+
+                '<input id="secret-target" type="password" value="dont-touch-me" />';
+              document.querySelector('main').append(container);
+              document.querySelector('#hover-target').dispatchEvent(
+                new PointerEvent('pointerover',{bubbles:true,shiftKey:true}));
+            }""")
+            await page.locator('#hover-target + .pit-translation').get_by_text(
+              '译文:Hover interaction for finance readers').wait_for(timeout=9000)
+            input_box=page.locator('#input-target')
+            await input_box.focus()
+            await input_box.press('Space')
+            await input_box.press('Space')
+            await input_box.press('Space')
+            await page.wait_for_function("""()=>{
+              return document.querySelector('#input-target').value==='译文:Financial markets';
+            }""",timeout=9000)
+            assert await page.locator('#secret-target').input_value()=='dont-touch-me'
+            await page.evaluate("()=>window.pitAction('PIT_SET_DISPLAY')")
+            # A direct display-mode command is tested below with its value.
+            await page.evaluate("""()=>new Promise(resolve=>
+              window.pitListeners.forEach(fn=>fn({
+                type:'PIT_SET_DISPLAY',display:'translation-only',theme:'highlight'
+              },{},resolve)))""")
+            assert await page.locator('#hover-target').evaluate(
+              "el=>el.classList.contains('pit-original-concealed')")
+            assert await page.locator('#hover-target + .pit-translation').get_attribute(
+              'data-theme')=='highlight'
+            print("PASS: Shift hover, triple-Space translation and translation-only mode")
             await page.evaluate("()=>window.pitAction('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
             assert await page.evaluate("""()=>
