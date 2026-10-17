@@ -44,7 +44,11 @@ async def main():
       await page.evaluate("()=>window.action('PIT_START')")
       await page.locator("#block-319 + .pit-translation").wait_for(timeout=25000)
       assert await page.locator("#article .pit-translation").count()==320
-      print("PASS: all 320 article paragraphs translated, no first-page truncation")
+      progress=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
+      assert progress["ok"] and progress["progress"]["eligible"]>=320,progress
+      assert progress["progress"]["coveragePercent"]==100,progress
+      assert progress["progress"]["failedBatches"]==0,progress
+      print("PASS: 320 article paragraphs + real DOM coverage metrics, no first-page truncation")
 
       await page.locator("#list-item .pit-translation").wait_for(timeout=5000)
       one=await page.locator("#list-item .pit-translation").inner_text()
