@@ -102,8 +102,10 @@ async function parsePdfSource(buffer:Uint8Array,entry:string):Promise<{
 }
 export async function translateBilingualPdf(
  file:File, translate:PdfTranslate, language:PdfOcrLanguage,
- progress:PdfProgress=()=>{}
+ progress:PdfProgress=()=>{},signal?:AbortSignal
 ):Promise<{pdf:Uint8Array;pages:number;ocrPages:number}>{
+ const ensureRunning=()=>{if(signal?.aborted)throw Error('用户已取消 PDF 翻译');};
+ ensureRunning();
  if(file.size<20||file.size>MAX_FILE||!file.name.toLowerCase().endsWith('.pdf'))
    throw Error('仅支持不超过 16 MiB 的 PDF 文件');
  const runtime=(globalThis as {chrome?:{runtime?:{
@@ -124,6 +126,7 @@ export async function translateBilingualPdf(
    const {PDFDocument}=await import('pdf-lib');
    const out=await PDFDocument.create();
    for(let index=1;index<=pageCount;index++){
+     ensureRunning();
      const page=await source.getPage(index);
      try{
        const nativeViewport=page.getViewport({scale:1});
@@ -159,12 +162,14 @@ export async function translateBilingualPdf(
          throw Error('单页文字超过浏览器内 PDF 翻译上限');
        const translations:string[]=[];
        for(const batch of splitForProvider(segments)){
+         ensureRunning();
          const batchResults=await translate(batch);
          if(batchResults.length!==batch.length||
            batchResults.some(x=>typeof x!=='string'||!x.trim()))
            throw Error('PDF 翻译服务没有返回完整的段落');
          translations.push(...batchResults);
        }
+       ensureRunning();
        const composite=drawSideBySide(canvas,translations);
        const imageBytes=new Uint8Array(await (await blobFromCanvas(composite)).arrayBuffer());
        const image=await out.embedPng(imageBytes);
@@ -178,7 +183,9 @@ export async function translateBilingualPdf(
        canvas.width=0;canvas.height=0;
      }finally{page.cleanup();}
    }
+   ensureRunning();
    const exported=await out.save({useObjectStreams:false});
+   ensureRunning();
    return {pdf:new Uint8Array(exported),pages:pageCount,ocrPages};
  }finally{
    if(ocr)await ocr.terminate().catch(()=>{});
