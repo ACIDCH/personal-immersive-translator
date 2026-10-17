@@ -113,12 +113,17 @@ async def main():
           globalThis.__fileDocxCalls=0;
           globalThis.__fileRequestLengths=[];
           globalThis.__simulateOne429=false;
+          globalThis.__delayNextFetch=false;
           globalThis.fetch=async(input,opts)=>{
             const url=String(input?.url||input);
             if(url.startsWith('https://api.cognitive.microsofttranslator.com/')){
               globalThis.__fileDocxCalls++;
               const data=JSON.parse(opts.body);
               globalThis.__fileRequestLengths.push(data.length);
+              if(globalThis.__delayNextFetch){
+                globalThis.__delayNextFetch=false;
+                await new Promise(resolve=>setTimeout(resolve,1300));
+              }
               if(globalThis.__simulateOne429){
                 globalThis.__simulateOne429=false;
                 return new Response('rate limit',{status:429,headers:{'content-type':'text/plain'}});
@@ -269,6 +274,18 @@ async def main():
         assert evidence['lengths']==[1,1],evidence
         report['transient_retry_and_dedupe']='pass'
         print('WXT REAL HTTP 429 RETRY + DUPLICATE PARAGRAPH CACHE: PASS',flush=True)
+
+        await page.locator('.batch-file-lab input[type=file]').set_input_files([
+          {'name':'cancel.docx','mimeType':'application/octet-stream','buffer':ooxml_docx()},
+          {'name':'not-run.pptx','mimeType':'application/octet-stream','buffer':pptx_fixture()}
+        ])
+        await sw.evaluate('()=>{globalThis.__delayNextFetch=true}')
+        await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        await page.get_by_role('button',name='取消批量处理').click()
+        await page.locator('.batch-file-lab p[aria-live=polite]').get_by_text('用户已取消',exact=False).wait_for(timeout=12000)
+        assert not await page.get_by_role('button',name='取消批量处理').count()
+        report['batch_user_cancel']='pass'
+        print('WXT BATCH USER CANCEL / NO PARTIAL ZIP: PASS',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
