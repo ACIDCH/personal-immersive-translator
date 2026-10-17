@@ -10,6 +10,7 @@ function setup(version='2.1.1'){
  writeFileSync(join(dir,'kiss','LICENSE'),'GNU GENERAL PUBLIC LICENSE Version 3');
  const file=(path,body)=>{const full=join(src,path);mkdirSync(dirname(full),{recursive:true});writeFileSync(full,body);};
  file('LICENSE','MIT License');
+ for(const size of [16,48,128])file('assets/icon'+size+'.png','fixture-PIT-icon-'+size);
  for(const p of ['tools.html','tools.js','options.html','options.js','ui.css','pdf-preview.js','lib/settings.js','lib/cache.js','lib/providers.js','lib/vision.js','vendor/pdf.mjs','vendor/pdf.worker.mjs','vendor/PDFJS-LICENSE.txt','vendor/SOURCE.json'])file('src/'+p,'mock');
  file('src/tools.html','<h1>文件与图片翻译</h1>');
  file('src/options.html','<h1>Personal Immersive Translator</h1>');
@@ -61,6 +62,13 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
   assert.equal(report.distribution,'POC_ONLY_NO_RELEASE');
   const m=JSON.parse(readFileSync(join(f.build,'manifest.json'),'utf8'));
   assert.equal(m.background.service_worker,'pit/background-entry.js');
+  assert.equal(m.name,'PIT 沉浸式翻译（测试版）');
+  assert.equal(m.version,'2.1.1');
+  assert.equal(m.version_name,'PIT v0.4.9 (KISS 2.1.1)');
+  assert.equal(m.icons['128'],'pit/icons/icon128.png');
+  assert.equal(m.action.default_title,'PIT 沉浸式翻译 · v0.4.9');
+  assert.equal(m.action.default_icon['48'],'pit/icons/icon48.png');
+  assert.ok(readFileSync(join(f.build,'pit/icons/icon128.png'),'utf8').includes('fixture-PIT-icon'));
   assert.ok(m.permissions.includes('tabCapture'));
   assert.ok(m.permissions.includes('offscreen'));
   assert.ok(m.permissions.includes('activeTab'));
