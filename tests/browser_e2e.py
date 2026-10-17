@@ -108,6 +108,24 @@ async def main():
             assert await page.locator('#hover-target + .pit-translation').get_attribute(
               'data-theme')=='highlight'
             print("PASS: Shift hover, triple-Space translation and translation-only mode")
+            await page.evaluate("""()=>{
+              const node=document.getElementById('latin-short').firstChild;
+              const selection=window.getSelection();
+              const range=document.createRange();
+              range.selectNodeContents(node);
+              selection.removeAllRanges();selection.addRange(range);
+            }""")
+            await page.evaluate("()=>window.pitAction('PIT_SELECTION')")
+            await page.locator('.pit-selection-card .pit-selection-result').get_by_text(
+              '译文:Good day').wait_for(timeout=10000)
+            assert await page.locator('.pit-selection-card button').count()==4
+            assert await page.locator('.pit-selection-card button').all_text_contents()==[
+              '关闭','复制译文','朗读原文','朗读译文']
+            await page.locator('.pit-selection-card button').get_by_text(
+              '关闭').click()
+            assert await page.locator('.pit-selection-card').count()==0
+            print("PASS: persistent selection card with copy, native TTS and dismiss")
+
             await page.evaluate("()=>window.pitAction('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
             assert await page.evaluate("""()=>
