@@ -3,22 +3,48 @@ import type {BatchTranslate,DocxProgress} from './docxTranslate';
 
 export type PortableKind='txt'|'md'|'html'|'htm'|'epub';
 type Unit={source:string;apply:(translated:string)=>void};
-const MAX_FILE=12*1024*1024;
-const MAX_UNPACKED=18*1024*1024;
-const MAX_CHAPTERS=180;
-const MAX_SEGMENTS=2500;
-const MAX_CHARS=250000;
+const MAX_FILE=48*1024*1024;
+const MAX_UNPACKED=96*1024*1024;
+const MAX_CHAPTERS=800;
+const MAX_SEGMENTS=20000;
+const MAX_CHARS=4000000;
 const BLOCKS='title,h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,dt,dd';
 const EXCLUDE='script,style,noscript,template,pre,code,svg,math,textarea,select,button,[hidden],[aria-hidden="true"],[translate="no"],[contenteditable="true"]';
 
 function ensureFile(buffer:ArrayBuffer){
-  if(!buffer.byteLength||buffer.byteLength>MAX_FILE)throw Error('当前文件大小限制为 1 字节至 12 MiB');
+  if(!buffer.byteLength||buffer.byteLength>MAX_FILE)throw Error('当前文件大小限制为 1 字节至 48 MiB');
 }
-function utf8(buffer:ArrayBuffer):string{
-  // Never silently corrupt a non-UTF-8 book: invalid encodings need an
-  // explicitly selected decoder, not a lossy replacement-character export.
-  return new TextDecoder('utf-8',{fatal:true}).decode(buffer);
+function decodeText(buffer:ArrayBuffer):{text:string;encode:(text:string)=>Uint8Array}{
+  const bytes=new Uint8Array(buffer);
+  const utf16le=bytes[0]===0xff&&bytes[1]===0xfe;
+  const utf16be=bytes[0]===0xfe&&bytes[1]===0xff;
+  if(utf16le||utf16be){
+    const encoding=utf16be?'utf-16be':'utf-16le';
+    const text=new TextDecoder(encoding,{fatal:true}).decode(bytes.subarray(2));
+    return {text,encode:(value:string)=>{
+      const utf8=new TextEncoder().encode(value);
+      // Encode UTF-16 bytes without browser-dependent TextEncoder options.
+      const out=new Uint8Array(2+value.length*2);
+      out.set(utf16be?[0xfe,0xff]:[0xff,0xfe]);
+      for(let i=0;i<value.length;i++){
+        const unit=value.charCodeAt(i);
+        out[2+i*2]=utf16be?unit>>>8:unit&255;
+        out[3+i*2]=utf16be?unit&255:unit>>>8;
+      }
+      return out;
+    }};
+  }
+  const bom=bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf;
+  return {text:new TextDecoder('utf-8',{fatal:true}).decode(
+    bom?bytes.subarray(3):bytes),
+    encode:(text:string)=>{
+      const body=new TextEncoder().encode(text);
+      if(!bom)return body;
+      const out=new Uint8Array(body.length+3);
+      out.set([0xef,0xbb,0xbf]);out.set(body,3);return out;
+    }};
 }
+function utf8(buffer:ArrayBuffer):string{return decodeText(buffer).text;}
 function xml(raw:string):Document{
   const doc=new DOMParser().parseFromString(raw,'application/xml');
   if(doc.getElementsByTagName('parsererror').length)throw Error('XML/XHTML 文件结构不正确');
@@ -49,7 +75,7 @@ function add(units:Unit[],source:string,apply:(text:string)=>void){
 }
 function guard(units:Unit[]){
   if(units.length>MAX_SEGMENTS||units.reduce((n,u)=>n+u.source.length,0)>MAX_CHARS)
-    throw Error('当前最多支持 2500 个文本块、25 万字符');
+    throw Error('当前最多支持 2 万个文本块、400 万字符');
 }
 function fillTextNodes(nodes:Text[],translated:string){
   const lengths=nodes.map(n=>Array.from(n.data).length);
@@ -241,7 +267,7 @@ async function epubParts(zip:JSZip):Promise<string[]>{
     }
   }
   if(!chapters.length)throw Error('EPUB 阅读顺序中没有 XHTML 章节');
-  if(chapters.length>MAX_CHAPTERS)throw Error('EPUB 超出 180 章限制');
+  if(chapters.length>MAX_CHAPTERS)throw Error('EPUB 超出 800 章限制');
   return chapters;
 }
 export async function translatePortable(
@@ -251,9 +277,10 @@ export async function translatePortable(
   ensureFile(buffer);
   const encoder=new TextEncoder();
   if(kind==='txt'||kind==='md'){
-    const parsed=plaintextUnits(utf8(buffer),kind==='md');
+    const original=decodeText(buffer);
+    const parsed=plaintextUnits(original.text,kind==='md');
     await translateUnits(parsed.units,translator,progress);
-    return encoder.encode(parsed.write());
+    return original.encode(parsed.write());
   }
   if(kind==='html'||kind==='htm'){
     const original=utf8(buffer);
@@ -272,7 +299,7 @@ export async function translatePortable(
   for(const path of chapters){
     const raw=await zip.file(path)!.async('string');
     unpacked+=raw.length;
-    if(unpacked>MAX_UNPACKED)throw Error('EPUB 解压正文超过 18 MiB 限制');
+    if(unpacked>MAX_UNPACKED)throw Error('EPUB 解压正文超过 96 MiB 限制');
     const doc=xml(raw);
     const units=markupUnits(doc);
     parts.push({path,doc,units});

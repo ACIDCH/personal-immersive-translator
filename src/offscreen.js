@@ -60,10 +60,15 @@ async function flush(c){
   try{
     const data=resampleChunks(samples,c.context.sampleRate,ASR_SAMPLE_RATE);
     const wav=encodeMonoPcm16(data,ASR_SAMPLE_RATE);
-    const body=new FormData();body.append('audio',wav,'chunk.wav');
-    const response=await fetch('http://127.0.0.1:8765/asr',{
-      method:'POST',headers:{'X-PIT-Token':c.token},body,
-      signal:AbortSignal.any([c.abort.signal,AbortSignal.timeout(15000)])
+    const hosted=c.asrBackend==='cloud';
+    const body=hosted?wav:new FormData();
+    if(!hosted)body.append('audio',wav,'chunk.wav');
+    const response=await fetch(hosted?c.cloudEndpoint:'http://127.0.0.1:8765/asr',{
+      method:'POST',
+      headers:hosted
+        ? {'Authorization':'Bearer '+c.token,'Content-Type':'audio/wav'}
+        : {'X-PIT-Token':c.token},
+      body,signal:AbortSignal.any([c.abort.signal,AbortSignal.timeout(25000)])
     });
     if(!response.ok)throw Error('Whisper HTTP '+response.status);
     const result=await response.json();
@@ -99,11 +104,20 @@ async function flush(c){
     }
   }
 }
-async function start({streamId,tabId,token,sessionId}){
+function isValidCloudAsrUrl(value){
+ try{
+  const url=new URL(value);
+  return url.protocol==='https:'&&!url.username&&!url.password&&
+    !url.search&&!url.hash&&url.pathname.endsWith('/v1/asr');
+ }catch{return false;}
+}
+async function start({streamId,tabId,token,sessionId,asrBackend='local',cloudEndpoint=''}){
   await stop();
   const generation=++epoch;
   if(typeof token!=='string'||token.length<16||!Number.isInteger(tabId)||!streamId ||
-     typeof sessionId!=='string'||!/^[0-9a-f-]{36}$/i.test(sessionId))
+     typeof sessionId!=='string'||!/^[0-9a-f-]{36}$/i.test(sessionId)||
+     !['local','cloud'].includes(asrBackend)||
+     (asrBackend==='cloud'&&!isValidCloudAsrUrl(cloudEndpoint)))
     throw Error('本地 ASR 会话参数不完整');
   let stream=null,context=null,c=null;
   try {
@@ -141,7 +155,7 @@ async function start({streamId,tabId,token,sessionId}){
     source.connect(processor);
     processor.connect(mute);mute.connect(context.destination);
     // Tab playback already routed before the worklet is initialized.
-    c={context,source,processor,mute,stream,tabId,token,sessionId,queue,busy:false,
+    c={context,source,processor,mute,stream,tabId,token,sessionId,asrBackend,cloudEndpoint,queue,busy:false,
       timer:null,abort:null,stats:new LiveStats(120),lastDroppedSamples:0,attempts:0,failures:0,retryAt:0};
     if(generation!==epoch){await dispose(c);return {ok:false,error:'捕获已取消'};}
     current=c;

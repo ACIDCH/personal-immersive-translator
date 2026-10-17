@@ -217,8 +217,8 @@ async def main():
           }""",decoded)
           assert result['pages']==1 and result['width']>200 and result['height']>100,result
           notice=await file_laboratory.locator('.pdf-bilingual-lab p[aria-live=polite]').inner_text()
-          if kind=='digital':assert '使用 OCR 0 页' in notice,notice
-          else:assert '使用 OCR 1 页' in notice,notice
+          if kind=='digital':assert 'OCR 0 页' in notice,notice
+          else:assert 'OCR 1 页' in notice,notice
           report['pdf_'+kind+'_translation']='pass'
           print('WXT '+kind.upper()+' PDF OCR/TRANSLATION/REOPEN: PASS',flush=True)
         await file_laboratory.close()

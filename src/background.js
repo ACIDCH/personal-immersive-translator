@@ -74,9 +74,37 @@ async function verifyLocalAsr(token){
   if(status.speech_asr_requires_risk_ack)
     throw new TranslationError('当前本机 Whisper 服务使用未经批准的实验模式');
 }
+async function verifyCloudAsr(settings){
+ const raw=String(settings.cloudEndpoint||''),token=String(settings.cloudToken||'');
+ if(token.length<16)throw new TranslationError('先在插件设置中配置 PIT 云端访问令牌');
+ let url;
+ try{url=new URL(raw);}catch{
+  throw new TranslationError('云端语音需要先部署 PIT Cloudflare Worker 并填写 HTTPS 地址');
+ }
+ if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)
+  throw new TranslationError('云端语音服务只接受已配置的纯 HTTPS 地址');
+ url.pathname=url.pathname.replace(/\/$/,'')+'/v1/asr';
+ const health=new URL(raw);health.pathname=health.pathname.replace(/\/$/,'')+'/v1/capabilities';
+ try{
+  const response=await fetch(health.toString(),{
+   headers:{Authorization:'Bearer '+token},
+   signal:AbortSignal.timeout(5000)
+  });
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const capabilities=await response.json();
+  if(!capabilities.ready||capabilities.routes?.asr!=='ready')
+   throw Error('ASR model unavailable');
+ }catch{
+  throw new TranslationError('PIT 云端语音模型不可用：请确认 Worker 已部署、AI 已绑定、访问令牌正确');
+ }
+ return {endpoint:url.toString(),token};
+}
 async function startLiveAsr(message){
+  const cloud=message.asrBackend==='cloud';
   const token=String(message.token||'');
-  if(token.length<16) throw new TranslationError('缺少本机 Whisper 服务令牌');
+  if(!cloud&&token.length<16) throw new TranslationError('缺少本机 Whisper 服务令牌');
+  if(cloud&&message.userInitiated!==true)
+    throw new TranslationError('云端语音会上传音频并消耗云端推理额度，必须由用户确认');
   const mode=message.mode==='ai'?'ai':'standard';
   if(mode==='ai' && message.userInitiated!==true)
     throw new TranslationError('本机实时字幕使用 AI 必须明确确认计费风险');
@@ -85,7 +113,8 @@ async function startLiveAsr(message){
   // Establish actual local model readiness before opening any audio track.
   // A configured port or a successfully created recorder is not proof that
   // Whisper inference can run. This is only a readiness gate, not a quality test.
-  await verifyLocalAsr(token);
+  const remote=cloud?await verifyCloudAsr(await getSettings()):null;
+  if(!cloud)await verifyLocalAsr(token);
   await stopLiveAsr();
   await chrome.offscreen.createDocument({url:'src/offscreen.html',reasons:['USER_MEDIA'],
     justification:'用户明确启动的本机实时音频字幕识别'});
@@ -95,7 +124,9 @@ async function startLiveAsr(message){
     await chrome.storage.session.set({pit_live_asr_tab:tab.id,pit_live_asr_session:sessionId,
       pit_live_asr_mode:mode,pit_live_ai_requests:0});
     const started=await chrome.runtime.sendMessage({
-      target:'offscreen',type:'PIT_OFFSCREEN_START',streamId,tabId:tab.id,token,sessionId
+      target:'offscreen',type:'PIT_OFFSCREEN_START',streamId,tabId:tab.id,
+      token:remote?.token||token,sessionId,
+      asrBackend:cloud?'cloud':'local',cloudEndpoint:remote?.endpoint||''
     });
     if(!started?.ok)throw Error(started?.error||'音频捕获失败');
     const still=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);

@@ -7,10 +7,13 @@ export type PdfTranslationMode='standard'|'ai';
 export type PdfProgress=(done:number,total:number,status:string)=>void;
 export type PdfTranslate=(texts:string[])=>Promise<string[]>;
 type OcrWorker={recognize:(input:Blob)=>Promise<{data:{text:string}}> ;terminate:()=>Promise<unknown>};
-const MAX_FILE=16*1024*1024;
-const MAX_PAGES=8;
+export type OcrSelection=PdfOcrLanguage|'auto';
+const MAX_FILE=48*1024*1024;
+const MAX_PAGES=300;
+const PAGES_PER_PART=12;
+const MAX_OUTPUT_BYTES=150*1024*1024;
 const MAX_PAGE_PIXELS=2_600_000;
-const MAX_ALL_PIXELS=13_000_000;
+
 
 function linesFromText(raw:string):string[]{
  const normalized=raw.replace(/\r/g,'').replace(/[ \t]+/g,' ').trim();
@@ -101,13 +104,13 @@ async function parsePdfSource(buffer:Uint8Array,entry:string):Promise<{
  return await import(/* @vite-ignore */ entry);
 }
 export async function translateBilingualPdf(
- file:File, translate:PdfTranslate, language:PdfOcrLanguage,
+ file:File, translate:PdfTranslate, language:OcrSelection,
  progress:PdfProgress=()=>{},signal?:AbortSignal
-):Promise<{pdf:Uint8Array;pages:number;ocrPages:number}>{
+):Promise<{pdf?:Uint8Array;archive?:Uint8Array;pages:number;ocrPages:number;parts:number}>{
  const ensureRunning=()=>{if(signal?.aborted)throw Error('用户已取消 PDF 翻译');};
  ensureRunning();
  if(file.size<20||file.size>MAX_FILE||!file.name.toLowerCase().endsWith('.pdf'))
-   throw Error('仅支持不超过 16 MiB 的 PDF 文件');
+   throw Error('PDF 文件大小不能超过 48 MiB；大型文件应由云端高保真引擎处理');
  const runtime=(globalThis as {chrome?:{runtime?:{
    id?:string;getURL?:(name:string)=>string;
  }}}).chrome?.runtime;
@@ -117,14 +120,26 @@ export async function translateBilingualPdf(
  pdfjs.GlobalWorkerOptions.workerSrc=runtime.getURL('vendor/pdf.worker.mjs');
  const documentTask=pdfjs.getDocument({data:bytes,isEvalSupported:false,enableXfa:false,useSystemFonts:true});
  let ocr:OcrWorker|null=null;
- let pageCount=0,ocrPages=0,pixels=0;
+ let pageCount=0,ocrPages=0;
  try{
    const source=await documentTask.promise;
    pageCount=source.numPages;
    if(pageCount<1||pageCount>MAX_PAGES)
-     throw Error('浏览器内双语 PDF 每次最多支持 8 页，请使用本机高保真 PDF 工具');
+     throw Error('每份 PDF 最多处理 300 页；更大文档应交给独立云端文档任务');
    const {PDFDocument}=await import('pdf-lib');
-   const out=await PDFDocument.create();
+   const {default:JSZip}=await import('jszip');
+   const parts=new JSZip();
+   let out=await PDFDocument.create();
+   let emitted=0,totalBytes=0;
+   const completePart=async(lastPage:number)=>{
+     const exported=new Uint8Array(await out.save({useObjectStreams:false}));
+     totalBytes+=exported.byteLength;
+     if(totalBytes>MAX_OUTPUT_BYTES)throw Error('PDF 输出总量超过浏览器内 150 MiB 上限，请使用云端文档处理');
+     const partIndex=++emitted;
+     parts.file('bilingual-'+String(partIndex).padStart(3,'0')+
+       '-pages-'+String(lastPage-out.getPageCount()+1)+'-'+String(lastPage)+'.pdf',exported);
+     out=await PDFDocument.create();
+   };
    for(let index=1;index<=pageCount;index++){
      ensureRunning();
      const page=await source.getPage(index);
@@ -134,8 +149,6 @@ export async function translateBilingualPdf(
        const viewport=page.getViewport({scale:scale});
        const canvas=document.createElement('canvas');
        canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
-       pixels+=canvas.width*canvas.height;
-       if(pixels>MAX_ALL_PIXELS)throw Error('PDF 累计页面分辨率超过浏览器安全上限');
        const ctx=canvas.getContext('2d',{alpha:false});
        if(!ctx)throw Error('PDF 渲染 Canvas 不可用');
        progress(index-1,pageCount,`渲染第 ${index}/${pageCount} 页`);
@@ -151,7 +164,11 @@ export async function translateBilingualPdf(
              corePath:runtime.getURL('tesseract/core'),
              workerBlobURL:false
            };
-           ocr=await createWorker(language,1,config) as OcrWorker;
+           // Explicit auto mode loads CJK and Latin language models into
+           // one Tesseract worker. Language packs may download on first use.
+           const ocrLanguages=language==='auto'
+             ? ['eng','fra','chi_sim','jpn','kor']:language;
+           ocr=await createWorker(ocrLanguages,1,config) as OcrWorker;
          }
          text=(await ocr.recognize(await blobFromCanvas(canvas))).data.text.trim();
          ocrPages++;
@@ -178,15 +195,27 @@ export async function translateBilingualPdf(
        const width=composite.width*.6,height=composite.height*.6;
        const newPage=out.addPage([width,height]);
        newPage.drawImage(image,{x:0,y:0,width,height});
-       progress(index,pageCount,`已完成第 ${index}/${pageCount} 页`);
+       progress(index,pageCount,'已完成第 '+index+'/'+pageCount+' 页');
        composite.width=0;composite.height=0;
+       if(index%PAGES_PER_PART===0||index===pageCount){
+         ensureRunning();
+         await completePart(index);
+       }
        canvas.width=0;canvas.height=0;
      }finally{page.cleanup();}
    }
    ensureRunning();
-   const exported=await out.save({useObjectStreams:false});
    ensureRunning();
-   return {pdf:new Uint8Array(exported),pages:pageCount,ocrPages};
+   if(emitted===1){
+     const only=Object.values(parts.files)[0];
+     const exported=new Uint8Array(await only.async('uint8array'));
+     return {pdf:exported,pages:pageCount,ocrPages,parts:1};
+   }
+   const archive=new Uint8Array(await parts.generateAsync({
+     type:'uint8array',compression:'DEFLATE',compressionOptions:{level:3}
+   }));
+   ensureRunning();
+   return {archive,pages:pageCount,ocrPages,parts:emitted};
  }finally{
    if(ocr)await ocr.terminate().catch(()=>{});
    await documentTask.destroy();

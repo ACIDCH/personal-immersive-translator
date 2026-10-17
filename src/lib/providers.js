@@ -81,6 +81,21 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
   const target = opts.target || 'zh';
   let result;
   switch (provider) {
+    case 'cloud': {
+      const raw = required(opts.cloudEndpoint, 'PIT 云端翻译服务 HTTPS 地址（需先部署 Worker）');
+      const token = required(opts.cloudToken, '云端服务访问令牌');
+      if(token.length<16)throw new TranslationError('云端服务令牌至少 16 字符');
+      let endpoint;
+      try { endpoint=new URL(raw); }
+      catch { throw new TranslationError('云端翻译服务地址不是有效的 HTTPS URL'); }
+      if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||
+         endpoint.search||endpoint.hash||!endpoint.hostname)
+        throw new TranslationError('云端翻译服务必须使用 HTTPS、无嵌入凭据和查询参数');
+      endpoint.pathname=endpoint.pathname.replace(/\/$/,'')+'/v1/translate';
+      result=await postJson(fetchFn,endpoint.toString(),
+        {texts,source,target},{Authorization:'Bearer '+token});
+      return toPlainStringArray(result?.translations,texts.length);
+    }
     case 'microsoft': {
       const url = new URL('https://api.cognitive.microsofttranslator.com/translate');
       url.searchParams.set('api-version', '3.0');

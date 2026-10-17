@@ -2,10 +2,10 @@ import JSZip from 'jszip';
 
 export type DocxProgress=(done:number,total:number)=>void;
 export type BatchTranslate=(texts:string[])=>Promise<string[]>;
-const MAX_FILE_BYTES=12*1024*1024;
-const MAX_TOTAL_XML=12*1024*1024;
-const MAX_PARAGRAPHS=1500;
-const MAX_TEXT_CHARS=180000;
+const MAX_FILE_BYTES=48*1024*1024;
+const MAX_TOTAL_XML=64*1024*1024;
+const MAX_PARAGRAPHS=12000;
+const MAX_TEXT_CHARS=3000000;
 
 // Keep OOXML package assets, styles, tables, numbering, header/footer and images.
 // Translate each paragraph once for coherent context, then spread text across
@@ -32,7 +32,7 @@ export async function translateDocx(
   buffer:ArrayBuffer, translator:BatchTranslate,progress:DocxProgress=()=>{}
 ):Promise<Uint8Array>{
   if(buffer.byteLength===0 || buffer.byteLength>MAX_FILE_BYTES)
-    throw Error('DOCX 大小必须介于 1 字节至 12 MiB');
+    throw Error('DOCX 大小必须介于 1 字节至 48 MiB');
   const zip=await JSZip.loadAsync(buffer,{checkCRC32:true});
   const names=Object.keys(zip.files).filter(name=>
     /^word\/(?:document|header\d+|footer\d+|footnotes|endnotes)\.xml$/.test(name)
@@ -44,7 +44,7 @@ export async function translateDocx(
   for(const name of names){
     const xml=await zip.file(name)!.async('string');
     xmlBytes+=xml.length;
-    if(xmlBytes>MAX_TOTAL_XML)throw Error('DOCX 解压后的 XML 超出 12 MiB 限制');
+    if(xmlBytes>MAX_TOTAL_XML)throw Error('DOCX 解压后的 XML 超出 64 MiB 限制');
     const doc=new DOMParser().parseFromString(xml,'application/xml');
     if(doc.getElementsByTagName('parsererror').length)throw Error('DOCX XML 结构无效：'+name);
     const entries:Entry[]=[];
@@ -53,11 +53,10 @@ export async function translateDocx(
       if(!nodes.length)continue;
       const text=nodes.map(n=>n.textContent||'').join('');
       if(!text.trim())continue;
-      if(text.length>4500)throw Error('存在超过 4500 字符的单个段落，暂不支持自动拆分');
       entries.push({nodes,text});
       totalEntries++;totalChars+=text.length;
       if(totalEntries>MAX_PARAGRAPHS||totalChars>MAX_TEXT_CHARS)
-        throw Error('DOCX 当前最多支持 1500 段、18 万字符');
+        throw Error('DOCX 当前最多支持 12000 段、300 万字符');
     }
     fragments.push({name,doc,entries});
   }
@@ -65,6 +64,20 @@ export async function translateDocx(
   let done=0;progress(done,entries.length);
   // Each extension provider call permits at most 10 texts / 12000 chars.
   while(done<entries.length){
+    if(entries[done].text.length>4500){
+      // Translate oversize paragraphs as bounded Unicode chunks. Keep the
+      // paragraph/runs intact instead of aborting a 100-page course book.
+      const entry=entries[done];
+      const chars=Array.from(entry.text),translated:string[]=[];
+      for(let offset=0;offset<chars.length;offset+=3400){
+        const result=await translator([chars.slice(offset,offset+3400).join('')]);
+        if(result.length!==1||!result[0]?.trim())
+          throw Error('DOCX 超长段落翻译失败');
+        translated.push(result[0]);
+      }
+      preserveStyledRuns(entry.nodes,translated.join(''));
+      done++;progress(done,entries.length);continue;
+    }
     const chunk:Entry[]=[];let chars=0;
     for(let i=done;i<entries.length&&chunk.length<8;i++){
       const entry=entries[i];

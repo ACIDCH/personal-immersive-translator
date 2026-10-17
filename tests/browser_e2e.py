@@ -59,6 +59,22 @@ async def main():
             """)
             await page.locator("#slides .pit-translation").wait_for(timeout=5000)
             assert await page.locator("#slides .pit-translation").count() == 1
+            # Regression for the old Latin-only letter pattern and 12-char
+            # threshold, which made Chinese/Japanese short text ineligible.
+            await page.evaluate("""()=>{
+              const host=document.createElement('section');
+              host.innerHTML='<p id="cjk-short">中文金融</p>'+
+                '<p id="latin-short">Good day</p>'+
+                '<div id="div-only">Div-only financial summary</div>';
+              document.querySelector('main').append(host);
+            }""")
+            await page.locator('#cjk-short + .pit-translation').get_by_text(
+              '译文:中文金融').wait_for(timeout=9000)
+            await page.locator('#latin-short + .pit-translation').get_by_text(
+              '译文:Good day').wait_for(timeout=9000)
+            await page.locator('#div-only + .pit-translation').get_by_text(
+              '译文:Div-only financial summary').wait_for(timeout=9000)
+            print("PASS: actual browser short CJK, short Latin and div-only article segments")
             await page.evaluate("()=>window.pitAction('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
             assert await page.evaluate("""()=>
