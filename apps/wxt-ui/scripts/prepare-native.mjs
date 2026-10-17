@@ -45,7 +45,7 @@ const ocrTarget=join(output,'tesseract/worker.min.js');
 mkdirSync(dirname(ocrTarget),{recursive:true});
 copyFileSync(ocrWorker,ocrTarget);
 const coreFiles=readdirSync(coreDir).filter(name=>
-  /^tesseract-core(?:-simd)?(?:-lstm)?\\.wasm(?:\\.js)?$/.test(name));
+  /^tesseract-core(?:-simd)?(?:-lstm)?\.wasm(?:\.js)?$/.test(name));
 if(coreFiles.filter(name=>name.endsWith('.wasm.js')).length!==4)
   throw Error('Expected four separately selectable Tesseract.js WASM core loaders');
 for(const name of coreFiles){
