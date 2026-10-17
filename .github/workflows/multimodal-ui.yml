@@ -11,6 +11,7 @@ on:
       - 'src/options*'
       - 'tests/ai-profiles.test.js'
       - '.github/workflows/multimodal-ui.yml'
+      - 'tests/wxt_native_web_e2e.py'
   workflow_dispatch:
 
 permissions:
@@ -68,3 +69,27 @@ jobs:
       - name: Validate native WXT web integration package
         if: matrix.app == 'wxt-ui'
         run: node wxt-ui/scripts/check-native-bundle.mjs
+
+  wxt-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated WXT frontend dependencies
+        working-directory: apps
+        run: |
+          npm install --no-audit --no-fund
+          npm run build --workspace wxt-ui
+          node wxt-ui/scripts/check-native-bundle.mjs
+      - name: Install Chromium testing environment
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Test real React + PIT web translation in installed MV3
+        run: python tests/wxt_native_web_e2e.py
