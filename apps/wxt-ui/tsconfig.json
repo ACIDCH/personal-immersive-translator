@@ -11,6 +11,8 @@
   "include": [
     ".wxt/wxt.d.ts",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "../../shared-ui/**/*.d.ts",
+    "../shared-ui/**/*.d.ts"
   ]
 }
