@@ -1,0 +1,48 @@
+name: Owner-authorized real translation provider quality probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider with a credential set as a repository secret'
+        required: true
+        type: choice
+        options: [google, microsoft, deepl, gemini, deepseek]
+      accept_possible_cost:
+        description: 'Explicitly allow a maximum of 3 short external translation API requests'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  real-vendor:
+    if: inputs.accept_possible_cost == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PIT_TEST_GOOGLE_KEY: ${{ secrets.PIT_TEST_GOOGLE_KEY }}
+      PIT_TEST_MICROSOFT_KEY: ${{ secrets.PIT_TEST_MICROSOFT_KEY }}
+      PIT_TEST_MICROSOFT_REGION: ${{ secrets.PIT_TEST_MICROSOFT_REGION }}
+      PIT_TEST_DEEPL_KEY: ${{ secrets.PIT_TEST_DEEPL_KEY }}
+      PIT_TEST_GEMINI_KEY: ${{ secrets.PIT_TEST_GEMINI_KEY }}
+      PIT_TEST_DEEPSEEK_KEY: ${{ secrets.PIT_TEST_DEEPSEEK_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run three capped real-provider API requests through native PIT core
+        run: |
+          node benchmarks/real_translation_provider_acceptance.mjs \
+            --provider '${{ inputs.provider }}' --acknowledge-billed-requests
+      - name: Save only latencies, counts and error types, not provider content
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-provider-redacted-results
+          path: real-vendor-probe.json
+          if-no-files-found: ignore
+          retention-days: 7
