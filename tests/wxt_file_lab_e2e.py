@@ -111,11 +111,18 @@ async def main():
         await sw.evaluate("""()=>{
           const original=globalThis.fetch.bind(globalThis);
           globalThis.__fileDocxCalls=0;
+          globalThis.__fileRequestLengths=[];
+          globalThis.__simulateOne429=false;
           globalThis.fetch=async(input,opts)=>{
             const url=String(input?.url||input);
             if(url.startsWith('https://api.cognitive.microsofttranslator.com/')){
               globalThis.__fileDocxCalls++;
               const data=JSON.parse(opts.body);
+              globalThis.__fileRequestLengths.push(data.length);
+              if(globalThis.__simulateOne429){
+                globalThis.__simulateOne429=false;
+                return new Response('rate limit',{status:429,headers:{'content-type':'text/plain'}});
+              }
               return new Response(JSON.stringify(data.map(x=>({
                 translations:[{text:'译文:'+x.Text}]
               }))),{status:200,headers:{'content-type':'application/json'}});
@@ -231,6 +238,37 @@ async def main():
         assert 'Financial models\n译文:Financial models' in translated_text
         report['offline_subtitle_translation']='pass'
         print('WXT OFFLINE VTT TO BILINGUAL SRT: PASS',flush=True)
+
+        # A legitimate HTTP 429 should retry, but identical paragraph text
+        # must only consume one provider input even when it appears twice.
+        original=ooxml_docx()
+        repeat=io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(original)) as source,zipfile.ZipFile(repeat,'w',zipfile.ZIP_DEFLATED) as output:
+          for name in source.namelist():
+            contents=source.read(name)
+            if name=='word/document.xml':
+              contents=contents.replace(
+                b'<w:t>My finance DOCX document</w:t>',
+                b'<w:t>Repeated finance sentence</w:t></w:r></w:p><w:p><w:r><w:t>Repeated finance sentence</w:t>'
+              )
+            output.writestr(name,contents)
+        await page.get_by_role('button',name='DOCX 文档').click()
+        await page.locator('.document-lab').first.locator('input[type=file]').set_input_files({
+          'name':'repeated.docx','mimeType':'application/octet-stream','buffer':repeat.getvalue()
+        })
+        previous=await sw.evaluate('()=>globalThis.__fileDocxCalls')
+        await sw.evaluate('()=>{globalThis.__simulateOne429=true;globalThis.__fileRequestLengths=[]}')
+        async with page.expect_download(timeout=30000) as event:
+          await page.get_by_role('button',name='翻译并导出 Office').click()
+        download=await event.value
+        with zipfile.ZipFile(await download.path()) as o:
+          xml=o.read('word/document.xml').decode('utf8')
+          assert xml.count('译文:Repeated finance sentence')==2,xml
+        evidence=await sw.evaluate('()=>({calls:globalThis.__fileDocxCalls,lengths:globalThis.__fileRequestLengths})')
+        assert evidence['calls']-previous>=2,evidence
+        assert evidence['lengths']==[1,1],evidence
+        report['transient_retry_and_dedupe']='pass'
+        print('WXT REAL HTTP 429 RETRY + DUPLICATE PARAGRAPH CACHE: PASS',flush=True)
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
