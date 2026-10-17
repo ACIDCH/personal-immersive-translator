@@ -14,6 +14,7 @@ on:
       - 'tests/wxt_native_web_e2e.py'
       - 'tests/wxt_web_coverage_matrix_e2e.py'
       - 'tests/wxt_public_site_probe.py'
+      - 'tests/portal_real_image_ocr_e2e.py'
   workflow_dispatch:
 
 concurrency:
@@ -128,5 +129,39 @@ jobs:
         with:
           name: multimodal-public-site-probe
           path: wxt-public-site-probe.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  real-image-ocr:
+    # Keep informational until the external language-model download is stable
+    # across GitHub runner networks. Failure is recorded, never called PASS.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build local React OCR frontend
+        working-directory: apps
+        run: |
+          npm install --no-audit --no-fund
+          npm run build --workspace portal
+      - name: Install real Chromium and image fixture generator
+        run: |
+          python -m pip install 'playwright==1.55.0' 'Pillow>=11,<13'
+          python -m playwright install --with-deps chromium
+      - name: Recognize synthetic real PNG using Tesseract WASM in browser
+        run: python tests/portal_real_image_ocr_e2e.py
+      - name: Archive OCR quality and model loading evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multimodal-real-image-ocr
+          path: portal-ocr-browser-result.json
           if-no-files-found: ignore
           retention-days: 7
