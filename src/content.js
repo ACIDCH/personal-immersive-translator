@@ -13,6 +13,7 @@
   let observer = null, observedRoots = new Set();
   let busy = false, queued = false, timer = null;
   let aiCount = 0, standardSpent = 0, standardBudget = 600;
+  let failedBatches=0, lastError='', succeededBatches=0;
   const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70, STANDARD_STEP = 600;
 
   function roots() {
@@ -74,6 +75,27 @@
       result.push({el,original});
     }
     return result;
+  }
+  // Actual DOM coverage is measured, not inferred from a successful
+  // translate-command response. No original text is returned in these stats.
+  function coverage() {
+    let eligible=0,translated=0;
+    for(const el of queryDeep(TARGETS)){
+      if(!el.isConnected || isUnsafe(el) || !el.getClientRects().length)continue;
+      if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
+      const original=sourceText(el);
+      if(original.length<12 || original.length>5000)continue;
+      eligible++;
+      const done=processed.get(el);
+      if(done && done.source===original && done.node?.isConnected)translated++;
+    }
+    return {
+      active,mode,eligible,translated,remaining:Math.max(0,eligible-translated),
+      coveragePercent:eligible?Math.round(10000*translated/eligible)/100:null,
+      failedBatches,succeededBatches,busy,lastError,
+      budgetRemaining:mode==='standard'?Math.max(0,standardBudget-standardSpent):
+        Math.max(0,AI_MAX_PER_ACTION-aiCount)
+    };
   }
   function attach(el,source,translation,isAI) {
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
@@ -144,6 +166,7 @@
         const before=targets[i-1]?.original?.slice(-300)||'';
         const after=targets[i+6]?.original?.slice(0,300)||'';
         const translations=await request(chunk.map(x=>x.original),mode,[before,after].filter(Boolean).join('\n'));
+        succeededBatches++;
         if(!active || currentId!==id)return;
         for(let j=0;j<chunk.length;j++){
           if(attach(chunk[j].el,chunk[j].original,translations[j],mode==='ai'))count++;
@@ -161,7 +184,11 @@
         toast('已到本次自动翻译的 '+standardBudget+' 段请求上限；如仍有未翻译内容，请在插件中点击「继续翻译」。');
       }
     }catch(error){
-      if(id===currentId)toast('翻译失败：'+String(error?.message||error));
+      if(id===currentId){
+        failedBatches++;
+        lastError=String(error?.message||error).slice(0,200);
+        toast('翻译失败：'+lastError);
+      }
     }finally{
       busy=false;
       if(queued && active){
@@ -178,6 +205,7 @@
     }
     document.querySelectorAll('.pit-toast').forEach(node=>node.remove());
     processed=new WeakMap();aiCount=0;standardSpent=0;standardBudget=STANDARD_STEP;
+    failedBatches=0;succeededBatches=0;lastError='';
   }
   function start(requestedMode) {
     restore();mode=requestedMode;active=true;
@@ -201,7 +229,9 @@
     catch(error){toast('翻译失败：'+String(error.message||error));}
   }
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
-    if(message?.type==='PIT_START' && ['standard','ai'].includes(message.mode)){
+    if(message?.type==='PIT_GET_PROGRESS'){
+      reply({ok:true,progress:coverage()});
+    }else if(message?.type==='PIT_START' && ['standard','ai'].includes(message.mode)){
       start(message.mode);reply({ok:true});
     }else if(message?.type==='PIT_CONTINUE' && active && mode==='standard'){
       standardBudget+=STANDARD_STEP;

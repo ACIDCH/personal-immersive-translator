@@ -5,7 +5,7 @@
   const core = globalThis.PITCaptionCore;
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[]};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -52,7 +52,7 @@
     state.generation++;
     state.cache=new core.CaptionCache(350);
     state.busy=false;state.domPending=false;state.failedAt=0;
-    state.seenAny=false;state.latestDomText='';
+    state.seenAny=false;state.latestDomText='';state.contextHistory=[];
     state.domMode=!next;
     render('');
     return true;
@@ -84,8 +84,16 @@
     (document.fullscreenElement || document.documentElement).append(overlay);
     return overlay;
   }
-  async function fetchBatch(texts, generation) {
-    const response=await chrome.runtime.sendMessage({type:'TRANSLATE_BATCH',texts,mode:state.mode,userInitiated:state.mode==='ai',context:''});
+  async function fetchBatch(texts, generation, nearbyText='') {
+    // Meaningful subtitles often require preceding dialogue and upcoming
+    // utterances. Only add bounded context when the user opted into AI;
+    // standard/free machine translation retains the same request behavior.
+    const context=state.mode==='ai'
+      ?String(nearbyText||'').slice(0,1600):'';
+    const response=await chrome.runtime.sendMessage({
+      type:'TRANSLATE_BATCH',texts,mode:state.mode,
+      userInitiated:state.mode==='ai',context
+    });
     if(!response?.ok) throw new Error(response?.error || '字幕翻译失败');
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){
       stop();throw new Error('播放器录像地址发生变化，字幕会话已停止');
@@ -132,9 +140,12 @@
       state.requestCount++;state.domPending=true;
       const generation=state.generation;
       try {
-        const translations=await fetchBatch([text],generation);
+        const prior=state.contextHistory.join('\n');
+        const translations=await fetchBatch([text],generation,prior);
         if(state.active && generation===state.generation) {
           state.cache.put(key,translations[0]);
+          if(state.mode==='ai' && state.contextHistory.at(-1)!==text)
+            state.contextHistory=[...state.contextHistory.slice(-2),text];
           if(state.latestDomText===text) render(translations[0]);
         }
       } catch {
@@ -173,7 +184,10 @@
     state.requestCount++;
     state.busy=true;
     try {
-      await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation));
+      const nearby=state.mode==='ai'
+        ?cues.filter(c=>c.end>=now-15 && c.start<=now+25)
+          .slice(0,10).map(c=>c.text).join('\n'):'';
+      await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation,nearby));
       if(generation===state.generation && state.active) {
         const fresh=core.currentCue(cues,video.currentTime);
         render(fresh ? (state.cache.get(fresh.key) || '正在翻译…') : '');
@@ -192,7 +206,7 @@
     clearInterval(state.timer);state.timer=null;
     releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];
   }
   function embeddedPlayerHint(){
     for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){

@@ -21,6 +21,35 @@ function show() {
     : '○ 尚未配置当前服务，请点击右上角「设置」';
 }
 function status(msg) {$('status').textContent=msg;}
+let progressTimer=null;
+let progressEpoch=0;
+async function watchCoverage(tabId){
+  clearInterval(progressTimer);
+  const epoch=++progressEpoch;
+  let attempts=0;
+  const check=async()=>{
+    if(epoch!==progressEpoch)return;
+    try{
+      const result=await chrome.tabs.sendMessage(tabId,{type:'PIT_GET_PROGRESS'});
+      if(!result?.ok||!result?.progress)return;
+      const p=result.progress;
+      const percent=p.coveragePercent===null?'—':p.coveragePercent+'%';
+      const state=p.lastError?'，错误：'+p.lastError:
+        p.busy?'（处理中）':p.remaining>0?'（仍有未处理内容）':'';
+      $('translationProgress').textContent='实际正文覆盖：'+p.translated+'/'+p.eligible+
+        ' 段（'+percent+'） · 未处理 '+p.remaining+
+        ' 段 · 成功批次 '+p.succeededBatches+
+        ' · 失败批次 '+p.failedBatches+state;
+      if(p.failedBatches>0)status('网页翻译未完全成功，请查看正文覆盖率与错误信息');
+    }catch(e){
+      $('translationProgress').textContent='无法读取正文翻译进度：'+String(e?.message||e);
+    }
+    attempts++;
+    if(attempts>=80||epoch!==progressEpoch)clearInterval(progressTimer);
+  };
+  await check();
+  progressTimer=setInterval(check,1500);
+}
 async function send(type) {
   if (mode==='ai' && !['PIT_RESTORE','PIT_CONTINUE'].includes(type) && !confirm('即将调用 AI API，可能产生费用。是否确认本次翻译？（单次全文最多处理 30 段）')) return;
   status('处理中…');
@@ -31,7 +60,9 @@ async function send(type) {
     await chrome.scripting.executeScript({target:{tabId:tab.id},files:['src/content.js']});
     const res=await chrome.tabs.sendMessage(tab.id,{type,mode});
     if (!res?.ok) throw new Error(res?.reason||'发送翻译操作失败');
-    status('请求已发送，请在网页查看结果。');
+    status('操作请求已发送；以实际网页覆盖率与失败批次为准，不等同于翻译成功。');
+    if(['PIT_START','PIT_CONTINUE','PIT_RESTORE'].includes(type))
+      void watchCoverage(tab.id);
   } catch(e) {status('操作失败：'+(e?.message||String(e)));}
 }
 $('standard').onclick=()=>{mode='standard';show();};

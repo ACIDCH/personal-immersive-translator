@@ -39,12 +39,20 @@ async def main():
       assert await page.locator(".pit-translation").count()==600
       assert await page.evaluate("window.count")==600
       assert await page.locator("#block-610 + .pit-translation").count()==0
-      print("PASS: 600 paragraph per-action request cap stops without additional consent")
+      progress=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
+      assert progress["ok"] and progress["progress"]["eligible"]==615,progress
+      assert progress["progress"]["translated"]==600,progress
+      assert progress["progress"]["remaining"]==15,progress
+      assert progress["progress"]["coveragePercent"]<100,progress
+      print("PASS: 600 paragraph cap is honestly reported as incomplete coverage")
       continued=await page.evaluate("()=>window.action('PIT_CONTINUE')")
       assert continued.get("ok"),continued
       await page.locator("#block-614 + .pit-translation").wait_for(timeout=10000)
       assert await page.locator(".pit-translation").count()==615
       assert await page.evaluate("window.count")==615
+      progress=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
+      assert progress["progress"]["eligible"]==615 and progress["progress"]["translated"]==615,progress
+      assert progress["progress"]["coveragePercent"]==100,progress
       await page.evaluate("()=>window.action('PIT_RESTORE')")
       assert await page.locator(".pit-translation").count()==0
       assert not problems,problems
