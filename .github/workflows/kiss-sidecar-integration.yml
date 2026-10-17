@@ -78,5 +78,53 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Verify live Chromium MV3 KISS popup, file tools and PDF.js
         run: python tests/kiss_sidecar_mv3_e2e.py
-      # GPL combined build exists only inside disposable CI runner.
-      # Deliberately NO packaging/upload-artifact/release steps.
+      # Owner specifically requested a ready-to-install, unpacked extension ZIP.
+      # Provide the GPL-3.0 corresponding source as a separate artifact from
+      # the same verified commit/run, without publishing a GitHub Release.
+      - name: Package tested Chrome extension and corresponding GPL source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/combo-src/kiss-translator-v2.1.1 dist/combo-src/pit-adaptation-v0.4.9
+          cat > /tmp/pit-kiss-upstream/build/chrome/README-PIT-TEST-PACKAGE.txt <<'EOF'
+          Personal Immersive Translator + KISS v2.1.1 (TEST BUILD ONLY)
+          Verified integration branch: feat/kiss-github-oneclick-diagnostics-v049
+          This combines MIT PIT original code with GPL-3.0 KISS Translator.
+          The COMBINED PACKAGE is GPL-3.0, NOT licensed as entirely MIT.
+          Includes a separate corresponding-source ZIP from the same CI run.
+          Installation: unzip; load the directory containing manifest.json in
+          chrome://extensions (Developer mode > Load unpacked).
+          Locally activated translation/diagnostics; no tokens bundled.
+          This is a development build, not validated for production accounts.
+          EOF
+          (cd /tmp/pit-kiss-upstream/build/chrome && zip -q -r "$GITHUB_WORKSPACE/dist/PIT-KISS-v049-CHROME-TEST.zip" .)
+          git -C /tmp/pit-kiss-upstream archive HEAD | tar -x -C dist/combo-src/kiss-translator-v2.1.1
+          git archive HEAD | tar -x -C dist/combo-src/pit-adaptation-v0.4.9
+          cat > dist/combo-src/README-SOURCE.txt <<'EOF'
+          Corresponding source for PIT-KISS-v049-CHROME-TEST.zip
+          KISS original source: fishjar/kiss-translator at SHA a1279f2517bd478ef1dd93b941f9177094486cd4
+          PIT adaptation source: ACIDCH/personal-immersive-translator at this CI checkout SHA
+          Build entry: pit-adaptation-v0.4.9/scripts/assemble-kiss-sidecar.mjs
+          MIT applies to original PIT files; GPL-3.0 applies to the combined
+          derivative work, with original licenses included in source folders.
+          Build procedure: docs/KISS_REAL_PLATFORM_ACCEPTANCE_zh-CN.md
+          EOF
+          (cd dist && zip -q -r PIT-KISS-v049-CORRESPONDING-SOURCE.zip combo-src)
+          unzip -p dist/PIT-KISS-v049-CHROME-TEST.zip manifest.json | grep -q '"manifest_version": 3'
+          unzip -l dist/PIT-KISS-v049-CORRESPONDING-SOURCE.zip | grep -q 'combo-src/kiss-translator-v2.1.1/LICENSE'
+          unzip -l dist/PIT-KISS-v049-CORRESPONDING-SOURCE.zip | grep -q 'combo-src/pit-adaptation-v0.4.9/scripts/assemble-kiss-sidecar.mjs'
+          ls -lh dist/PIT-KISS-v049-*.zip
+      - name: Upload ready-to-install Chrome test ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIT-KISS-v049-CHROME-TEST
+          path: dist/PIT-KISS-v049-CHROME-TEST.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload matching combined corresponding source
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIT-KISS-v049-CORRESPONDING-SOURCE
+          path: dist/PIT-KISS-v049-CORRESPONDING-SOURCE.zip
+          if-no-files-found: error
+          retention-days: 14
