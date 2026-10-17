@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {browser} from '#imports';
 
 type Mode='standard'|'ai';
 type Progress={
