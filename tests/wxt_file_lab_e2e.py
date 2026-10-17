@@ -333,6 +333,25 @@ async def main():
         report['mixed_pdf_and_text_zip']='pass'
         print('WXT MIXED PDF+TXT BILINGUAL ZIP: PASS',flush=True)
 
+        # Browser drag/drop must use the identical MIME/size validator and
+        # translation pipeline as the multiple-select file picker.
+        await page.locator('.batch-file-lab .document-drop').evaluate("""root=>{
+          const data=new DataTransfer();
+          data.items.add(new File(['Drag and drop economics'], 'dragged.txt',
+            {type:'text/plain'}));
+          root.dispatchEvent(new DragEvent('drop',{
+            bubbles:true,cancelable:true,dataTransfer:data
+          }));
+        }""")
+        await page.locator('.batch-file-lab').get_by_text('已选择 1 个文件').wait_for(timeout=8000)
+        async with page.expect_download(timeout=20000) as drag_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await drag_event.value).path()) as archive:
+          translation=archive.read('translated/01-dragged-translated.txt').decode('utf8')
+          assert translation=='译文:Drag and drop economics',translation
+        report['drag_drop_file_translation']='pass'
+        print('WXT REAL DROP EVENT AND TRANSLATED TXT ZIP: PASS',flush=True)
+
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'lecture.vtt','mimeType':'text/vtt',
           'buffer':b'WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello world\n\n00:00:04.500 --> 00:00:08.000\nFinancial models\n'
