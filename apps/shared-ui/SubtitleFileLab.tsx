@@ -25,7 +25,7 @@ export function SubtitleFileLab(){
  }
  async function translate(){
    if(busy||!file||!runtime?.sendMessage)return;
-   if(file.size>2_000_000||!/.?\.(srt|vtt)$/i.test(file.name)){
+   if(file.size>2_000_000||!/\.(srt|vtt)$/i.test(file.name)){
      setStatus('请上传不超过 2 MB 的 SRT/VTT 文件');return;
    }
    if(mode==='ai'&&!window.confirm('自选 AI 将连续翻译全部字幕，可能产生额外 API 费用，继续吗？'))return;
