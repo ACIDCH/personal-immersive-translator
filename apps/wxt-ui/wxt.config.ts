@@ -1,16 +1,17 @@
 import {defineConfig} from 'wxt';
 import react from '@vitejs/plugin-react';
 
-// Native PIT web translation runs inside this separate integration build.
-// Media/ASR/OCR remain on the original experimental track and are not claimed.
+// Native PIT web translation, file labs, subtitle adapters and optional
+// local ASR run inside this separately tested WXT integration build.
+// External PDF layout services and user-key vendor quality need independent QA.
 export default defineConfig({
   // Existing PIT JavaScript uses a parameter named storage; disabling
   // WXT auto-imports prevents an erroneous wxt/utils/storage import.
   imports:false,
   manifest:{
-    name:'多模态翻译 — 网页集成测试',
+    name:'多模态翻译 — 核心集成测试版',
     short_name:'多模态翻译',
-    description:'PIT native webpage translation through the WXT React control panel. Video/PDF not enabled in this build.',
+    description:'Bilingual web translation, visible captions, local OCR, Office translation and optional local PDF/ASR services.',
     minimum_chrome_version:'125',
     // MV3 permits packaged WASM evaluation, not remote executable code.
     content_security_policy:{
