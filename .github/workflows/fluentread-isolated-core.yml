@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/upstream/fluentread-build-report.mjs'
       - 'tests/fluentread_mv3_smoke.py'
+      - 'tests/fluentread_translation_matrix_e2e.py'
       - '.github/workflows/fluentread-isolated-core.yml'
   workflow_dispatch:
 permissions:
@@ -49,6 +50,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Boot FluentRead service worker and popup in Chromium
         run: python tests/fluentread_mv3_smoke.py upstream/fluentread/.output/chrome-mv3
+      - name: Execute native FluentRead webpage translation with mock Microsoft MT
+        run: python tests/fluentread_translation_matrix_e2e.py upstream/fluentread/.output/chrome-mv3
       - name: Archive independent evidence only (no GPL binaries)
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,5 +60,6 @@ jobs:
           path: |
             fluentread-build-report.json
             fluentread-browser-report.json
+            fluentread-translation-benchmark.json
           if-no-files-found: ignore
           retention-days: 7
