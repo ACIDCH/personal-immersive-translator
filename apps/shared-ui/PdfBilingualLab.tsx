@@ -26,14 +26,16 @@ export function PdfBilingualLab(){
    setBusy(true);setStatus('正在处理 PDF…');
    try{
      const {translateBilingualPdf}=await import('./pdfBilingual');
-     const result=await translateBilingualPdf(file,async texts=>{
+     const {createRecoverableTranslator}=await import('./translationRecovery');
+     const translate=createRecoverableTranslator(async texts=>{
        const response=await runtime.sendMessage!({
          type:'TRANSLATE_DOCUMENT',texts,mode,userInitiated:true
        });
        if(!response.ok||!Array.isArray(response.translations))
          throw Error(response.error||'PDF 翻译服务未返回译文');
        return response.translations;
-     },ocrLang,(done,total,stage)=>setProgress(`${done}/${total} 页 · ${stage}`));
+     },{onRetry:info=>setProgress('PDF 翻译暂时限流/超时，重试 '+info.attempt+' 次')});
+     const result=await translateBilingualPdf(file,translate,ocrLang,(done,total,stage)=>setProgress(`${done}/${total} 页 · ${stage}`));
      const copy=new Uint8Array(result.pdf.byteLength);copy.set(result.pdf);
      const url=URL.createObjectURL(new Blob([copy],{type:'application/pdf'}));
      const a=document.createElement('a');
