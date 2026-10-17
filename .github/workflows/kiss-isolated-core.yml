@@ -5,6 +5,7 @@ on:
     paths:
       - 'scripts/upstream/kiss-build-report.mjs'
       - 'tests/kiss_upstream_mv3_smoke.py'
+      - 'tests/kiss_translation_matrix_e2e.py'
       - '.github/workflows/kiss-isolated-core.yml'
   workflow_dispatch:
 
@@ -55,6 +56,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Load compiled KISS extension in actual Chromium
         run: python tests/kiss_upstream_mv3_smoke.py upstream/kiss/build/chrome
+      - name: Execute pinned KISS translation engine on a real Chromium webpage
+        run: python tests/kiss_translation_matrix_e2e.py upstream/kiss/build/chrome
       - name: Retain only results, not unmodified GPL binaries or source
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,5 +66,6 @@ jobs:
           path: |
             kiss-build-report.json
             kiss-browser-smoke-report.json
+            kiss-translation-benchmark.json
           if-no-files-found: ignore
           retention-days: 7
