@@ -33,6 +33,12 @@ export function SubtitleFileLab(){
    setStatus('正在解析并翻译字幕文件…');
    try{
      const cues:TimedCue[]=parseSubtitleFile(await file.text());
+     const {createRecoverableTranslator}=await import('./translationRecovery');
+     const translate=createRecoverableTranslator(async texts=>{
+       const response=await runtime.sendMessage!({type:'TRANSLATE_DOCUMENT',texts,mode,userInitiated:true});
+       if(!response?.ok||!response.translations)throw Error(response?.error||'字幕翻译服务响应失败');
+       return response.translations;
+     },{onRetry:info=>setProgress('字幕服务暂时繁忙，重试 '+info.attempt+' 次')});
      const outputs:string[]=[];
      for(let i=0;i<cues.length;){
        const chunk:TimedCue[]=[];let size=0;
@@ -41,13 +47,7 @@ export function SubtitleFileLab(){
          if(chunk.length&&size+cue.text.length>10500)break;
          chunk.push(cue);size+=cue.text.length;
        }
-       const result=await runtime.sendMessage({
-         type:'TRANSLATE_DOCUMENT',texts:chunk.map(x=>x.text),mode,userInitiated:true
-       });
-       if(!result?.ok||!Array.isArray(result.translations)||
-         result.translations.length!==chunk.length)
-         throw Error(result?.error||'服务返回了不完整的字幕译文');
-       outputs.push(...result.translations);
+       outputs.push(...await translate(chunk.map(x=>x.text)));
        i+=chunk.length;setProgress('已翻译 '+i+'/'+cues.length+' 条');
      }
      const serialized=formatBilingualSrt(cues,outputs);
