@@ -38,8 +38,8 @@ async def setup(page,url,html):
         return {ok:true,translations:msg.texts?.map(x=>'译文:'+x)};
       }
     }};
-    window.pitAction=(type,cues=[])=>new Promise(r=>{
-      for(const cb of window.pitCallbacks)cb({type,mode:'standard',cues},{},r);
+    window.pitAction=(type,cues=[],mode='standard')=>new Promise(r=>{
+      for(const cb of window.pitCallbacks)cb({type,mode,cues},{},r);
     });
   }""")
   for path in ("lib/caption-core.js","lib/platform-captions.js","subtitles.js"):
@@ -72,6 +72,60 @@ async def run():
         assert sent<=4,(provider,sent)
         print("PASS",provider,"visible captions, update, hidden state, stop, bounded calls")
         await page.close()
+
+      # AI captions must actually supply bounded cross-sentence
+      # context; v0.4.4 had hardcoded context:'' even with AI enabled.
+      # This mock does not call a paid model or establish translation quality.
+      contextual=await browser.new_page()
+      await setup(contextual,"https://www.youtube.com/watch?v=context-fixture",
+                  '<video style="width:640px;height:360px"></video>')
+      await contextual.evaluate("""()=>{
+        const video=document.querySelector('video');
+        const track=video.addTextTrack('subtitles','English','en');
+        track.mode='showing';
+        track.addCue(new VTTCue(0,3,'She studies the financial system.'));
+        track.addCue(new VTTCue(3,6,'The bank has experienced a run.'));
+        track.addCue(new VTTCue(6,9,'It must restore consumer confidence.'));
+      }""")
+      result=await contextual.evaluate(
+        "()=>window.pitAction('PIT_CAPTIONS_START',[],'ai')")
+      assert result["ok"],result
+      await contextual.wait_for_function("""()=>
+        window.pitRequests.some(m=>m.mode==='ai' && m.texts?.length>0)
+      """,timeout=5000)
+      contexts=await contextual.evaluate("""()=>window.pitRequests
+        .filter(m=>m.mode==='ai')
+        .map(m=>({context:m.context,mode:m.mode,optedIn:m.userInitiated}))""")
+      assert contexts and any(
+        'financial system' in r['context'] and
+        'consumer confidence' in r['context'] and
+        r['optedIn'] is True for r in contexts
+      ),contexts
+      assert all(len(r['context'])<=1600 for r in contexts)
+      await contextual.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      await contextual.close()
+      print("PASS user-opted AI caption batch carries preceding and upcoming dialogue context")
+
+      # Separate visible-only subtitle DOM: the next line inherits the
+      # prior line's context, unlike the uncontextualized original code.
+      ai_dom=await browser.new_page()
+      await setup(ai_dom,"https://www.youtube.com/watch?v=context-dom",
+                  PLATFORMS[0][2])
+      ai_start=await ai_dom.evaluate(
+        "()=>window.pitAction('PIT_CAPTIONS_START',[],'ai')")
+      assert ai_start["ok"],ai_start
+      await ai_dom.locator('.pit-caption-translated').get_by_text(
+        '译文:First lecture caption').wait_for(timeout=5000)
+      await ai_dom.locator('.ytp-caption-segment').evaluate(
+        "(node)=>node.textContent='Second lecture caption'")
+      await ai_dom.locator('.pit-caption-translated').get_by_text(
+        '译文:Second lecture caption').wait_for(timeout=5000)
+      followup=await ai_dom.evaluate("""()=>window.pitRequests
+        .filter(m=>m.mode==='ai' && m.texts?.includes('Second lecture caption'))""")
+      assert followup and 'First lecture caption' in followup[-1]['context'],followup
+      await ai_dom.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      await ai_dom.close()
+      print("PASS user-opted AI visible caption translation carries previous line")
 
       # Real Chrome regression: the player advertises a native TextTrack
       # but does not fill it. Visible YouTube CC must still be translated;
