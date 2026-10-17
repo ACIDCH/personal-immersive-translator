@@ -23,7 +23,8 @@
    <button class="primary" id="translate">翻译当前网页</button>
    <div class="button-split"><button id="selection">翻译选中文字</button><button id="restore">恢复原文</button></div>
    <button id="continue" class="subtle-action">继续翻译后续段落（额外 600 段）</button>
-   <p class="muted">原文与译文并列显示。额外段落只有点击继续后才会处理。</p>
+   <p class="muted">原文与译文并列显示。剩余段落和批次失败会如实显示；操作响应成功不代表全文已经翻译完成。</p>
+   <p id="translationProgress" class="muted" role="status" aria-live="polite">尚未开始；启动后显示真实的已翻译段落比例。</p>
   </div>
  </details>
  <details class="tool-group" id="videoGroup">
