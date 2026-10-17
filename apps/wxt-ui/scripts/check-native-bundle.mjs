@@ -8,6 +8,7 @@ const dist=join(root,'.output','chrome-mv3');
 const manifest=JSON.parse(readFileSync(join(dist,'manifest.json'),'utf8'));
 const expected=['activeTab','scripting','storage'];
 for(const permission of expected)assert(manifest.permissions.includes(permission),'Missing permission: '+permission);
+for(const origin of ['https://*/*','http://*/*'])assert(manifest.host_permissions.includes(origin),'Missing ordinary webpage access: '+origin);
 assert.equal(manifest.options_page,'pit-options.html','Functional native options page must be used');
 assert.equal(manifest.action.default_popup,'popup.html');
 assert.equal(manifest.background.service_worker,'pit-background.js');
