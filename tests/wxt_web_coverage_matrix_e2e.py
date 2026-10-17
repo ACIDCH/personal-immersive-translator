@@ -106,9 +106,10 @@ async def main():
                 # Remote provider errors must not be represented as successful translations.
                 await popup.get_by_role("button",name="恢复原文").click()
                 await target.locator(".pit-translation").first.wait_for(state="detached",timeout=12000)
-                # Existing translations are correctly cached; clear them before
+                # Existing translations are correctly cached; settings-page-only
+                # cache clearing is an intentional trust boundary. Clear before
                 # fault injection or no real network call would be made.
-                cleared=await popup.evaluate("""async()=>chrome.runtime.sendMessage({type:'CLEAR_CACHE'})""")
+                cleared=await options.evaluate("""async()=>chrome.runtime.sendMessage({type:'CLEAR_CACHE'})""")
                 assert cleared.get("ok"),cleared
                 await sw.evaluate("()=>{globalThis.pitQa.failNext=true;}")
                 await popup.get_by_role("button",name="翻译当前网页").click()
