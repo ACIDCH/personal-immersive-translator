@@ -168,6 +168,27 @@ sidecarPort.onDisconnect.addListener(()=>{
  manifest.permissions=[...new Set([
    ...(manifest.permissions||[]),'activeTab','offscreen','tabCapture','webNavigation'
  ])];
+ // Keep KISS engine's numeric version intact for its internal upgrade
+ // logic; Chrome's version_name labels our composite distribution.
+ // Do not mutate/rebrand the KISS source package or strip its GPL license.
+ manifest.name='PIT 沉浸式翻译（测试版）';
+ manifest.short_name='PIT Translate';
+ manifest.version_name='PIT v0.4.9 (KISS 2.1.1)';
+ manifest.description='PIT 个人沉浸式翻译测试版：双语网页、视频字幕、图片 OCR、PDF 与 GitHub 诊断。基于 KISS Translator 2.1.1（GPL-3.0）。';
+ const pitIcons={};
+ for(const size of [16,48,128]){
+   const relative='pit/icons/icon'+size+'.png';
+   const source=join(root,'assets','icon'+size+'.png');
+   must(existsSync(source),'Missing PIT identity icon: '+source);
+   mkdirSync(dirname(join(build,relative)),{recursive:true});
+   copyFileSync(source,join(build,relative));
+   pitIcons[size]=relative;
+ }
+ manifest.icons=pitIcons;
+ manifest.action={...manifest.action,
+   default_title:'PIT 沉浸式翻译 · v0.4.9',
+   default_icon:pitIcons
+ };
  writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
  const popupExtra=readFileSync(popupFile,'utf8');
  must(popupExtra.includes('pit-multimodal-links'),'Expected original PIT navigation');
