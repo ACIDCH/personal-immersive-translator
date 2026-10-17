@@ -11,6 +11,9 @@ const rootCss='pit-native.css';
 
 export function NativeWebControls(){
  const [mode,setMode]=useState<Mode>('standard');
+ const [feature,setFeature]=useState<'web'|'video'|'files'|'settings'>('web');
+ const [display,setDisplay]=useState<'bilingual'|'translation-only'>('bilingual');
+ const [scope,setScope]=useState<'smart'|'full'>('smart');
  const [captionFile,setCaptionFile]=useState<File|null>(null);
  const [captionBusy,setCaptionBusy]=useState(false);
  const [asrToken,setAsrToken]=useState('');
@@ -27,6 +30,8 @@ export function NativeWebControls(){
    void browser.runtime.sendMessage({type:'GET_SETTINGS'}).then(answer=>{
      const settings=answer?.settings;
      if(!active||!settings)return;
+     setDisplay(settings.webDisplay==='translation-only'?'translation-only':'bilingual');
+     setScope(settings.webScope==='full'?'full':'smart');
      if(settings.standardProvider==='cloud'&&
        (!settings.cloudEndpoint||!settings.cloudToken)){
        setStatus('云端翻译未部署/配置。请先在「配置翻译服务」填写已部署的 PIT Worker 地址与访问令牌；当前没有可用的默认翻译引擎。');
@@ -52,6 +57,22 @@ export function NativeWebControls(){
    return()=>{alive=false;if(timer.current)clearInterval(timer.current);timer.current=null;};
  },[tabId]);
 
+ async function saveReaderOption(key:'webDisplay'|'webScope',value:string){
+   try{
+     const data=await browser.storage.local.get('pit_settings_v1');
+     const old=(data.pit_settings_v1||{}) as Record<string,unknown>;
+     await browser.storage.local.set({pit_settings_v1:{...old,[key]:value}});
+     if(key==='webDisplay')setDisplay(value==='translation-only'?'translation-only':'bilingual');
+     else setScope(value==='full'?'full':'smart');
+     const [tab]=await browser.tabs.query({active:true,currentWindow:true});
+     if(tab?.id&&key==='webDisplay'){
+       await browser.tabs.sendMessage(tab.id,{type:'PIT_SET_DISPLAY',display:value})
+         .catch(()=>{});
+     }
+     setStatus(key==='webDisplay'?'阅读模式已保存并应用于当前已翻译段落。':
+       '翻译范围已保存，下次开启网页翻译时生效。');
+   }catch(error){setStatus('阅读设置保存失败：'+String(error instanceof Error?error.message:error));}
+ }
  async function run(action:'PIT_START'|'PIT_CONTINUE'|'PIT_SELECTION'|'PIT_RESTORE'){
    if(working)return;
    if(mode==='ai' && (action==='PIT_START'||action==='PIT_SELECTION')){
@@ -84,7 +105,7 @@ export function NativeWebControls(){
        // this static public asset is verified byte-for-byte by the output test.
        await browser.scripting.executeScript({target:{tabId:tab.id},files:[rootFile as never]});
      }
-     const answer=await browser.tabs.sendMessage(tab.id,{type:action,mode});
+     const answer=await browser.tabs.sendMessage(tab.id,{type:action,mode,scope,display});
      if(!answer?.ok)throw Error(answer?.reason||'原生翻译核心未接受请求');
      if(token!==latest.current)return;
      setTabId(tab.id);
@@ -244,39 +265,83 @@ export function NativeWebControls(){
    finally{setCaptionBusy(false);}
  }
  return <div className="native-web">
-   <div className="native-modes" role="group" aria-label="翻译模式">
-     <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
-     <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>自选 AI 精译</button>
-   </div>
-   <div className="native-actions">
-     <button type="button" disabled={working} onClick={()=>void run('PIT_START')}>翻译当前网页</button>
-     <button type="button" disabled={working} onClick={()=>void run('PIT_CONTINUE')}>继续翻译</button>
-     <button type="button" disabled={working} onClick={()=>void run('PIT_SELECTION')}>翻译选中内容</button>
-     <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
-     <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>配置翻译服务 / AI 模型</button>
-     <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>打开本地 DOCX / 图片 OCR 实验台</button>
-     <button type="button" disabled={working} onClick={()=>void screenshotToFileLab()}>截图当前网页 → 图片 OCR</button>
-     <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('pit-tools.html' as never)})}>打开 PDF / 高保真本机工具</button>
-     <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
-     <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
-     <label>可选：导入 SRT / VTT（限 2 MiB）
+   <nav className="pit-feature-tabs" aria-label="功能模块">
+     <button type="button" aria-current={feature==='web'?'page':undefined} onClick={()=>setFeature('web')}>网页翻译</button>
+     <button type="button" aria-current={feature==='video'?'page':undefined} onClick={()=>setFeature('video')}>视频字幕</button>
+     <button type="button" aria-current={feature==='files'?'page':undefined} onClick={()=>setFeature('files')}>文件与图片</button>
+     <button type="button" aria-current={feature==='settings'?'page':undefined} onClick={()=>setFeature('settings')}>设置与诊断</button>
+   </nav>
+   {feature==='web'&&<section className="pit-feature-section" aria-label="网页阅读">
+     <div className="native-modes" role="group" aria-label="翻译模式">
+       <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
+       <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>自选 AI 精译</button>
+     </div>
+     <div className="pit-setting-row">
+       <label>阅读模式
+         <select aria-label="网页阅读显示模式" value={display} onChange={e=>void saveReaderOption('webDisplay',e.target.value)}>
+           <option value="bilingual">双语对照</option><option value="translation-only">仅显示译文</option>
+         </select>
+       </label>
+       <label>翻译范围
+         <select aria-label="网页翻译范围" value={scope} onChange={e=>void saveReaderOption('webScope',e.target.value)}>
+           <option value="smart">智能正文</option><option value="full">整页可读文本</option>
+         </select>
+       </label>
+     </div>
+     <div className="native-actions">
+       <button type="button" disabled={working} onClick={()=>void run('PIT_START')}>翻译当前网页</button>
+       <button type="button" disabled={working} onClick={()=>void run('PIT_RESTORE')}>恢复原文</button>
+       <button type="button" disabled={working} onClick={()=>void run('PIT_CONTINUE')}>继续翻译</button>
+       <button type="button" disabled={working} onClick={()=>void run('PIT_SELECTION')}>翻译选中内容</button>
+     </div>
+     {siteAccessNeeded&&<button type="button" className="grant-site" onClick={()=>void authorizeCurrentSite()}>允许当前网站翻译</button>}
+     {progress&&<p role="status" className="native-progress">正文覆盖 {progress.translated}/{progress.eligible}
+       （{progress.coveragePercent===null?'暂无':progress.coveragePercent+'%'}）；未处理 {progress.remaining}；
+       成功批次 {progress.succeededBatches}，失败批次 {progress.failedBatches}
+       {progress.busy?' · 处理中':''}{progress.lastError?' · '+progress.lastError:''}
+     </p>}
+     <p className="native-hint">Alt+A 翻译/恢复 · Alt+W 整页阅读 · Shift+悬停可选 · 输入框连按三次空格可选。</p>
+   </section>}
+   {feature==='video'&&<section className="pit-feature-section" aria-label="视频字幕">
+     <div className="native-modes" role="group" aria-label="字幕翻译模式">
+       <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
+       <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>AI 字幕精译</button>
+     </div>
+     <p className="native-hint">优先读取视频本身的字幕。无字幕时可选择云端 Whisper 识别；字幕源受网站播放器限制。</p>
+     <div className="native-actions">
+       <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
+       <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
+     </div>
+     <label className="pit-field">导入字幕 SRT / VTT（可选）
        <input type="file" accept=".srt,.vtt,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
      </label>
-     <label>可选本机 Whisper ASR 令牌
+     <div className="native-actions">
+       <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','cloud')}>云端 Whisper 语音字幕</button>
+       <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('stop')}>停止实时语音字幕</button>
+       <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','local')}>使用本机 Whisper（可选）</button>
+     </div>
+     <label className="pit-field">本机 Whisper 服务令牌（仅使用本机模式时填写）
        <input type="password" autoComplete="off" placeholder="PIT_BRIDGE_TOKEN" value={asrToken}
-          onChange={event=>setAsrToken(event.target.value)}/>
+         onChange={event=>setAsrToken(event.target.value)}/>
      </label>
-     <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','cloud')}>启动云端 Whisper 实时音频字幕</button>
-     <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','local')}>使用本机 Whisper（可选）</button>
-     <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('stop')}>停止本机实时音频字幕</button>
-   </div>
-   {siteAccessNeeded&&<button type="button" className="grant-site" onClick={()=>void authorizeCurrentSite()}>允许当前网站翻译</button>}
-   {progress&&<p role="status" className="native-progress">正文覆盖 {progress.translated}/{progress.eligible}
-    （{progress.coveragePercent===null?'暂无':progress.coveragePercent+'%'}）；未处理 {progress.remaining}；
-    成功批次 {progress.succeededBatches}，失败批次 {progress.failedBatches}
-    {progress.busy?' · 处理中':''}{progress.lastError?' · '+progress.lastError:''}
-   </p>}
+   </section>}
+   {feature==='files'&&<section className="pit-feature-section" aria-label="文件与图片">
+     <p className="native-hint">统一文件工作台：PDF、Office、EPUB、TXT/UTF、Markdown、图片 OCR 及字幕；云端高保真 PDF 需要实际部署服务器。</p>
+     <div className="native-actions">
+       <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>打开文件翻译工作台</button>
+       <button type="button" disabled={working} onClick={()=>void screenshotToFileLab()}>截图当前网页 → 图片 OCR</button>
+       <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('pit-tools.html' as never)})}>PDF 高保真服务说明</button>
+     </div>
+   </section>}
+   {feature==='settings'&&<section className="pit-feature-section" aria-label="翻译设置与诊断">
+     <p className="native-hint">阅读显示、悬停、输入框、自动站点、语言识别、机器翻译、AI 模型和云端配置统一由完整设置页面管理。</p>
+     <div className="native-actions">
+       <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>打开完整设置</button>
+       <button type="button" onClick={()=>void browser.tabs.create({url:'chrome://extensions/shortcuts'})}>快捷键管理</button>
+       <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>文档引擎诊断</button>
+     </div>
+     <p className="native-hint">当前为对标测试版，若未配置可用翻译引擎，不会伪装成成功翻译。</p>
+   </section>}
    <p role="status" aria-live="polite" className="native-status">{status}</p>
-   <p className="native-hint">原生网页翻译、已获授权的字幕轨、DOCX 与图片 OCR 均可使用；字幕需视频提供可访问的原文轨或可见字幕，不能绕过 DRM。高保真 PDF 和复杂图像重绘仍需独立处理。</p>
  </div>;
 }
