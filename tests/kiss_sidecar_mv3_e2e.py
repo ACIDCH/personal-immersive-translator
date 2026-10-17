@@ -28,6 +28,17 @@ async def main():
           origin="/".join(worker.url.split("/")[:3])
           assert origin.startswith("chrome-extension://"),worker.url
           print("PASS: KISS MV3 background worker is active",origin,flush=True)
+          display=await worker.evaluate("""()=>{
+            const m=chrome.runtime.getManifest();
+            return {name:m.name,version:m.version,version_name:m.version_name,
+              title:m.action?.default_title,icon:m.icons?.['128']};
+          }""")
+          assert display["name"]=="PIT 沉浸式翻译（测试版）",display
+          assert display["version"]=="2.1.1",display
+          assert display["version_name"]=="PIT v0.4.9 (KISS 2.1.1)",display
+          assert display["title"]=="PIT 沉浸式翻译 · v0.4.9",display
+          assert display["icon"]=="pit/icons/icon128.png",display
+          print("PASS: Chrome extension identity displays PIT brand and KISS core attribution",flush=True)
           errors=[]
           popup=await browser.new_page()
           popup.on("pageerror",lambda e:errors.append(str(e)))
