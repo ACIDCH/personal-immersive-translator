@@ -6,8 +6,8 @@
   if (globalThis.__PIT_TRANSLATOR_V1__) return;
   globalThis.__PIT_TRANSLATOR_V1__ = true;
 
-  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
-  const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="listitem"],[role="slide"] p';
+  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
+  const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
   let active = false, currentId = 0, mode = 'standard';
   let observer = null, observedRoots = new Set();
@@ -60,6 +60,23 @@
     document.documentElement.append(el);
     setTimeout(()=>el.remove(),5000);
   }
+  function translatable(el,original){
+    // Avoid numeric-only UI counters while retaining short article headings
+    // and normal CJK text. The former 12-character minimum discarded a large
+    // class of legitimate short paragraphs without reporting any failure.
+    if(original.length>5000||!/[^\W\d_]/u.test(original))return false;
+    const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
+    if(original.length<threshold)return false;
+    // Translating nested editable menus or site controls is not article reading.
+    if(el.matches('div')&&el.closest('nav,aside,[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
+    if(el.matches('div')&&el.children.length>0){
+      // A wrapping DIV with its own rich descendants is not a leaf text unit.
+      // Only permit literal text runs at leaf DIV level, so a whole article is
+      // never translated twice as one giant paragraph.
+      if([...el.children].some(child=>child.matches?.('div,p,section,article,ul,ol,h1,h2,h3,h4,h5,h6')))return false;
+    }
+    return true;
+  }
   function candidates() {
     const result=[];
     for(const el of queryDeep(TARGETS)){
@@ -71,7 +88,7 @@
         record.node?.remove();
         processed.delete(el);
       }
-      if(original.length<12 || original.length>5000 || processed.has(el))continue;
+      if(!translatable(el,original) || processed.has(el))continue;
       result.push({el,original});
     }
     return result;
@@ -84,7 +101,7 @@
       if(!el.isConnected || isUnsafe(el) || !el.getClientRects().length)continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
-      if(original.length<12 || original.length>5000)continue;
+      if(!translatable(el,original))continue;
       eligible++;
       const done=processed.get(el);
       if(done && done.source===original && done.node?.isConnected)translated++;
