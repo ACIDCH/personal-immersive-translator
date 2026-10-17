@@ -20,6 +20,18 @@ export function detectSource(text){
  if(hangul>=2&&hangul>kana)return {language:'ko',confidence:'script'};
  if(kana>=1)return {language:'ja',confidence:'script'};
  if(cjk>=2)return {language:'zh',confidence:'script'};
+ const tokens=Array.from(s.toLowerCase().matchAll(/[\p{L}]+/gu),m=>m[0]);
+ const lexicon={
+  en:['the','and','this','that','with','from','are','was','have','for','you','their','our','will','not'],
+  fr:['bonjour','avec','vous','nous','pour','dans','suis','sont','les','des','une','est','que','pas','merci'],
+  de:['und','der','die','das','nicht','mit','für','sind','ist','ein','eine','werden','auf','aus','den'],
+  es:['hola','gracias','los','las','una','que','con','para','por','del','está','son','como','pero','este','esta']
+ };
+ const scores=Object.entries(lexicon).map(([language,terms])=>({
+   language,score:tokens.reduce((n,t)=>n+(terms.includes(t)?1:0),0)
+ })).sort((a,b)=>b.score-a.score);
+ if(tokens.length>=4&&scores[0].score>=2&&scores[0].score>scores[1].score)
+  return {language:scores[0].language,confidence:'latin-heuristic-review-required'};
  return {language:'en',confidence:'latin-fallback-unverified'};
 }
 function authorized(request,env){
