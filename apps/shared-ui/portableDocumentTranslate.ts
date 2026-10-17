@@ -41,7 +41,7 @@ function add(units:Unit[],source:string,apply:(text:string)=>void){
     }
     chunks.push(source.slice(offset,end));offset=end;
   }
-  const translated=new Array<string|undefined>(chunks.length);
+  const translated=new Array<string|undefined>(chunks.length).fill(undefined);
   chunks.forEach((text,index)=>units.push({source:text,apply:(value)=>{
     translated[index]=value;
     if(translated.every(s=>s!==undefined))apply(translated.join(''));
