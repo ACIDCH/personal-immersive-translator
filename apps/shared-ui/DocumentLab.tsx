@@ -43,7 +43,18 @@ export function DocumentLab(){
       } else {
         // WASM runs locally; the browser may download runtime/selected language assets.
         const {createWorker}=await import('tesseract.js');
-        const worker=await createWorker(language);
+        // Chrome MV3 prohibits remote executable worker scripts. Use only
+        // first-party bundled JavaScript/WASM when inside our extension.
+        // Ordinary Pages builds retain Tesseract's usual browser defaults.
+        const runtime=(globalThis as {chrome?:{runtime?:{
+          id?:string;getURL?:(path:string)=>string;
+        }}}).chrome?.runtime;
+        const localPaths=runtime?.id&&runtime.getURL?{
+          workerPath:runtime.getURL('tesseract/worker.min.js'),
+          corePath:runtime.getURL('tesseract/core'),
+          workerBlobURL:false
+        }:undefined;
+        const worker=await createWorker(language,1,localPaths);
         try{
           const result=await worker.recognize(file);
           setText(result.data.text.trim());
