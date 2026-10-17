@@ -55,4 +55,4 @@
 <section id="privacySettings" class="panel"><h2>隐私及站点规则</h2>
 <label>禁止翻译的域名（每行一个，包含子域名）<textarea name="blockedHosts" rows="4" placeholder="example.com&#10;banking.example"></textarea></label>
 <p class="muted">API Key 保存在 chrome.storage.local，不使用同步存储。浏览器本地扩展存储本身不是端到端加密保险箱，不建议在共用设备输入生产级高权限凭据。</p></section>
-<section id="saveActions" class="buttons"><button class="primary" type="submit">保存设置</button><button type="button" id="test">测试当前所选服务</button><button type="button" id="clearCache">清理翻译缓存</button></section><p id="status" role="status" aria-live="polite"></p></form></main><script type="module" src="options.js"></script></body></html>
+<section id="saveActions" class="buttons"><button class="primary" type="submit">保存设置</button><button type="button" id="test">测试当前所选服务</button><button type="button" id="clearCache">清理翻译缓存</button><button type="button" id="exportPreferences">导出阅读设置</button><button type="button" id="importPreferences">导入阅读设置</button><input type="file" id="preferenceFile" accept=".json,application/json" hidden></section><p id="status" role="status" aria-live="polite"></p></form></main><script type="module" src="options.js"></script></body></html>
