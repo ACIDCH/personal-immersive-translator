@@ -29,6 +29,10 @@ test('background discards stale offscreen ASR events and closes a valid session'
   }
  };
  await import('../src/background.js');
+ globalThis.fetch=async url=>{
+   assert.equal(url,'http://127.0.0.1:8765/health');
+   return {ok:true,json:async()=>({speech_asr:true,speech_asr_requires_risk_ack:false})};
+ };
  const request=(msg,sender)=>new Promise(resolve=>listener(msg,sender,resolve));
  const ui={id:chrome.runtime.id};
  const media={id:chrome.runtime.id,url:chrome.runtime.getURL('src/offscreen.html')};
