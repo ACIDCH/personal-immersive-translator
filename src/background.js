@@ -6,10 +6,46 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
     const data = await chrome.storage.local.get(SETTINGS_KEY);
-    if (!data[SETTINGS_KEY]) await chrome.storage.local.set({[SETTINGS_KEY]: normalizeSettings()});
+    if(!data[SETTINGS_KEY]){
+      await chrome.storage.local.set({[SETTINGS_KEY]:normalizeSettings()});
+    }else{
+      // The old native v0.5-0.6 release shipped the default cloud provider
+      // while its Worker had no endpoint and returned 501. On update, migrate
+      // *only* that unusable empty configuration to the documented low-volume
+      // no-key MT option. Never modify existing working cloud credentials.
+      const previous=normalizeSettings(data[SETTINGS_KEY]);
+      if(previous.standardProvider==='cloud'&&!previous.cloudEndpoint&&!previous.cloudToken){
+        await chrome.storage.local.set({
+          [SETTINGS_KEY]:{...previous,standardProvider:'mymemory'}
+        });
+      }
+    }
   } catch (error) { console.warn('PIT setup failed', error); }
 });
 chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});
+let freeMtLock=Promise.resolve();
+async function runLimitedFreeMT(texts,run){
+  const task=freeMtLock.then(async()=>{
+    // This local, no-content counter prevents PIT from silently issuing
+    // large numbers of anonymous requests past MyMemory's small daily quota.
+    // It is a soft guard, not a quota guarantee (provider may count other
+    // devices or IP traffic). UTC avoids a client clock ambiguity.
+    const day=new Date().toISOString().slice(0,10);
+    const key='pit_mymemory_usage_'+day;
+    let used=0;
+    try{const info=await chrome.storage.local.get(key);
+      used=Math.max(0,Number(info[key])||0);
+    }catch{}
+    const chars=texts.reduce((total,text)=>total+text.length,0);
+    if(chars+used>4500)throw new TranslationError(
+      '免费翻译接近每日匿名额度，已停止继续发送。请等待次日或切换正式翻译服务',429);
+    const translations=await run();
+    await chrome.storage.local.set({[key]:used+chars}).catch(()=>{});
+    return translations;
+  });
+  freeMtLock=task.catch(()=>{});
+  return task;
+}
 async function getSettings() {
   const item = await chrome.storage.local.get(SETTINGS_KEY);
   return normalizeSettings(item[SETTINGS_KEY]);
@@ -140,6 +176,56 @@ async function startLiveAsr(message){
   }
 }
 
+/** Context-menu handlers call only the bundled native PIT entrypoint.
+ * Only the user-selected caption/image/text is involved; no site scraping
+ * occurs on right-click. Image URL is fetched later after file-lab opens.
+ */
+const menuNames=[
+ ['pit-translate-selected','PIT：翻译选中文字','selection'],
+ ['pit-read-selected','PIT：朗读选中文字','selection'],
+ ['pit-translate-page','PIT：翻译当前页面','page'],
+ ['pit-image-ocr','PIT：识别并翻译此图片','image']
+];
+chrome.runtime.onInstalled.addListener(()=>{
+ if(!chrome.contextMenus?.create)return;
+ for(const [id,title,context] of menuNames){
+  chrome.contextMenus.create({id,title,contexts:[context]},()=>{
+   // Menus can already exist during an extension update.
+   void chrome.runtime.lastError;
+  });
+ }
+});
+chrome.contextMenus?.onClicked?.addListener((info,tab)=>{
+ void (async()=>{
+  if(!tab?.id||!/^https?:\/\//.test(tab.url||''))return;
+  if(info.menuItemId==='pit-image-ocr'){
+   let u;
+   try{u=new URL(String(info.srcUrl||''));}catch{return;}
+   if(!['https:','http:'].includes(u.protocol)||u.username||u.password)return;
+   await chrome.storage.session.set({pit_ocr_image_url:u.toString()});
+   await chrome.tabs.create({url:chrome.runtime.getURL('file-lab.html')});
+   return;
+  }
+  const settings=await getSettings();
+  if(hostIsBlocked(new URL(tab.url).hostname,settings.blockedHosts))return;
+  if(settings.standardProvider==='cloud'&&(!settings.cloudEndpoint||!settings.cloudToken))return;
+  if(info.menuItemId==='pit-translate-page'){
+   await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+   await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+   await chrome.tabs.sendMessage(tab.id,{type:'PIT_START',mode:'standard',
+     scope:settings.webScope,display:settings.webDisplay,theme:settings.translationTheme});
+   return;
+  }
+  const selected=String(info.selectionText||'').trim().slice(0,5000);
+  if(!selected)return;
+  const speak=info.menuItemId==='pit-read-selected';
+  if(!speak&&info.menuItemId!=='pit-translate-selected')return;
+  await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+  await chrome.tabs.sendMessage(tab.id,{
+   type:speak?'PIT_SPEAK_SELECTION':'PIT_SELECTION_CONTEXT',text:selected});
+ })().catch(()=>{});
+});
 async function handle(message, sender) {
   if (!message || typeof message.type !== 'string') throw new TranslationError('无效的请求');
   ensureSource(sender, message.type);
@@ -261,7 +347,8 @@ async function handle(message, sender) {
       if(count>=80)throw new TranslationError('本次实时 AI 字幕达到 80 次请求上限，请停止并明确重新启动');
       await chrome.storage.session.set({pit_live_ai_requests:count+1});
     }
-    const translations=await translateBatch(texts,{...settings,provider,source,target,context});
+    const translation=()=>translateBatch(texts,{...settings,provider,source,target,context});
+    const translations=provider==='mymemory'?await runLimitedFreeMT(texts,translation):await translation();
     return {translations,provider,cached:false,transient:true};
   }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
@@ -270,7 +357,11 @@ async function handle(message, sender) {
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
   if (missing.length) {
-    const newly = await translateBatch(missing.map(x=>x.text), {...settings, provider, source,target,context});
+    const requestTexts=missing.map(x=>x.text);
+    const translation=()=>translateBatch(requestTexts,{...settings,provider,source,target,context});
+    const newly=provider==='mymemory'
+      ?await runLimitedFreeMT(requestTexts,translation)
+      :await translation();
     for (let j=0;j<newly.length;j++) {
       const i=missing[j].index;
       values[i]=newly[j];

@@ -49,21 +49,53 @@ export function DocumentLab(){
     }}}}).chrome?.storage?.session;
     if(!session)return;
     void (async()=>{
-      const key='pit_ocr_screenshot';
-      const stored=await session.get(key);
-      const encoded=stored?.[key];
-      if(typeof encoded!=='string'||!encoded.startsWith('data:image/png;base64,')||
-         encoded.length>6_000_000)return;
-      await session.remove(key);
-      const raw=atob(encoded.slice(encoded.indexOf(',')+1));
-      const bytes=new Uint8Array(raw.length);
-      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      const screenshot='pit_ocr_screenshot',imageUrlKey='pit_ocr_image_url';
+      const stored=await session.get(screenshot);
+      const encoded=stored?.[screenshot];
+      if(typeof encoded==='string'&&encoded.startsWith('data:image/png;base64,')&&
+         encoded.length<=6_000_000){
+        await session.remove(screenshot);
+        const raw=atob(encoded.slice(encoded.indexOf(',')+1));
+        const bytes=new Uint8Array(raw.length);
+        for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+        if(!mounted)return;
+        setMode('ocr');
+        setFile(new File([bytes],'captured-webpage.png',{type:'image/png'}));
+        setOcrRegions([]);setText('');
+        setMessage('已载入当前网页的可见区域截图，请选择 OCR 语言并点击开始识别。');
+        return;
+      }
+      const imageStored=await session.get(imageUrlKey);
+      const requested=imageStored?.[imageUrlKey];
+      if(typeof requested!=='string')return;
+      await session.remove(imageUrlKey);
+      let url:URL;
+      try{
+        url=new URL(requested);
+        if(!['https:','http:'].includes(url.protocol)||url.username||url.password)
+          throw Error('图片网址协议或认证方式不受支持');
+      }catch{throw Error('右键选中的图片地址无效');}
+      // Fetch in the extension page, after the user explicitly picked this
+      // image from a context menu. Never forward site cookies or file URLs.
+      const response=await fetch(url.toString(),{
+        credentials:'omit',signal:AbortSignal.timeout(20000)
+      });
+      if(!response.ok)throw Error('图片服务 HTTP '+response.status+
+        '，可能需要网站登录或防盗链；可以另存图片再选择文件');
+      const size=Number(response.headers.get('content-length')||0);
+      if(size>MAX_BYTES)throw Error('图片超过 12 MiB');
+      const mime=(response.headers.get('content-type')||'').split(';')[0].trim();
+      if(!['image/png','image/jpeg','image/webp','image/bmp'].includes(mime))
+        throw Error('当前图片不是可用的 PNG/JPEG/WebP/BMP；请保存后手动上传');
+      const bytes=new Uint8Array(await response.arrayBuffer());
+      if(bytes.length>MAX_BYTES||bytes.length<12)throw Error('图片大小不支持');
       if(!mounted)return;
+      const extension=mime==='image/png'?'png':mime==='image/webp'?'webp':
+        mime==='image/bmp'?'bmp':'jpg';
       setMode('ocr');
-      setFile(new File([bytes],'captured-webpage.png',{type:'image/png'}));
-      setOcrRegions([]);
-      setText('');
-      setMessage('已载入当前网页的可见区域截图，请选择 OCR 语言并点击开始识别。');
+      setFile(new File([bytes],'selected-image.'+extension,{type:mime}));
+      setOcrRegions([]);setText('');
+      setMessage('已从右键菜单导入真实图片，接下来可进行 OCR 与翻译。');
     })().catch(error=>{
       if(mounted)setMessage('截图加载失败：'+formatError(error));
     });

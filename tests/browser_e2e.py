@@ -108,6 +108,17 @@ async def main():
             assert await page.locator('#hover-target + .pit-translation').get_attribute(
               'data-theme')=='highlight'
             print("PASS: Shift hover, triple-Space translation and translation-only mode")
+            # Genuine content-script message creates a persistent reading
+            # card with a safe text-only translation and copy/voice controls.
+            await page.evaluate("""()=>new Promise(resolve=>{
+              for(const fn of window.pitListeners)fn({
+                type:'PIT_SELECTION_CONTEXT',text:'Financial market analysis'
+              },{},resolve);
+            })""")
+            await page.locator('.pit-selection-card .pit-selection-translated').get_by_text(
+              '译文:Financial market analysis').wait_for(timeout=5000)
+            assert await page.locator('.pit-selection-toolbar button').count()==3
+            print('PASS: native persistent selection translation/copy/voice card')
             await page.evaluate("()=>window.pitAction('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
             assert await page.evaluate("""()=>

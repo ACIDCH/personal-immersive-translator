@@ -112,6 +112,11 @@ async def main():
                 options=await ctx.new_page()
                 await options.goto(f"chrome-extension://{eid}/pit-options.html")
                 await options.locator('form[data-ready="1"]').wait_for(timeout=10000)
+                # This DOM coverage probe intentionally stubs Microsoft MT.
+                # PIT now defaults to genuine no-key MyMemory; explicitly
+                # choose the intercepted mock provider or the test would
+                # silently hit the real rate-limited public MyMemory API.
+                await options.locator('[name="standardProvider"]').select_option('microsoft')
                 await options.locator('[name="microsoftKey"]').fill('public-probe-placeholder')
                 await options.get_by_role('button',name='保存设置').click()
                 await options.get_by_text('设置已保存。').wait_for(timeout=8000)

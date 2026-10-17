@@ -34,7 +34,7 @@ export function NativeWebControls(){
      setScope(settings.webScope==='full'?'full':'smart');
      if(settings.standardProvider==='cloud'&&
        (!settings.cloudEndpoint||!settings.cloudToken)){
-       setStatus('云端翻译未部署/配置。请先在「配置翻译服务」填写已部署的 PIT Worker 地址与访问令牌；当前没有可用的默认翻译引擎。');
+       setStatus('所选 PIT 云端翻译未配置。可在设置切换至无需 Key 但有日额度限制的 MyMemory，或填写已部署 Worker。');
      }
    }).catch(()=>{});
    return()=>{active=false;};

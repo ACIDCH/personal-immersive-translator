@@ -1,5 +1,6 @@
 import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';
 import {validateAIProfile} from './lib/ai-profiles.js';
+import {createPreferenceBackup,importPreferenceBackup} from './lib/preference-export.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
 const checkboxKeys=['contextAI','hoverTranslate','inputTranslate'];
@@ -123,6 +124,37 @@ document.getElementById('test').addEventListener('click', async()=>{
     if(!res.ok) throw new Error(res.error);
     status.textContent=`测试成功：${res.translations[0]}`;
   } catch(e) {status.textContent='测试失败：'+e.message;}
+});
+document.getElementById('exportPreferences').addEventListener('click',async()=>{
+ try{
+  const data=await chrome.storage.local.get(SETTINGS_KEY);
+  const backup=createPreferenceBackup(data[SETTINGS_KEY]);
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;link.download='pit-reading-preferences.json';
+  document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  status.textContent='已导出阅读与站点设置，不包含 API 密钥、云端令牌或历史翻译。';
+ }catch(error){status.textContent='导出设置失败：'+String(error.message||error);}
+});
+document.getElementById('importPreferences').addEventListener('click',()=>{
+ document.getElementById('preferenceFile').click();
+});
+document.getElementById('preferenceFile').addEventListener('change',async event=>{
+ const file=event.target.files?.[0];
+ if(!file)return;
+ try{
+  if(file.size>120000)throw Error('设置文件太大，最大 120 KB');
+  const data=JSON.parse(await file.text());
+  const current=await chrome.storage.local.get(SETTINGS_KEY);
+  const updated=importPreferenceBackup(data,current[SETTINGS_KEY]);
+  if(!confirm('将覆盖当前语言、阅读样式、自动翻译和站点规则设置，不修改 API Key。继续？'))return;
+  await chrome.storage.local.set({[SETTINGS_KEY]:updated});
+  viewSettings(updated);
+  status.textContent='阅读设置导入成功。翻译服务密钥和自定义模型未修改。';
+ }catch(error){status.textContent='阅读设置导入失败：'+String(error.message||error);}
+ finally{event.target.value='';}
 });
 document.getElementById('clearCache').addEventListener('click',async()=>{
   const res=await chrome.runtime.sendMessage({type:'CLEAR_CACHE'});

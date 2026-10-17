@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {translateBatch,parseAIResponse,decodeEntities,TranslationError} from '../src/lib/providers.js';
 import {normalizeSettings,hostIsBlocked} from '../src/lib/settings.js';
+import {identifyLanguage} from '../src/lib/language-detect.js';
+import {createPreferenceBackup,importPreferenceBackup} from '../src/lib/preference-export.js';
 
 function mockResponse(output,check) {return async (url,init) => {check?.(url,init);return {ok:true,status:200,json:async()=>output};};}
 const config = {target:'zh', source:'en'};
@@ -65,7 +67,7 @@ test('remote HTTP errors are sanitized to avoid leaking server data',async()=>{
   await assert.rejects(translateBatch(['x'],{...config,provider:'microsoft',microsoftKey:'secret'},async()=>({ok:false,status:429})),e=>e.status===429 && !e.message.includes('secret'));
 });
 test('sanitize settings and block nested sensitive hosts',()=>{
-  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'cloud');
+  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'mymemory');
   assert.equal(normalizeSettings({autoAI:true}).autoAI,false);
   assert.equal(hostIsBlocked('payments.example.com','example.com'),true);
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
@@ -76,7 +78,7 @@ test('Corrupted settings reset safely without enabling AI',()=>{
   for(const input of [null,42,'broken',[]]){
     const settings=normalizeSettings(input);
     assert.equal(settings.autoAI,false);
-    assert.equal(settings.standardProvider,'cloud');
+    assert.equal(settings.standardProvider,'mymemory');
     assert.equal(settings.target,'zh');
   }
 });
@@ -121,4 +123,102 @@ test('immersive reading settings keep validated controls and never opt in to AI'
  assert.equal(invalid.webScope,'smart');
  assert.equal(invalid.translationTheme,'subtle');
  assert.equal(invalid.inputTarget,'en');
+});
+
+test('default keyless translation uses documented MyMemory GET with language ID',async()=>{
+ const seen=[];
+ const transport=async(url,init)=>{
+   const target=new URL(url);seen.push(target);
+   assert.equal(target.origin,'https://api.mymemory.translated.net');
+   assert.equal(target.pathname,'/get');
+   assert.equal(init.method,'GET');
+   assert.equal(target.searchParams.get('langpair'),'en|zh-CN');
+   assert.ok(new TextEncoder().encode(target.searchParams.get('q')).length<=500);
+   return {ok:true,status:200,json:async()=>({
+      responseStatus:200,responseData:{translatedText:'你好，世界！'}
+   })};
+ };
+ assert.equal(normalizeSettings().standardProvider,'mymemory');
+ assert.deepEqual(await translateBatch(['Hello world!'],{
+   source:'auto',target:'zh',provider:'mymemory'
+ },transport),['你好，世界！']);
+ assert.equal(seen.length,1);
+});
+test('MyMemory splits long multibyte Unicode at valid code point boundaries',async()=>{
+ const source='Bonjour le marché et la capacité sont importants. '.repeat(22);
+ const sizes=[];
+ const transport=async(url)=>{
+   const target=new URL(url);
+   sizes.push(new TextEncoder().encode(target.searchParams.get('q')).length);
+   assert.equal(target.searchParams.get('langpair'),'fr|zh-CN');
+   return {ok:true,status:200,json:async()=>({
+     responseStatus:200,responseData:{translatedText:'译文'}
+   })};
+ };
+ const output=await translateBatch([source],{source:'fr',target:'zh',provider:'mymemory'},transport);
+ assert.ok(sizes.length>=2);
+ assert.ok(sizes.every(x=>x>0&&x<=450));
+ assert.equal(output.length,1);
+ assert.ok(output[0].includes('译文'));
+});
+test('MyMemory responseStatus is validated rather than trusting HTTP 200',async()=>{
+ await assert.rejects(translateBatch(['The company'],{
+   provider:'mymemory',source:'en',target:'zh'
+ },async()=>({ok:true,status:200,json:async()=>({
+   responseStatus:429,responseData:{translatedText:'MYMEMORY WARNING: limit'}
+ })})),/额度|错误/);
+});
+test('heuristic language ID discloses uncertainty and handles common scripts',()=>{
+ assert.equal(identifyLanguage('日本語の金融').language,'ja');
+ assert.equal(identifyLanguage('한국어의 금융').language,'ko');
+ assert.equal(identifyLanguage('金融市场需求').language,'zh');
+ assert.equal(identifyLanguage('Bonjour les marchés sont importants').language,'fr');
+ assert.equal(identifyLanguage('Die Wirtschaft und der Markt sind').language,'de');
+ assert.equal(identifyLanguage('Hola los mercados son importantes').language,'es');
+ assert.equal(identifyLanguage('qzx ppt ggg').confidence,'latin-default-uncertain');
+});
+
+test('settings export imports only reading options; never leaks API tokens or profiles',()=>{
+ const current={microsoftKey:'top-secret',cloudToken:'secret-remote-123',
+   geminiKey:'top-secret-ai',aiProfiles:[{apiKey:'hidden'}],
+   webDisplay:'translation-only',hoverTranslate:true,blockedHosts:'bank.example'};
+ const data=createPreferenceBackup(current);
+ const text=JSON.stringify(data);
+ for(const forbidden of ['top-secret','secret-remote','apiKey','aiProfiles','cloudToken']){
+   assert.equal(text.includes(forbidden),false,forbidden);
+ }
+ assert.equal(data.preferences.webDisplay,'translation-only');
+ const restored=importPreferenceBackup(data,{
+   microsoftKey:'keep-my-key',standardProvider:'mymemory',
+   webDisplay:'bilingual',blockedHosts:''
+ });
+ assert.equal(restored.microsoftKey,'keep-my-key');
+ assert.equal(restored.webDisplay,'translation-only');
+ assert.equal(restored.hoverTranslate,true);
+ assert.equal(restored.blockedHosts,'bank.example');
+ assert.throws(()=>importPreferenceBackup({
+   product:'PIT',schema:1,preferences:{hoverTranslate:{dangerous:true}}
+ },{}),/格式/);
+ assert.throws(()=>importPreferenceBackup({
+   product:'unknown',schema:1,preferences:{}
+ },{}),/有效/);
+});
+
+test('free MT processes up to three concurrent requests and preserves paragraph order',async()=>{
+ let active=0,peak=0;
+ const provider=async url=>{
+   const q=new URL(url).searchParams.get('q');
+   active++;peak=Math.max(active,peak);
+   await new Promise(resolve=>setTimeout(resolve,8));
+   active--;
+   return {ok:true,status:200,json:async()=>({
+     responseStatus:200,responseData:{translatedText:'CN:'+q}
+   })};
+ };
+ const texts=Array.from({length:7},(_,i)=>'This economy is about '+i);
+ const out=await translateBatch(texts,{
+   source:'en',target:'zh',provider:'mymemory'
+ },provider);
+ assert.deepEqual(out,texts.map(x=>'CN:'+x));
+ assert.ok(peak>=2&&peak<=3,'parallelism must be 2..3, actual '+peak);
 });
