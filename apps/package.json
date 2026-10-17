@@ -1,0 +1,14 @@
+{
+  "name": "multimodal-translate-frontend-workspace",
+  "private": true,
+  "workspaces": [
+    "wxt-ui",
+    "portal"
+  ],
+  "scripts": {
+    "check:wxt": "npm run check --workspace wxt-ui",
+    "build:wxt": "npm run build --workspace wxt-ui",
+    "check:portal": "npm run check --workspace portal",
+    "build:portal": "npm run build --workspace portal"
+  }
+}
