@@ -15,6 +15,8 @@ on:
       - 'tests/wxt_web_coverage_matrix_e2e.py'
       - 'tests/wxt_public_site_probe.py'
       - 'tests/portal_real_image_ocr_e2e.py'
+      - 'tests/pit_translation_matrix_e2e.py'
+      - 'tests/wxt_file_lab_e2e.py'
   workflow_dispatch:
 
 concurrency:
@@ -105,18 +107,25 @@ jobs:
           node wxt-ui/scripts/check-native-bundle.mjs
       - name: Install Chromium testing environment
         run: |
-          python -m pip install 'playwright==1.55.0'
+          python -m pip install 'playwright==1.55.0' 'Pillow>=11,<13'
           python -m playwright install --with-deps chromium
       - name: Test real React + PIT web translation in installed MV3
         run: python tests/wxt_native_web_e2e.py
       - name: Test editorial coverage, dynamic DOM, HTTP 429 and manual recovery
         run: python tests/wxt_web_coverage_matrix_e2e.py
+      - name: Benchmark native PIT on the same 24-paragraph fixture as KISS
+        run: python tests/pit_translation_matrix_e2e.py
+      - name: Verify actual DOCX and PNG OCR inside the installed WXT extension
+        run: python tests/wxt_file_lab_e2e.py
       - name: Archive machine-readable browser coverage results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: multimodal-web-coverage-matrix
-          path: wxt-web-coverage-report.json
+          path: |
+            wxt-web-coverage-report.json
+            pit-translation-benchmark.json
+            wxt-file-lab-report.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Probe public websites in real Chromium (network-dependent, not provider quality)
