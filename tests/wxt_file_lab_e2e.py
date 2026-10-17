@@ -65,6 +65,7 @@ def pptx_fixture():
   with zipfile.ZipFile(o,'w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('ppt/presentation.xml','<?xml version="1.0"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>')
     z.writestr('ppt/slides/slide1.xml','<?xml version="1.0"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Strategic planning presentation</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
+    z.writestr('ppt/slides/slide2.xml','<?xml version="1.0"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:rPr b="1"/><a:t>Bold strategy </a:t></a:r><a:r><a:t>forecast</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
     z.writestr('ppt/media/image1.png',b'unchanged-fixture-media')
   return o.getvalue()
 def xlsx_fixture():
@@ -192,6 +193,13 @@ async def main():
           with zipfile.ZipFile(io.BytesIO(fixture)) as original,zipfile.ZipFile(saved) as generated:
             assert needle in generated.read(xml_part).decode('utf8')
             if media:assert original.read(media)==generated.read(media)
+            if kind=='pptx':
+              root=ET.fromstring(generated.read('ppt/slides/slide2.xml'))
+              ns_a={'a':'http://schemas.openxmlformats.org/drawingml/2006/main'}
+              spans=root.findall('.//a:t',ns_a)
+              assert len(spans)==2 and all(node.text for node in spans)
+              assert ''.join(node.text for node in spans)=='译文:Bold strategy forecast'
+              assert root.find('.//a:rPr',ns_a) is not None
             if kind=='xlsx':
               sheet=generated.read('xl/worksheets/sheet1.xml').decode('utf8')
               assert '译文:Forecast notes' in sheet
