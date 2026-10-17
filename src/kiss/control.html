@@ -1,10 +1,15 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KISS 增强视频字幕与 Whisper</title><link rel="stylesheet" href="ui.css">
+<title>PIT · 视频字幕与 Whisper</title><link rel="stylesheet" href="ui.css">
 <style>
 body{max-width:780px;margin:auto}.stack{display:grid;gap:14px}section{border:1px solid #bbc9dc;border-radius:10px;padding:16px}button{margin:5px 7px 5px 0;padding:9px 12px}input[type=password],select{max-width:480px}.hint{font-size:13px;opacity:.8;line-height:1.6}#status{white-space:pre-wrap;min-height:36px;overflow-wrap:anywhere}h1{font-size:22px}
 </style></head><body class="options"><main>
-<h1>视频字幕与本机 Whisper 听译</h1>
+<h1>PIT · 视频字幕与本机 Whisper</h1>
+<nav class="hint" aria-label="PIT 页面导航">
+<a href="dashboard.html">PIT 完整控制台</a> ·
+<a href="options.html">PIT 翻译服务设置</a> ·
+<a href="tools.html">PDF / 图片 OCR</a>
+</nav>
 <p class="hint">本工具作为 KISS 的额外功能运行。KISS 的网页双语翻译功能保持独立。本机 Whisper 必须由你点击开始，并连接本机 127.0.0.1:8765 服务。</p>
 <p id="target" class="hint">正在检查目标标签页…</p>
 <div class="stack">
@@ -21,7 +26,7 @@ body{max-width:780px;margin:auto}.stack{display:grid;gap:14px}section{border:1px
 <p class="hint">音频只发送到本机 Whisper 服务；识别文本由文件工具设置的普通机器翻译服务处理。使用前需启动本机服务并安装 Whisper 模型。录音不会存入云端或历史记录。</p>
 </section>
 <section id="diagPanel"><h2>真实网站兼容性检查（不读取课程或字幕正文）</h2>
-<p class="hint">先在你自己的浏览器中登录并打开视频页面，再从 KISS 弹窗进入此控制台。检查仅读取播放器、字幕轨、嵌入框架的数量和可用状态，不抓取视频、账号、课程文字、字幕内容或网页链接。</p>
+<p class="hint">先在你自己的浏览器中登录并打开视频页面，再从 PIT 主面板进入此控制台。检查仅读取播放器、字幕轨、嵌入框架的数量和可用状态，不抓取视频、账号、课程文字、字幕内容或网页链接。</p>
 <label>测试平台
 <select id="diagPlatform">
 <option value="O2B">O2B</option><option value="Panopto">Panopto</option>

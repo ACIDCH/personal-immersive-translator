@@ -17,6 +17,7 @@ function setup(version='2.1.1'){
  file('src/pdf-preview.js',"const url=chrome.runtime.getURL('src/vendor/pdf.worker.mjs');");
  const additional=['kiss/background-entry.js','kiss/asr-controller.js',
  'kiss/control.html','kiss/control.js','kiss/popup-entry.js',
+ 'kiss/home.html','kiss/home.css','kiss/home.js',
  'kiss/bridge-client.js','kiss/view-client.js','kiss/whisper-readiness.js',
  'kiss/site-diagnostics.js','kiss/site-diagnostics-ui.js',
  'kiss/github-diagnostics.js',
@@ -26,6 +27,10 @@ function setup(version='2.1.1'){
  'lib/platform-captions.js','lib/subtitle-import.js','lib/frame-route.js'];
  for(const name of additional)file('src/'+name,'fixture');
  file('src/kiss/background-entry.js',"import '../background.js';");
+ file('src/kiss/home.html','<title>PIT · 个人沉浸式翻译</title><body class="pit-shell" data-view="popup"><button id="webTranslate"></button><button id="githubReport"></button><button id="videoControl"></button><button id="fileTools"></button></body>');
+ file('src/kiss/home.css','/* PIT original home */');
+ file('src/kiss/home.js','/* PIT original module navigation */');
+ writeFileSync(join(build,'options.html'),'<html><body>KISS old settings</body></html>');
  file('src/kiss/asr-controller.js',
    "import {translateBatch} from '../lib/providers.js';\n"+
    "import {normalizeSettings} from '../lib/settings.js';");
@@ -62,11 +67,21 @@ test('sidecar retains KISS core while exposing original PDF/OCR files',()=>{
   assert.equal(report.distribution,'POC_ONLY_NO_RELEASE');
   const m=JSON.parse(readFileSync(join(f.build,'manifest.json'),'utf8'));
   assert.equal(m.background.service_worker,'pit/background-entry.js');
+  assert.equal(m.action.default_popup,'pit/home.html');
+  assert.equal(m.options_ui.page,'pit/dashboard.html');
+  assert.equal(m.options_ui.open_in_tab,true);
+  assert.ok(!m.options_page);
+  assert.ok(readFileSync(join(f.build,'pit/home.html'),'utf8').includes('id="githubReport"'));
+  assert.ok(readFileSync(join(f.build,'pit/dashboard.html'),'utf8').includes('data-view="dashboard"'));
+  assert.ok(readFileSync(join(f.build,'pit/dashboard.html'),'utf8').includes('class="pit-shell dashboard"'));
+  const upstreamUi=JSON.parse(readFileSync(join(f.build,'pit/KISS-UI-PATHS.json'),'utf8'));
+  assert.equal(upstreamUi.settings,'options.html');
+  assert.equal(upstreamUi.popup,'popup.html');
   assert.equal(m.name,'PIT 沉浸式翻译（测试版）');
   assert.equal(m.version,'2.1.1');
   assert.equal(m.version_name,'PIT v0.4.9 (KISS 2.1.1)');
   assert.equal(m.icons['128'],'pit/icons/icon128.png');
-  assert.equal(m.action.default_title,'PIT 沉浸式翻译 · v0.4.9');
+  assert.equal(m.action.default_title,'PIT 沉浸式翻译 · v0.5.0');
   assert.equal(m.action.default_icon['48'],'pit/icons/icon48.png');
   assert.ok(readFileSync(join(f.build,'pit/icons/icon128.png'),'utf8').includes('fixture-PIT-icon'));
   assert.ok(m.permissions.includes('tabCapture'));
