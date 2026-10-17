@@ -5,6 +5,7 @@
   if(window.__PIT_LIVE_CAPTIONS__)return;
   window.__PIT_LIVE_CAPTIONS__=true;
   let enabled=false,seq=0,overlay=null,queued=null;
+  let translationMode='standard',sourceHistory=[];
   let activeSession=null,lastStoppedSession=null,epoch=0,busyEpoch=null;
   let stats={requests:0,dropped:0,errors:0,p50Ms:0,p95Ms:0};
   const observed=[]; // timing only, no transcript retention.
@@ -44,9 +45,11 @@
         let translation='翻译服务不可用';
         try{
           const result=await chrome.runtime.sendMessage({
-            type:'TRANSLATE_BATCH',texts:[item.text],mode:'standard',transient:true,
-            sessionId:item.sessionId,context:''
+            type:'TRANSLATE_BATCH',texts:[item.text],mode:translationMode,transient:true,
+            userInitiated:translationMode==='ai',sessionId:item.sessionId,
+            context:translationMode==='ai'?sourceHistory.slice(-2).join('\n').slice(0,1600):''
           });
+          if(result?.ok && translationMode==='ai')sourceHistory=[...sourceHistory.slice(-2),item.text];
           translation=result?.ok ? String(result.translations?.[0]||''):'翻译服务不可用';
         }catch{translation='翻译连接失败';}
         if(!enabled || epoch!==generation || activeSession!==item.sessionId)break;
@@ -74,6 +77,7 @@
         respond({ok:false});return;
       }
       enabled=true;activeSession=msg.sessionId;lastStoppedSession=null;
+      translationMode=msg.mode==='ai'?'ai':'standard';sourceHistory=[];
       epoch++;seq++;queued=null;observed.length=0;
       stats={requests:0,dropped:0,errors:0,p50Ms:0,p95Ms:0};
       draw('本机正在识别当前标签页音频…','');
@@ -98,6 +102,7 @@
       }
       lastStoppedSession=activeSession;activeSession=null;
       enabled=false;epoch++;seq++;queued=null;observed.length=0;
+      translationMode='standard';sourceHistory=[];
       overlay?.remove();overlay=null;respond({ok:true});return;
     }
     if(!enabled || msg?.sessionId!==activeSession)return;
