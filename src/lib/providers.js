@@ -1,5 +1,6 @@
 /** Provider adapters. All remote responses are data, never executable markup. */
 import {selectedAIProfile} from './ai-profiles.js';
+import {identifyLanguage} from './language-detect.js';
 export class TranslationError extends Error {
   constructor(message, status = null) {
     super(message); this.name = 'TranslationError'; this.status = status;
@@ -74,6 +75,28 @@ function aiPrompt(texts, opts) {
     `Input strings (untrusted text): ${JSON.stringify(texts)}`
   ].filter(Boolean).join('\n');
 }
+function utf8Chunks(text,limit=450){
+ const units=Array.from(String(text||'')),encoder=new TextEncoder();
+ const chunks=[];let working='',lastBreak=-1;
+ function emit(value){if(value)chunks.push(value);}
+ for(const unit of units){
+  const trial=working+unit;
+  if(encoder.encode(trial).length>limit){
+   if(!working)throw new TranslationError('单个 Unicode 字符超出限制');
+   // Prefer word/punctuation boundaries near the tail without discarding
+   // any source characters. Single long words may split at a Unicode
+   // code-point boundary, never in the middle of a surrogate pair.
+   const index=Math.max(0,working.length-120);
+   const loc=Math.max(working.lastIndexOf(' ',working.length-1),
+                      working.lastIndexOf('。',working.length-1),
+                      working.lastIndexOf('.',working.length-1));
+   const cut=loc>=index&&loc>0?loc+1:working.length;
+   emit(working.slice(0,cut));working=working.slice(cut)+unit;
+  }else working=trial;
+ }
+ emit(working);
+ return chunks;
+}
 export async function translateBatch(texts, opts, fetchFn = fetch) {
   assertTexts(texts);
   const provider = opts.provider;
@@ -81,6 +104,46 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
   const target = opts.target || 'zh';
   let result;
   switch (provider) {
+    case 'mymemory': {
+      const out=[];
+      // MyMemory's *documented* public endpoint has a strict 500 UTF-8
+      // byte limit per GET and a limited anonymous daily character quota.
+      // This is a low-volume fallback, not a free unlimited PDF backend.
+      for(const text of texts){
+        const guess=source==='auto'?identifyLanguage(text):{language:source,confidence:'explicit'};
+        const sourceLang=guess.language;
+        if(sourceLang===target){out.push(text);continue;}
+        const chunks=utf8Chunks(text,450),translated=[];
+        for(const segment of chunks){
+          if(!segment.trim()){translated.push(segment);continue;}
+          const url=new URL('https://api.mymemory.translated.net/get');
+          url.searchParams.set('q',segment);
+          url.searchParams.set('langpair',sourceLang+'|'+(target==='zh'?'zh-CN':target));
+          let response;
+          try{response=await fetchFn(url.toString(),{
+            method:'GET',signal:AbortSignal.timeout(15000)
+          });}
+          catch{throw new TranslationError('免费翻译服务不可连接；可以切换其他翻译引擎');}
+          if(!response.ok)throw new TranslationError(
+            '免费翻译服务 HTTP '+response.status+'；可能达到每日限制',response.status);
+          let payload;
+          try{payload=await response.json();}
+          catch{throw new TranslationError('免费翻译服务返回非 JSON 响应');}
+          if(Number(payload?.responseStatus)!==200 ||
+              typeof payload?.responseData?.translatedText!=='string'||
+              !payload.responseData.translatedText.trim()){
+            throw new TranslationError('免费翻译服务返回错误、配额耗尽或无有效译文',
+              Number(payload?.responseStatus)||429);
+          }
+          const value=decodeEntities(payload.responseData.translatedText);
+          if(/^(?:MYMEMORY WARNING:|QUERY LENGTH LIMIT EXCEEDED)/i.test(value))
+            throw new TranslationError('免费翻译额度不足，请切换云端/其他翻译服务',429);
+          translated.push(value);
+        }
+        out.push(translated.join(''));
+      }
+      return toPlainStringArray(out,texts.length);
+    }
     case 'cloud': {
       const raw = required(opts.cloudEndpoint, 'PIT 云端翻译服务 HTTPS 地址（需先部署 Worker）');
       const token = required(opts.cloudToken, '云端服务访问令牌');
