@@ -90,7 +90,7 @@ async def main():
         page.on("pageerror",lambda e:print("FILELAB PAGE ERROR:",str(e)[:300],flush=True))
         await page.goto(f'chrome-extension://{eid}/file-lab.html',wait_until='domcontentloaded',timeout=20000)
         await page.get_by_role('heading',name='文件与图片处理').wait_for(timeout=15000)
-        await page.locator('.document-lab input[type="file"]').set_input_files({
+        await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.docx',
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'buffer':ooxml_docx()
@@ -138,7 +138,7 @@ async def main():
         assert report['docx_provider_calls']==1,report
         print('WXT DOCX TRANSLATION + DOWNLOAD: PASS',flush=True)
         source=structured_docx()
-        await page.locator('.document-lab input[type="file"]').set_input_files({
+        await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'structured.docx',
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'buffer':source})
@@ -170,7 +170,7 @@ async def main():
              '译文:Income and investment',None)
         ]:
           await page.get_by_role('button',name=label).click()
-          await page.locator('.document-lab input[type="file"]').set_input_files({
+          await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
             'name':'fixture.'+kind,'mimeType':'application/octet-stream','buffer':fixture})
           await page.get_by_role('button',name='开始本地读取 / 识别').click()
           await page.locator('.document-result').wait_for(timeout=16000)
@@ -237,7 +237,7 @@ async def main():
         font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',66)
         d.text((25,36),'HELLO WORLD 2026',font=font,fill='black')
         f=io.BytesIO();image.save(f,format='PNG')
-        await page.locator('.document-lab input[type="file"]').set_input_files({
+        await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.png','mimeType':'image/png','buffer':f.getvalue()
         })
         started=time.monotonic()
