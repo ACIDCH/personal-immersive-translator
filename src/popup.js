@@ -8,12 +8,12 @@ function show() {
   $('ai').classList.toggle('selected',mode==='ai');
   $('modeHint').textContent=mode==='standard'?'常规服务优先，不消耗 Gemini / DeepSeek Token。':'AI 按需翻译，可能产生模型调用费用。';
   const providers={microsoft:'Microsoft Translator',google:'Google Cloud',deepl:'DeepL',
-    libre:'LibreTranslate',gemini:'Gemini',deepseek:'DeepSeek'};
+    libre:'LibreTranslate',gemini:'Gemini',deepseek:'DeepSeek',custom:'自定义 AI'};
   const name=mode==='standard'?settings.standardProvider:settings.aiProvider;
   $('providerInfo').textContent='当前翻译服务：'+(providers[name]||name);
   const key=name==='microsoft'?'microsoftKey':name==='google'?'googleKey':
     name==='deepl'?'deeplKey':name==='libre'?'libreUrl':
-    name==='gemini'?'geminiKey':'deepseekKey';
+    name==='gemini'?'geminiKey':name==='custom'?'activeAIProfileId':'deepseekKey';
   const ready=Boolean(String(settings[key]||'').trim());
   $('setupStatus').classList.toggle('ready',ready);
   $('setupStatus').textContent=ready
