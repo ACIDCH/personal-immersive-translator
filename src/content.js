@@ -6,7 +6,7 @@
   if (globalThis.__PIT_TRANSLATOR_V1__) return;
   globalThis.__PIT_TRANSLATOR_V1__ = true;
 
-  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
+  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
   const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
   let active = false, currentId = 0, mode = 'standard';
