@@ -203,3 +203,22 @@ test('settings export imports only reading options; never leaks API tokens or pr
    product:'unknown',schema:1,preferences:{}
  },{}),/有效/);
 });
+
+test('free MT processes up to three concurrent requests and preserves paragraph order',async()=>{
+ let active=0,peak=0;
+ const provider=async url=>{
+   const q=new URL(url).searchParams.get('q');
+   active++;peak=Math.max(active,peak);
+   await new Promise(resolve=>setTimeout(resolve,8));
+   active--;
+   return {ok:true,status:200,json:async()=>({
+     responseStatus:200,responseData:{translatedText:'CN:'+q}
+   })};
+ };
+ const texts=Array.from({length:7},(_,i)=>'This economy is about '+i);
+ const out=await translateBatch(texts,{
+   source:'en',target:'zh',provider:'mymemory'
+ },provider);
+ assert.deepEqual(out,texts.map(x=>'CN:'+x));
+ assert.ok(peak>=2&&peak<=3,'parallelism must be 2..3, actual '+peak);
+});
