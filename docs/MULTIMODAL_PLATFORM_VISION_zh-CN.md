@@ -13,7 +13,9 @@
 
 - **浏览器界面**：WXT + React + TypeScript + Vite，原生 Chrome/Edge 扩展 API，后续迁入弹窗/设置/文件处理/字幕控制。
 - **Cloudflare Pages 控制台**：React + TypeScript + Vite，分享 `apps/shared-ui/` 中的设计组件和 token。
-- `apps/wxt-ui/`、`apps/portal/` 是可构建的**设计预览**；其现有按钮不构成翻译功能的验收证据。生产扩展当前仍沿用 `src/`，直到分模块迁移通过真实测试。
+- `apps/portal/` 仍是 Cloudflare Pages **设计预览**；`apps/wxt-ui/` 已进入**网页功能整合测试**：React 弹窗通过 Chrome MV3 API 调用打包进扩展的 PIT 原生 `pit-background.js`、`pit-native.js`，执行网页翻译、恢复和进度读取。视频、OCR、PDF 功能在 WXT 版仍未迁移；完整浏览器 CI 通过前不得声称可用。
+- WXT 构建使用 `apps/wxt-ui/scripts/prepare-native.mjs` 原样复制 `src/` 的网页处理、缓存、服务适配器与设置文件；没有创建独立的第二套翻译算法。构建测试要求原生文件与输出字节相同，避免修改 UI 意外覆盖引擎。
+- WXT 运行时独立使用 `pit-options.html` 作为正式设置入口，未把仅供展示的 React Dashboard 当作已工作的设置页面。
 - 不把 API Key 写进 Pages 静态构建产物；云端密钥只配置为 Workers Secrets。用户自带模型的 Key 目前仅保存在用户的 `chrome.storage.local`（不是加密保险箱）。
 
 ## 三、多引擎体系
@@ -53,7 +55,7 @@
 
 ## 六、验收与下一轮
 
-1. 本分支：原生插件展示名称修改、多个 AI 配置档案、两种通用 API 协议模拟测试、WXT/Pages 前端**可构建性**。
+1. 本分支：项目名称、多 AI 配置档案与协议测试；WXT/Pages React 可构建性；WXT 弹窗与 PIT 原生网页翻译真实代码集成，以及 Playwright Chromium 端到端回归（外部服务使用模拟响应）。
 2. 下一轮：在真实 Chrome/Edge 使用**自有合法 API 凭据**逐一测试自选模型的翻译输出；合并 PR #46 网页覆盖率修复和当前配置系统后进行真实站点验收。
 3. 第二轮：评估 KISS GPL fork 和旧版沉浸式源码的许可证、性能与模拟/真机对比，明确采用哪一种方式复用，保留原始版权声明。
 4. 再后：视频字幕、OCR、批量 Office/PDF 和 BabelDOC 高保真处理分别设置真实测试门槛。
@@ -66,7 +68,7 @@
 npm run check
 node --test tests/ai-profiles.test.js
 
-# WXT UI 设计预览（不会包含原生翻译核心）
+# WXT 网页功能集成测试版（包含原生 PIT Web 核心）
 cd apps
 npm install
 npm run check --workspace wxt-ui
@@ -78,3 +80,10 @@ npm run build --workspace portal
 ```
 
 Cloudflare Pages Git 项目未来配置：root=`apps/portal`、build=`npm run build`、output=`dist`。尚未创建项目或域名。生产版前端接口授权和 CSP 仍待复验。
+
+## 八、真实功能门禁与部署边界
+
+- GitHub PR 自动化检查新增 `tests/wxt_native_web_e2e.py`：加载实际 Chrome MV3，操作 React 弹窗，在测试环境中模拟翻译提供商网络响应，验证原生后台、译文 DOM 和覆盖率/恢复操作。**模拟翻译内容不是翻译质量的实测结果**。
+- 通过 GitHub Actions `multimodal-ui.yml` 的 WXT job 可获取 `multimodal-wxt-web-integration-test` 实验构建。该包与 `main` 分支旧 Alpha 严格区分。
+- 仍必须在用户实际访问的网站使用已授权 API 进行网页准确率、覆盖率测试，之后才能合并/宣布成熟版本。
+- Cloudflare Worker 当前提供 `/health` 和 `/v1/capabilities`，没有开放付费模型代理端点。Cloudflare Pages 仍是静态前端预览，不采集用户模型 API Key。
