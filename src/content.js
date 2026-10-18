@@ -190,7 +190,10 @@
         results[item.owner][item.index]=reply[k];
       }
     }
-    return {translations:results.map(parts=>parts.join(' ')),
+    // Fragments come from contiguous source slices. Inserting spaces here
+    // corrupts CJK and punctuation, and changes previously adjacent words.
+    // Preserve exactly the whitespace returned by each translated fragment.
+    return {translations:results.map(parts=>parts.join('')),
       segments:queued.length,requests};
   }
   function schedule(id,delay=300) {
