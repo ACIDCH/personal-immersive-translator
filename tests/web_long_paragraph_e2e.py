@@ -28,7 +28,7 @@ async def main():
               document.querySelector('#latin').textContent=latin;
               // A 20k+ character article paragraph was previously dropped
               // without a request, even though chunked translation works.
-              const long=('A scientific discussion of global market structures. ').repeat(600);
+              const long=('A scientific discussion of global market structures. ').repeat(600).trim();
               const oversized='Z'.repeat(120100);
               document.querySelector('#long').textContent=long;
               // Rich editor DOM: more than 5,000 text nodes in one paragraph.
