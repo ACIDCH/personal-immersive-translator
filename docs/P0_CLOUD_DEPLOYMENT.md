@@ -18,13 +18,15 @@
 
 实现：services/cloud_pdf_api.py；容器：services/cloud-pdf/Dockerfile。实际运行原 BabelDOC 0.6.4、OCRmyPDF/Tesseract、PyMuPDF 和授权 API，而不是栅格拼接 PDF。
 
-- POST /v1/pdf/translate 表单 pdf/source(auto 或 en/fr/zh/ja/ko/de/es)/target/ocr，通过 HTTP Authorization Bearer <PIT_CLOUD_PDF_TOKEN>。
+- 兼容旧版本的 POST /v1/pdf/translate 表单 pdf/source(auto 或 en/fr/zh/ja/ko/de/es)/target/ocr，通过 HTTP Authorization Bearer <PIT_CLOUD_PDF_TOKEN>。
+- **新增长文档异步任务**：POST /v1/pdf/jobs 提交并接收 202 + 随机 jobId；GET /v1/pdf/jobs/{jobId} 查询 queued/running/completed/failed；GET /v1/pdf/jobs/{jobId}/result 在完成后下载，未完成返回 HTTP 409。浏览器通过 /health 的 async_jobs 字段自动选择异步路径，旧版云容器继续使用同步回退。
+- **异步任务是单实例、单并发、内存暂存，完成后最多保存 15 分钟**，不是持久化队列或断点恢复。服务重启任务立即丢失，关闭浏览器/取消等待不保证服务端停止模型推理或费用；尚未接入数据库/对象存储。此实现需要真实部署及 10/50/100 页长任务耐久性验收。
 - 文件上限 25MiB / 300 页，单实例同时最多 1 个高资源任务。输出不持久保存文件，无需用户本机 Python。
 - 自动语言识别：文本层采用本机统计语言分类（langdetect），中日韩优先按文字脚本；扫描文件第一页由 Tesseract 多语种 OCR 估计。短 Latin 文本无法保证正确，必须保留人工覆盖。
 - 服务器需要安全环境变量 PIT_CLOUD_PDF_TOKEN 与 PIT_PDF_API_KEY/PIT_PDF_MODEL/PIT_PDF_BASE_URL。**真实翻译仍可能产生 AI API 费用**，不能存储凭据在客户端公共仓库。
 - 容器运行在支持 Python、外部二进制、足够 CPU/RAM、任务运行时间的云平台上；Cloudflare Worker/Supabase Edge Function 不等同于这种算力环境。需按目标平台配置 HTTPS、私有访问与费用限制。
 
-浏览器 WXT 文件工作台现已连接 `/v1/pdf/translate` 上传与下载接口；可选择自动检测或明确指定 7 种源语言，短文本/扫描件判断不准时可人工覆盖；上传前通过 `GET /health` 检查服务就绪状态，下载前检查真实 PDF 文件头，并显示服务器报告的源语言检测依据；该连接行为已在安装版 Chromium 中使用**模拟 HTTPS 容器**通过 L1 测试。**PDF 容器尚未实际部署，没有云端 BabelDOC 真实推理或付费学术论文排版质量验收**；200 响应及文件下载成功不能作为高保真质量证据。浏览器内“300 页 PDF”仍是分卷栅格的回退方式，不能混淆为 BabelDOC。
+浏览器 WXT 文件工作台现已连接 `/v1/pdf/jobs` 异步任务接口，并兼容旧容器的 `/v1/pdf/translate` 同步接口；可选择自动检测或明确指定 7 种源语言，短文本/扫描件判断不准时可人工覆盖；上传前通过 `GET /health` 检查服务就绪状态，下载前检查真实 PDF 文件头，并显示服务器报告的源语言检测依据；该连接行为已在安装版 Chromium 中使用**模拟 HTTPS 容器**通过 L1 测试。**PDF 容器尚未实际部署，没有云端 BabelDOC 真实推理或付费学术论文排版质量验收**；200 响应及文件下载成功不能作为高保真质量证据。浏览器内“300 页 PDF”仍是分卷栅格的回退方式，不能混淆为 BabelDOC。
 
 ## 3. 发布硬门槛
 
