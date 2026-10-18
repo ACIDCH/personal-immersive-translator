@@ -22,7 +22,7 @@ async def main():
             originals = await page.evaluate("""() => {
               const cjk='这是关于国际贸易、人工智能与经济发展的一段学术讨论。'.repeat(190);
               const latin=('Economic research must preserve adjacent words, '
-                +'punctuation, and translation fragment boundaries. ').repeat(105);
+                +'punctuation, and translation fragment boundaries. ').repeat(105).trim();
               document.querySelector('#cjk').textContent=cjk;
               document.querySelector('#latin').textContent=latin;
               window.calls=[];
