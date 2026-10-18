@@ -17,7 +17,7 @@ async def main():
             page.on("pageerror", lambda error: failures.append(str(error)))
             await page.set_content(
                 '<main><article><p id="cjk"></p><p id="latin"></p>'
-                '<p id="long"></p><p id="oversized"></p>'
+                '<p id="long"></p><p id="dense"></p><p id="oversized"></p>'
                 '</article></main>'
             )
             originals = await page.evaluate("""() => {
@@ -31,6 +31,12 @@ async def main():
               const long=('A scientific discussion of global market structures. ').repeat(600);
               const oversized='Z'.repeat(120100);
               document.querySelector('#long').textContent=long;
+              // Rich editor DOM: more than 5,000 text nodes in one paragraph.
+              // The old extractor silently discarded everything after node 5001.
+              const dense='Text '.repeat(5300);
+              const denseNode=document.querySelector('#dense');
+              for(let i=0;i<5300;i++)denseNode.appendChild(
+                document.createTextNode('Text '));
               document.querySelector('#oversized').textContent=oversized;
               window.calls=[];window.trimOutputs=false;
               window.listeners=[];
@@ -46,7 +52,7 @@ async def main():
               window.action=type=>new Promise(resolve=>{
                 for(const listener of window.listeners)listener({type,mode:'standard'},{},resolve);
               });
-              return {cjk,latin,long,oversized};
+              return {cjk,latin,long,dense,oversized};
             }""")
             assert len(originals["cjk"]) > 3200
             assert len(originals["latin"]) > 3200
@@ -57,20 +63,23 @@ async def main():
             await page.locator("#cjk + .pit-translation").wait_for(timeout=25000)
             await page.locator("#latin + .pit-translation").wait_for(timeout=25000)
             await page.locator("#long + .pit-translation").wait_for(timeout=25000)
+            await page.locator("#dense + .pit-translation").wait_for(timeout=25000)
             actual = await page.evaluate("""() => ({
               cjk:document.querySelector('#cjk + .pit-translation').textContent,
               latin:document.querySelector('#latin + .pit-translation').textContent,
               long:document.querySelector('#long + .pit-translation').textContent,
+              dense:document.querySelector('#dense + .pit-translation').textContent,
               calls:window.calls
             })""")
             assert actual["cjk"] == originals["cjk"], "CJK has extra spaces or missing characters"
             assert actual["latin"] == originals["latin"], "Latin punctuation/spacing corrupted"
             assert actual["long"] == originals["long"], "20k+ paragraph was skipped or corrupted"
+            assert actual["dense"] == originals["dense"].strip(), "rich editor dropped text after 5000 nodes"
             progress=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
             assert progress["ok"] and progress["progress"]["skippedOversized"]==1,progress
-            assert progress["progress"]["translated"]==3,progress
-            assert progress["progress"]["eligible"]==4,progress
-            assert progress["progress"]["coveragePercent"]==75,progress
+            assert progress["progress"]["translated"]==4,progress
+            assert progress["progress"]["eligible"]==5,progress
+            assert progress["progress"]["coveragePercent"]==80,progress
             assert await page.locator("#oversized + .pit-translation").count()==0
             assert sum(map(len, actual["calls"])) >= 4, "fixture did not exercise chunking"
             for batch in actual["calls"]:
@@ -87,11 +96,13 @@ async def main():
             trimmed = await page.evaluate("""() => ({
               cjk:document.querySelector('#cjk + .pit-translation').textContent,
               latin:document.querySelector('#latin + .pit-translation').textContent,
-              long:document.querySelector('#long + .pit-translation').textContent
+              long:document.querySelector('#long + .pit-translation').textContent,
+              dense:document.querySelector('#dense + .pit-translation').textContent
             })""")
             assert trimmed["cjk"] == originals["cjk"], "trimmed CJK translation changed"
             assert trimmed["latin"] == originals["latin"], "trimmed Latin fragments fused together"
             assert trimmed["long"] == originals["long"], "trimmed long Latin paragraph lost words"
+            assert trimmed["dense"] == originals["dense"].strip(), "fragmented DOM original lost text"
             await page.evaluate("()=>window.action('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
         finally:
