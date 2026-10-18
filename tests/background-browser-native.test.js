@@ -12,6 +12,8 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
    onInstalled:{addListener(){}},onMessage:{addListener(fn){messageListener=fn;}},
    async sendMessage(msg){
     requests.push(msg);
+    if(msg.type==='PIT_OFFSCREEN_PING')
+     return {ok:true,ready:true,translatorApi:'function'};
     if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS')
      return {ok:true,status:nativeStatus};
     if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE')
