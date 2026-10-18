@@ -2,7 +2,7 @@ export const SETTINGS_KEY = 'pit_settings_v1';
 export const DEFAULT_SETTINGS = Object.freeze({
   target: 'zh',
   source: 'auto',
-  standardProvider: 'cloud',
+  standardProvider: 'browser',
   cloudEndpoint: '',
   cloudToken: '',
   cloudPdfEndpoint: '',
@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autoTranslateHosts: '',
   translationTheme: 'subtle'
 });
-export const STANDARD_PROVIDERS = ['cloud', 'microsoft', 'google', 'deepl', 'libre'];
+export const STANDARD_PROVIDERS = ['browser', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
@@ -48,7 +48,7 @@ export function normalizeSettings(value = {}) {
   }
   if (!LANGUAGES.includes(clean.target)) clean.target = 'zh';
   if (!['auto', ...LANGUAGES].includes(clean.source)) clean.source = 'auto';
-  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'cloud';
+  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'browser';
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
@@ -102,6 +102,7 @@ export function applyPortablePreferences(current,data){
 export function isStandardServiceConfigured(value){
  const s=normalizeSettings(value);
  switch(s.standardProvider){
+ case 'browser':return true; // Free on-device Chrome API; pack readiness is checked at runtime.
  case 'cloud':
   try{
    const u=new URL(s.cloudEndpoint);
