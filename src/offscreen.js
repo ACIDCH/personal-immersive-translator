@@ -83,7 +83,18 @@ async function flush(c){
       await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
         message:(hosted?'云端':'本机')+' Whisper 识别延迟超过 12 秒，已跳过过期字幕；请检查网络或模型响应。'});
     }else if(text){
-      await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
+      // Whisper can identify the spoken language even for a one-word
+      // fragment. Carry only supported, sufficiently confident metadata
+      // through to MT; never infer audio language from the webpage UI.
+      const lang=String(result.language||'').toLowerCase().trim()
+        .replace(/_/g,'-').split('-')[0];
+      const conf=result.languageConfidence;
+      const audioLanguage=['en','zh','fr','de','es','ja','ko'].includes(lang) &&
+        !(typeof conf==='number'&&(!Number.isFinite(conf)||conf<0.65||conf>1))
+        ?lang:null;
+      await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,
+        text,capturedAt,segmentMs:SEGMENT_MS,asrMs,
+        ...(audioLanguage?{language:audioLanguage}:{})});
     }
   }catch(e){
     if(current===c){
