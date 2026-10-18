@@ -41,6 +41,7 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
     setAccessLevel:async()=>{},
     get:async key=>{
      if(key==='pit_settings_v1')return {pit_settings_v1:values.get(key)};
+     if(typeof key==='string'&&values.has(key))return {[key]:values.get(key)};
      return {};
     },
     set:async data=>{for(const [key,val] of Object.entries(data))values.set(key,val);},
