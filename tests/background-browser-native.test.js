@@ -65,4 +65,18 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(prefs.preferences.standardProvider,'browser');
  assert.equal(prefs.preferences.standardReady,true);
  assert.equal('cloudToken' in prefs.preferences,false);
+ // Chrome 138-149 does not expose chrome.offscreen.hasDocument().
+ // Query the exact PIT offscreen URL through runtime.getContexts instead.
+ delete chrome.offscreen.hasDocument;
+ chrome.runtime.getContexts=async query=>{
+  assert.deepEqual(query.contextTypes,['OFFSCREEN_DOCUMENT']);
+  assert.equal(query.documentUrls[0],
+    'chrome-extension://pit-native-engine-fixture/src/offscreen.html');
+  return [{contextType:'OFFSCREEN_DOCUMENT'}];
+ };
+ const next=await call({type:'TRANSLATE_BATCH',mode:'standard',
+  texts:['Bonjour notre prochain cours de finance et économie européenne.']});
+ assert.equal(next.ok,true,JSON.stringify(next));
+ assert.equal(opening,1,'must reuse existing offscreen document on Chrome 138-149');
+
 });
