@@ -18,9 +18,23 @@ async function getSettings() {
 // Chrome's free on-device Translator API runs in an extension document,
 // not in our MV3 network service worker. The existing ASR offscreen document
 // is reused, so neither feature needs the owner's Python installation.
+async function hasPITOffscreen(){
+ if(typeof chrome.offscreen.hasDocument==='function')
+   return chrome.offscreen.hasDocument();
+ // Chrome 116–149: hasDocument() does not exist but runtime.getContexts()
+ // is supported. This is needed because Translator shipped in Chrome 138.
+ if(typeof chrome.runtime.getContexts==='function'){
+   const contexts=await chrome.runtime.getContexts({
+     contextTypes:['OFFSCREEN_DOCUMENT'],
+     documentUrls:[chrome.runtime.getURL('src/offscreen.html')]
+   });
+   return Array.isArray(contexts)&&contexts.length>0;
+ }
+ return false;
+}
 let nativeDocOpening=null;
 async function nativeOffscreenReady(){
- if(await chrome.offscreen.hasDocument())return;
+ if(await hasPITOffscreen())return;
  if(!nativeDocOpening){
   nativeDocOpening=chrome.offscreen.createDocument({
    url:'src/offscreen.html',reasons:['DOM_PARSER'],
@@ -101,7 +115,7 @@ async function stopLiveAsr() {
   const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
   // Invalidate before teardown, so old offscreen callbacks are ignored.
   await chrome.storage.session.remove(['pit_live_asr_tab','pit_live_asr_session','pit_live_asr_mode','pit_live_ai_requests']);
-  try {if(await chrome.offscreen.hasDocument()){
+  try {if(await hasPITOffscreen()){
     await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_STOP'});
     await chrome.offscreen.closeDocument();
   }}catch {}
