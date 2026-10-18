@@ -1,5 +1,6 @@
 /** Provider adapters. All remote responses are data, never executable markup. */
 import {selectedAIProfile} from './ai-profiles.js';
+import {detectLanguages} from './language-detection.js';
 export class TranslationError extends Error {
   constructor(message, status = null) {
     super(message); this.name = 'TranslationError'; this.status = status;
@@ -92,8 +93,18 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
          endpoint.search||endpoint.hash||!endpoint.hostname)
         throw new TranslationError('云端翻译服务必须使用 HTTPS、无嵌入凭据和查询参数');
       endpoint.pathname=endpoint.pathname.replace(/\/$/,'')+'/v1/translate';
-      result=await postJson(fetchFn,endpoint.toString(),
-        {texts,source,target},{Authorization:'Bearer '+token});
+      // Chrome's built-in CLD is a genuine language identifier, unlike
+      // the Worker fallback's European-language stopword guesses.
+      // Unknown/ambiguous paragraphs remain 'auto'; the Worker reports
+      // low-confidence fallback rather than pretending it identified them.
+      let body={texts,source,target};
+      if(source==='auto'){
+        const hints=await detectLanguages(texts);
+        if(hints.some(x=>x.language!=='auto'))
+          body={...body,sources:hints.map(x=>x.language)};
+      }
+      result=await postJson(fetchFn,endpoint.toString(),body,
+        {Authorization:'Bearer '+token});
       return toPlainStringArray(result?.translations,texts.length);
     }
     case 'microsoft': {
