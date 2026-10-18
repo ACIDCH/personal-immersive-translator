@@ -37,7 +37,10 @@ async def main():
                   ? {ok:true,preferences:{hoverTranslate:true,inputTranslate:true,
                     webScope:'smart',webDisplay:'bilingual',
                     translationTheme:'subtle',autoTranslateHosts:'',blockedHosts:''}}
-                  : {ok:true,translations:msg.texts.map(t=>'译文:'+t)}
+                  : (msg.texts.some(t=>t.length>3500)||
+                     msg.texts.reduce((n,t)=>n+t.length,0)>9500)
+                    ? {ok:false,error:'test vendor payload overflow'}
+                    : {ok:true,translations:msg.texts.map(t=>'译文:'+t)}
               }};
               window.pitAction=(type,mode='standard')=>new Promise(resolve=>{
                 for(const fn of window.pitListeners)fn({type,mode},{},resolve);
@@ -77,6 +80,31 @@ async def main():
             await page.locator('#div-only + .pit-translation').get_by_text(
               '译文:Div-only financial summary').wait_for(timeout=9000)
             print("PASS: actual browser short CJK, short Latin and div-only article segments")
+            # A realistic article contains multiple 2,500-character
+            # paragraphs or a 4,600-character continuous passage. Previous
+            # fixed six-element batches exceeded cloud/provider hard limits.
+            await page.evaluate("""()=>{
+              const main=document.querySelector('main');
+              const container=document.createElement('section');
+              container.id='long-paragraphs';
+              const normal=('financial markets and investment decisions. ').repeat(64);
+              for(let i=0;i<6;i++){
+                const p=document.createElement('p');
+                p.id='batch-long-'+i;
+                p.textContent=normal+' Section '+i;
+                container.append(p);
+              }
+              const p=document.createElement('p');
+              p.id='oversized-paragraph';
+              p.textContent=('international financial economics and transport. ').repeat(96);
+              container.append(p);
+              main.append(container);
+            }""")
+            await page.locator('#batch-long-5 + .pit-translation').wait_for(timeout=15000)
+            await page.locator('#oversized-paragraph + .pit-translation').wait_for(timeout=15000)
+            assert await page.locator('#long-paragraphs > .pit-translation').count()==7
+            print("PASS: >12k aggregate input and >3.5k single paragraph bounded without lost text")
+
             await page.evaluate("""()=>{
               const container=document.createElement('section');
               container.innerHTML='<p id="hover-target">Hover interaction for finance readers</p>'+
