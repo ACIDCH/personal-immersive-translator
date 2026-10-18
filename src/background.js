@@ -34,14 +34,26 @@ async function hasPITOffscreen(){
 }
 let nativeDocOpening=null;
 async function nativeOffscreenReady(){
- if(await hasPITOffscreen())return;
- if(!nativeDocOpening){
-  nativeDocOpening=chrome.offscreen.createDocument({
-   url:'src/offscreen.html',reasons:['DOM_PARSER'],
-   justification:'Perform owner-selected Chrome built-in translation in a document context'
-  }).finally(()=>{nativeDocOpening=null;});
+ if(!await hasPITOffscreen()){
+  if(!nativeDocOpening){
+   nativeDocOpening=chrome.offscreen.createDocument({
+    url:'src/offscreen.html',reasons:['DOM_PARSER'],
+    justification:'Perform owner-selected Chrome built-in translation in a document context'
+   }).finally(()=>{nativeDocOpening=null;});
+  }
+  await nativeDocOpening;
  }
- await nativeDocOpening;
+ // A module-script import graph can still be initializing when
+ // offscreen.createDocument() resolves. Do not interpret no response as
+ // model unavailable, and do not send source texts before listener is ready.
+ for(let attempt=0;attempt<12;attempt++){
+  const pong=await chrome.runtime.sendMessage({
+   target:'offscreen',type:'PIT_OFFSCREEN_PING'
+  }).catch(()=>null);
+  if(pong?.ok&&pong?.ready)return pong;
+  await new Promise(resolve=>setTimeout(resolve,120));
+ }
+ throw new TranslationError('PIT 离屏翻译执行模块没有响应；请在扩展管理页重新加载插件并查看后台日志。');
 }
 function fallbackNativeSource(text,pageSource){
  const s=String(text||'');
