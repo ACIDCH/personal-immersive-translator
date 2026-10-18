@@ -21,6 +21,18 @@ test('picks current timed cue and updates accurately when seeking',()=>{
  assert.equal(currentCue(cues,3),null);
  assert.equal(currentCue(cues,0)?.text,'a');
 });
+test('displays simultaneous subtitle cues without duplicating overlapping text',()=>{
+ const {activeCues}=globalThis.PITCaptionCore;
+ const cues=normalizeCues([
+  {startTime:0,endTime:6,text:'speaker A'},
+  {startTime:1,endTime:5,text:'speaker B'},
+  {startTime:2,endTime:4,text:'speaker A'},
+  {startTime:7,endTime:9,text:'speaker C'}
+ ]);
+ assert.deepEqual(activeCues(cues,3).map(x=>x.text),['speaker A','speaker B']);
+ assert.deepEqual(activeCues(cues,8).map(x=>x.text),['speaker C']);
+ assert.deepEqual(activeCues(cues,6.5),[]);
+});
 test('fast playback prefetches a wider time window than 1x',()=>{
  const cues=normalizeCues([{startTime:16,endTime:18,text:'future'},{startTime:30,endTime:33,text:'far'}]);
  assert.equal(upcomingCues(cues,0,1).length,1);
