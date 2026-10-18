@@ -48,3 +48,30 @@ test('Native Translator accepts only bounded user text',async()=>{
  await assert.rejects(translateWithNative(['a'.repeat(4001)],{
   source:'en',target:'zh'}),/4000/);
 });
+
+test('Failed Chrome translation evicts a stale model session and retries with a fresh instance',async()=>{
+ let creates=0,destroys=0;
+ const native={
+  availability:async()=> 'available',
+  create:async()=>{
+   const number=++creates;
+   return {
+    translate:async text=>{
+     if(number===1)throw new Error('Chrome model context lost');
+     return '恢复:'+text;
+    },
+    destroy:()=>{destroys++;}
+   };
+  }
+ };
+ await assert.rejects(
+  translateWithNative(['Bonjour'],{source:'fr',target:'ko',api:native}),
+  error=>error.code==='translate_failed'&&/失效会话/.test(error.message)
+ );
+ const recovered=await translateWithNative(['Bonjour'],{
+  source:'fr',target:'ko',api:native
+ });
+ assert.deepEqual(recovered,['恢复:Bonjour']);
+ assert.equal(creates,2,'the unusable Chrome session must not be reused');
+ assert.equal(destroys,1,'the invalid session must release model resources');
+});
