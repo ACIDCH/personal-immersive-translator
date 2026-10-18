@@ -196,8 +196,7 @@
     }
     state.seenAny=true;
     const now=video.currentTime;
-    const current=core.currentCue(cues,now);
-    render(current ? (state.cache.get(current.key) || '正在翻译…') : '',current?.text || '');
+    renderTimedCues(cues,now);
     if(state.busy || Date.now()-state.failedAt < 3000) return;
     const upcoming=core.upcomingCues(cues,now,video.playbackRate,5);
     if(!upcoming.length || !upcoming.some(c=>!state.cache.has(c.key))) return;
@@ -211,8 +210,7 @@
           .slice(0,10).map(c=>c.text).join('\n'):'';
       await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation,nearby));
       if(generation===state.generation && state.active) {
-        const fresh=core.currentCue(cues,video.currentTime);
-        render(fresh ? (state.cache.get(fresh.key) || '正在翻译…') : '',fresh?.text || '');
+        renderTimedCues(cues,video.currentTime);
       }
     } catch(error) {
       if(generation===state.generation){
@@ -222,6 +220,14 @@
     } finally {
       if(generation===state.generation)state.busy=false;
     }
+  }
+  function renderTimedCues(cues,time){
+    const activeCues=core.activeCues(cues,time);
+    if(!activeCues.length){render('');return;}
+    // Concurrent cues represent different speakers. Display every
+    // simultaneously active translated line, never just the latest one.
+    render(activeCues.map(c=>state.cache.get(c.key)||'正在翻译…').join('\n'),
+      activeCues.map(c=>c.text).join('\n'));
   }
   function stop() {
     state.active=false;state.generation++;
