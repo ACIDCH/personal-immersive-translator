@@ -47,7 +47,7 @@ async def main():
                   await chrome.storage.local.get('pit_settings_v1')
                 ).pit_settings_v1""")
                 assert saved["webDisplay"]=="translation-only"
-                assert saved["standardProvider"]=="cloud"
+                assert saved["standardProvider"]=="browser"
                 assert saved["cloudEndpoint"]==""
                 await options.locator('[name="webDisplay"]').select_option("bilingual")
                 print("PASS: first-run reading settings save without an undeployed cloud provider")
