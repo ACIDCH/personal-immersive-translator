@@ -45,7 +45,7 @@ async def main():
                 await pdf.get_by_label('云端 PDF 原文语言').select_option('fr')
                 calls={'health':0,'upload':0,'ready':False,'valid_pdf':False,
                        'sources':[],'status':0,'download':0,'legacy':0,
-                       'async_enabled':True}
+                       'async_enabled':True,'hold_status':False}
                 job_id='pit-test-pdf-job-1234567890'
                 async def fake_service(route):
                     method=route.request.method
@@ -76,8 +76,9 @@ async def main():
                     elif route.request.url.endswith('/v1/pdf/jobs/'+job_id):
                         assert method=='GET'
                         calls['status']+=1
+                        status='running' if calls['hold_status'] else 'completed'
                         await route.fulfill(status=200,content_type='application/json',
-                            body='{"jobId":"'+job_id+'","status":"completed",'
+                            body='{"jobId":"'+job_id+'","status":"'+status+'",'
                                  '"detectedSource":"fr","detectionConfidence":"explicit"}',
                             headers={'Access-Control-Allow-Origin':'*'})
                     elif route.request.url.endswith('/v1/pdf/jobs/'+job_id+'/result'):
@@ -129,6 +130,29 @@ async def main():
                     await button.click()
                 assert (await old_info.value).suggested_filename.endswith('-babeldoc.pdf')
                 assert calls['legacy']==1 and calls['upload']==2,calls
+                # Real user action: submit a long PDF, refresh the lab while
+                # it is still processing, and retrieve it WITHOUT uploading
+                # or charging for a second job.
+                calls['async_enabled']=True
+                calls['hold_status']=True
+                await button.click()
+                await pdf.get_by_text('云端文档任务正在排版翻译',
+                    exact=False).wait_for(timeout=10000)
+                assert calls['upload']==3,calls
+                saved=await page.evaluate("""()=>JSON.parse(
+                  localStorage.getItem('pit_cloud_pdf_pending_v1'))""")
+                assert saved['jobId']==job_id,saved
+                await page.reload()
+                pdf=page.locator('.pdf-bilingual-lab')
+                recover=pdf.get_by_role('button',name='取回上次云端 PDF 任务（无需重新上传）')
+                await recover.wait_for(timeout=10000)
+                calls['hold_status']=False
+                async with page.expect_download(timeout=20000) as recovered:
+                    await recover.click()
+                assert (await recovered.value).suggested_filename.endswith('-babeldoc.pdf')
+                assert calls['upload']==3,'recover re-uploaded the PDF'
+                assert await page.evaluate("""()=>localStorage.getItem(
+                  'pit_cloud_pdf_pending_v1')""") is None
                 assert not problems,problems
                 print('PASS: installed WXT blocks PDF upload when cloud health not ready')
                 print('PASS: installed WXT uploads only after explicit ready preflight')
