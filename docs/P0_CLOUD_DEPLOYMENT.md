@@ -6,7 +6,7 @@
 
 实现：cloudflare/multimodal-api/src/index.mjs，服务：
 - POST /v1/translate：真实 Workers AI @cf/meta/m2m100-1.2b 多语言机器翻译；JSON texts/source/target。
-- POST /v1/asr：真实 Workers AI @cf/openai/whisper-large-v3-turbo 分段识别，音频需要用户确认后上传；自动语言识别由 Whisper 执行。
+- POST /v1/asr：真实 Workers AI @cf/openai/whisper-large-v3-turbo 分段识别，音频需要用户确认后上传。服务仅接受 16 kHz / 单声道 / PCM16 且 RIFF 长度与 data 字节数一致的标准 WAV；若 Whisper 返回可用的 `transcription_info.language`（置信度至少 0.65 或模型没有提供数值概率），将支持的英法德西中日韩语码连同文本返回。离屏音频→后台→实时字幕→机器翻译现能传播该语码；用户明确指定的源语言优先级仍高于自动检测。**这些都是模拟 Worker/音频浏览器的 L0/L1 回归，未验证实际远程 Whisper 推理。**
 - GET /v1/capabilities：仅在绑定 AI、设置访问令牌后报告就绪。
 - **OCR、高保真 PDF 不是 Workers 能运行的功能，不再返回假成功。**
 
@@ -24,7 +24,7 @@
 - 服务器需要安全环境变量 PIT_CLOUD_PDF_TOKEN 与 PIT_PDF_API_KEY/PIT_PDF_MODEL/PIT_PDF_BASE_URL。**真实翻译仍可能产生 AI API 费用**，不能存储凭据在客户端公共仓库。
 - 容器运行在支持 Python、外部二进制、足够 CPU/RAM、任务运行时间的云平台上；Cloudflare Worker/Supabase Edge Function 不等同于这种算力环境。需按目标平台配置 HTTPS、私有访问与费用限制。
 
-浏览器 WXT 文件工作台现已连接 `/v1/pdf/translate` 上传与下载接口，并在上传前通过 `GET /health` 检查服务就绪状态，下载前检查真实 PDF 文件头；该连接行为已在安装版 Chromium 中使用**模拟 HTTPS 容器**通过 L1 测试。**PDF 容器尚未实际部署，没有云端 BabelDOC 真实推理或付费学术论文排版质量验收**；200 响应及文件下载成功不能作为高保真质量证据。浏览器内“300 页 PDF”仍是分卷栅格的回退方式，不能混淆为 BabelDOC。
+浏览器 WXT 文件工作台现已连接 `/v1/pdf/translate` 上传与下载接口；可选择自动检测或明确指定 7 种源语言，短文本/扫描件判断不准时可人工覆盖；上传前通过 `GET /health` 检查服务就绪状态，下载前检查真实 PDF 文件头，并显示服务器报告的源语言检测依据；该连接行为已在安装版 Chromium 中使用**模拟 HTTPS 容器**通过 L1 测试。**PDF 容器尚未实际部署，没有云端 BabelDOC 真实推理或付费学术论文排版质量验收**；200 响应及文件下载成功不能作为高保真质量证据。浏览器内“300 页 PDF”仍是分卷栅格的回退方式，不能混淆为 BabelDOC。
 
 ## 3. 发布硬门槛
 
