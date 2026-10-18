@@ -39,11 +39,28 @@ export function PdfBilingualLab(){
      setStatus('未配置 PDF 云端访问令牌；请先打开插件设置。');
      return;
    }
+   if(file.size>25*1024*1024){
+     setStatus('云端单个 PDF 上限 25 MiB，请选择更小文件或分卷。');
+     return;
+   }
    if(!window.confirm('将上传选中的 PDF 到你配置的独立云端 BabelDOC 服务，并调用该云端配置的翻译模型。云服务及 AI 可能产生费用。确认继续？'))return;
    const controller=new AbortController();currentAbort.current=controller;
-   setBusy(true);setStatus('正在将 PDF 交给已配置的云端高保真引擎…');
+   setBusy(true);setStatus('正在验证云端 BabelDOC 引擎状态（不会上传文件）…');
    try{
-     if(file.size>25*1024*1024)throw Error('云端单个 PDF 上限 25 MiB');
+     const healthUrl=new URL(url.toString());
+     healthUrl.pathname=healthUrl.pathname.replace(/\/$/,'')+'/health';
+     const preflight=await fetch(healthUrl.toString(),{
+       method:'GET',headers:{Authorization:'Bearer '+secret},
+       signal:AbortSignal.any([controller.signal,AbortSignal.timeout(8000)])
+     });
+     if(!preflight.ok)throw Error('云端 PDF 健康检查 HTTP '+preflight.status+
+       '；请检查 HTTPS 地址、访问令牌和服务部署');
+     const health=await preflight.json();
+     if(health?.ready!==true)
+       throw Error('云端 BabelDOC 服务尚未就绪（CLI 或模型凭据未配置），文件未上传。');
+     if(typeof health.max_file_bytes==='number' && file.size>health.max_file_bytes)
+       throw Error('文件超过云端服务允许的大小，文件未上传。');
+     setStatus('云端环境预检通过；正在上传 PDF…');
      url.pathname=url.pathname.replace(/\/$/,'')+'/v1/pdf/translate';
      const body=new FormData();
      body.set('pdf',file,file.name);
