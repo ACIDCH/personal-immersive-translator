@@ -145,8 +145,15 @@ async function nativeLanguagePack(download){
  try{
   const state=await checkNativeTranslator(source,target);
   if(!download){
-   status.textContent='Chrome '+source+' → '+target+' 语言包状态：'+state+
-     (state==='available'?'，现在可用于本机翻译。':'。点击下载按钮以主动安装（若浏览器支持）。');
+   const reply=await chrome.runtime.sendMessage({
+     type:'PIT_BROWSER_STATUS',source,target
+   });
+   const actual=reply?.status||'unavailable';
+   const note=reply?.reason||reply?.error||'';
+   status.textContent='Chrome 设置页：'+state+
+     '；实际翻译执行环境：'+actual+
+     (note?'（'+String(note).slice(0,120)+'）':'')+
+     (actual==='available'?'，可以发起实际翻译。':'。如可下载，请先点击语言包下载；若执行环境不支持，切换云端引擎。');
    return;
   }
   const translator=await ensureNativeTranslator(source,target,{allowDownload:true});
@@ -154,7 +161,14 @@ async function nativeLanguagePack(download){
   const sample=source==='en'?'Hello, welcome to our class.':'PIT translation test';
   const text=await translator.translate(sample);
   if(!text?.trim())throw Error('模型没有返回译文');
-  status.textContent='浏览器已准备 '+source+' → '+target+' 内置语言包，测试已成功。无需翻译 API Key。';
+  const checked=await chrome.runtime.sendMessage({
+    type:'PIT_BROWSER_STATUS',source,target
+  });
+  status.textContent=checked?.ok&&checked?.status==='available'
+    ? 'Chrome 内置语言包及 PIT 翻译执行环境均已就绪：'+source+' → '+target+'。'
+    : '设置页测试模型已返回译文，但实际离屏执行环境尚未就绪（'+
+      String(checked?.reason||checked?.error||checked?.status||'unknown')+
+      '）。请暂时改选其他引擎。';
  }catch(error){status.textContent='内置模型准备失败：'+String(error.message||error);}
 }
 pick('nativeModelCheck').addEventListener('click',()=>void nativeLanguagePack(false));
