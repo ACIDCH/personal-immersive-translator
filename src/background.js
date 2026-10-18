@@ -1,7 +1,7 @@
 import {translateBatch, TranslationError} from './lib/providers.js';
 import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS, isStandardServiceConfigured} from './lib/settings.js';
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
-import {detectLanguages} from './lib/language-detection.js';
+import {detectLanguagesWithContext,normalizeDetectedLanguage} from './lib/language-detection.js';
 
 chrome.runtime.onInstalled.addListener(async () => {
   try {
@@ -55,7 +55,7 @@ function fallbackNativeSource(text){
 }
 async function runStandardProvider(texts,opts){
  if(opts.provider!=='browser')return translateBatch(texts,opts);
- const hints=opts.source==='auto'?await detectLanguages(texts):
+ const hints=opts.source==='auto'?await detectLanguagesWithContext(texts):
    texts.map(()=>({language:opts.source,confidence:'explicit'}));
  const out=new Array(texts.length);
  for(let i=0;i<texts.length;){
@@ -279,6 +279,22 @@ async function handle(message, sender) {
       standardProvider:settings.standardProvider,
       standardReady:isStandardServiceConfigured(settings)
     }};
+  }
+  if(message.type==='PIT_BROWSER_STATUS'){
+    if(!isTrustedExtensionPage(sender))
+      throw new TranslationError('只有插件设置/弹窗可以查询浏览器模型状态');
+    const source=normalizeDetectedLanguage(message.source);
+    const target=normalizeDetectedLanguage(message.target);
+    if(!source||!target)throw new TranslationError('请选择支持的原文与目标语言');
+    if(source===target)return {status:'available',equalLanguage:true};
+    await nativeOffscreenReady();
+    const reply=await chrome.runtime.sendMessage({
+      target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_STATUS',source,target
+    });
+    if(!reply?.ok)return {status:'unavailable',
+      reason:String(reply?.error||'离屏 Translator API 不可用').slice(0,200),
+      code:String(reply?.code||'unavailable')};
+    return {status:reply.status,runtime:'offscreen',code:'ok'};
   }
   if (message.type === 'GET_SETTINGS') {
     if (!isTrustedExtensionPage(sender)) throw new TranslationError('网页不允许读取 API 配置');
