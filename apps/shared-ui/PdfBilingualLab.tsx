@@ -53,7 +53,7 @@ export function PdfBilingualLab(){
    const objectUrl=URL.createObjectURL(blob);
    const a=document.createElement('a');
    a.href=objectUrl;
-   a.download=fileName.replace(/\\.pdf$/i,'')+'-babeldoc.pdf';
+   a.download=fileName.replace(/\.pdf$/i,'')+'-babeldoc.pdf';
    document.body.append(a);a.click();a.remove();
    setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
    const detected=response.headers.get('X-PIT-Detected-Source')||detectedFromJob||'unknown';
@@ -67,7 +67,7 @@ export function PdfBilingualLab(){
    const setting=config.settings||{};
    const secret=String(setting.cloudPdfToken||'');
    let endpoint='';
-   try{endpoint=new URL(String(setting.cloudPdfEndpoint||'')).toString().replace(/\\/$/,'');}
+   try{endpoint=new URL(String(setting.cloudPdfEndpoint||'')).toString().replace(/\/$/,'');}
    catch{setStatus('云端 PDF 服务地址无效，请先恢复原来的配置。');return;}
    if(secret.length<16||endpoint!==pendingJob.endpoint){
      setStatus('请恢复提交任务时使用的云容器地址与访问令牌；不会向其他服务器发送旧任务号。');
@@ -173,7 +173,7 @@ export function PdfBilingualLab(){
          throw Error('云端未返回有效文档任务 ID');
        // The token stays in PIT Settings. Keep only a short-lived pointer
        // so refreshing this window never forces a duplicate paid upload.
-       rememberJob({jobId,endpoint:url.toString().replace(/\\/$/,''),
+       rememberJob({jobId,endpoint:url.toString().replace(/\/$/,''),
          fileName:file.name});
        const stateUrl=new URL(jobsUrl.toString());
        stateUrl.pathname+='/'+jobId;
@@ -225,7 +225,7 @@ export function PdfBilingualLab(){
      if(health.async_jobs===true)forgetJob();
    }catch(error){
      setStatus(controller.signal.aborted
-       ?'已停止等待云端 PDF；服务端任务可能仍在执行并产生费用。当前任务为临时内存任务，尚无跨重启恢复。'
+       ?'已停止等待云端 PDF；服务端任务可能仍在执行并产生费用。可在此窗口刷新后查询，但服务端重启会丢失任务。'
        :'云端 PDF 任务失败：'+String(error instanceof Error?error.message:error));
    }finally{currentAbort.current=null;setBusy(false);}
  }
