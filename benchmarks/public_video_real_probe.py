@@ -114,6 +114,11 @@ async def main():
                 await options.get_by_role("button",name="保存设置").click()
                 popup=await ctx.new_page()
                 await popup.goto(f"chrome-extension://{extension}/popup.html")
+                # The React popup defaults to the WEB tab. The prior public
+                # probe timed out on a hidden video action before visiting
+                # YouTube/Bilibili at all, masking test harness failure as
+                # public-site incompatibility. Select the VIDEO panel first.
+                await popup.get_by_role("button",name="视频字幕",exact=True).click()
                 await popup.get_by_role("button",name="翻译视频字幕").wait_for(timeout=10000)
                 for site in SITES:
                     value=await public_site(ctx,popup,site)
