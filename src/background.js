@@ -370,6 +370,26 @@ async function handle(message, sender) {
       code:String(reply?.code||(reply===undefined?'no_response':'unavailable'))};
     return {status:reply.status,runtime:'offscreen',code:'ok'};
   }
+  if(message.type==='PIT_BROWSER_PROBE'){
+    if(!isTrustedOptionsPage(sender))
+      throw new TranslationError('只有设置页可以执行内置模型推理诊断');
+    const source=normalizeDetectedLanguage(message.source);
+    const target=normalizeDetectedLanguage(message.target);
+    if(!source||!target||source===target)
+      throw new TranslationError('请选择不同的有效测试语言对');
+    const ping=await nativeOffscreenReady();
+    if(ping?.translatorApi!=='function')
+      return {status:'failed',code:'web_api_absent',
+        reason:'实际离屏环境没有 Chrome Translator API'};
+    const answer=await chrome.runtime.sendMessage({
+      target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_PROBE',source,target
+    });
+    if(!answer?.ok||typeof answer.translation!=='string'||!answer.translation.trim())
+      return {status:'failed',code:String(answer?.code||'probe_failed'),
+        reason:String(answer?.error||'未得到真实模型译文').slice(0,240)};
+    return {status:'translated',sampleTranslation:answer.translation.slice(0,200),
+      elapsedMs:Number(answer.elapsedMs)||0,runtime:'offscreen'};
+  }
   if (message.type === 'GET_SETTINGS') {
     if (!isTrustedExtensionPage(sender)) throw new TranslationError('网页不允许读取 API 配置');
     return {settings: await getSettings()};

@@ -16,6 +16,8 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
      return {ok:true,ready:true,translatorApi:'function'};
     if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS')
      return {ok:true,status:nativeStatus};
+    if(msg.type==='PIT_OFFSCREEN_BROWSER_PROBE')
+     return {ok:true,translation:'真实模型测试译文',elapsedMs:87};
     if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE')
      return {ok:true,translations:msg.texts.map(x=>'译文:'+x)};
     throw Error('Unknown offscreen message');
@@ -108,6 +110,13 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(diag.ok,true,JSON.stringify(diag));
  assert.equal(diag.status,'downloadable');
  assert.equal(diag.runtime,'offscreen');
+ const actualProbe=await call({type:'PIT_BROWSER_PROBE',source:'en',target:'zh'},
+   {id:chrome.runtime.id,url:chrome.runtime.getURL('pit-options.html')});
+ assert.equal(actualProbe.ok,true,JSON.stringify(actualProbe));
+ assert.equal(actualProbe.status,'translated');
+ assert.equal(actualProbe.sampleTranslation,'真实模型测试译文');
+ const denied=await call({type:'PIT_BROWSER_PROBE',source:'en',target:'zh'});
+ assert.equal(denied.ok,false,'content scripts cannot invoke the options-only probe');
  const saved=values.get('pit_settings_v1');
  saved.autoTranslateHosts='example.org';
  let ready=await call({type:'PIT_PUBLIC_PREFERENCES',pageLanguage:'fr'});

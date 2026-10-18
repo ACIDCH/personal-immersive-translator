@@ -150,10 +150,18 @@ async function nativeLanguagePack(download){
    });
    const actual=reply?.status||'unavailable';
    const note=reply?.reason||reply?.error||'';
-   status.textContent='Chrome 设置页：'+state+
-     '；实际翻译执行环境：'+actual+
-     (note?'（'+String(note).slice(0,120)+'）':'')+
-     (actual==='available'?'，可以发起实际翻译。':'。如可下载，请先点击语言包下载；若执行环境不支持，切换云端引擎。');
+   if(actual==='available'){
+     const probe=await chrome.runtime.sendMessage({type:'PIT_BROWSER_PROBE',source,target});
+     status.textContent=probe?.ok&&probe.status==='translated'
+       ? '离屏实际推理成功：'+String(probe.sampleTranslation||'').slice(0,90)+
+         '（'+probe.elapsedMs+' ms，仅固定样本，不代表长文档质量）'
+       : '语言包状态显示可用，但 PIT 离屏真实推理失败：'+
+         String(probe?.reason||probe?.error||'unknown')+'。请切换在线备用引擎。';
+   }else{
+     status.textContent='Chrome 设置页：'+state+
+       '；离屏执行环境：'+actual+(note?'（'+String(note).slice(0,120)+'）':'')+
+       '。如可下载请点击语言包下载，不支持则选择在线备用服务。';
+   }
    return;
   }
   const translator=await ensureNativeTranslator(source,target,{allowDownload:true,
@@ -169,11 +177,15 @@ async function nativeLanguagePack(download){
   const checked=await chrome.runtime.sendMessage({
     type:'PIT_BROWSER_STATUS',source,target
   });
-  status.textContent=checked?.ok&&checked?.status==='available'
-    ? 'Chrome 内置语言包及 PIT 翻译执行环境均已就绪：'+source+' → '+target+'。'
-    : '设置页测试模型已返回译文，但实际离屏执行环境尚未就绪（'+
-      String(checked?.reason||checked?.error||checked?.status||'unknown')+
-      '）。请暂时改选其他引擎。';
+  const inference=checked?.ok&&checked?.status==='available'
+    ? await chrome.runtime.sendMessage({type:'PIT_BROWSER_PROBE',source,target}):null;
+  status.textContent=inference?.ok&&inference.status==='translated'
+    ? 'Chrome 模型安装后，PIT 离屏实际翻译已成功：'+
+      String(inference.sampleTranslation||'').slice(0,90)+
+      '（'+inference.elapsedMs+' ms；仅样例，需继续真实网页验收）'
+    : '设置页模型已返回译文，但 PIT 离屏真实推理尚未通过：'+
+      String(inference?.reason||inference?.error||checked?.reason||
+        checked?.status||'unknown')+'。请改选在线备用服务。';
  }catch(error){status.textContent='内置模型准备失败：'+String(error.message||error);}
 }
 pick('nativeModelCheck').addEventListener('click',()=>void nativeLanguagePack(false));

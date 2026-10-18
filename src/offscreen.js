@@ -206,6 +206,30 @@ chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
         code:String(error.code||'native_unavailable')}));
     return true;
   }
+  if(msg.type==='PIT_OFFSCREEN_BROWSER_PROBE'){
+    // The probe uses only static public samples, never webpage/private text.
+    const samples={
+      en:'The financial report is ready.',
+      fr:'Le rapport financier est prêt.',
+      de:'Der Finanzbericht ist fertig.',
+      es:'El informe financiero está listo.',
+      zh:'财务报告已经准备好了。',
+      ja:'財務報告の準備ができました。',
+      ko:'재무 보고서가 준비되었습니다.'
+    };
+    const sample=samples[msg.source];
+    if(!sample){
+      respond({ok:false,code:'invalid_language',error:'未知测试语言'});
+      return false;
+    }
+    const started=performance.now();
+    translateWithNative([sample],{source:msg.source,target:msg.target})
+      .then(translations=>respond({ok:true,translation:translations[0],
+        elapsedMs:Math.round(performance.now()-started)}))
+      .catch(error=>respond({ok:false,error:String(error.message||error),
+        code:String(error.code||'native_probe_failed')}));
+    return true;
+  }
   if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE'){
     translateWithNative(msg.texts,{source:msg.source,target:msg.target})
       .then(translations=>respond({ok:true,translations}))
