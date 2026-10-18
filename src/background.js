@@ -308,7 +308,12 @@ async function handle(message, sender) {
       // Only validated ASR language tags go to the UI. In automatic source
       // mode they outrank unreliable short-utterance CLD guesses.
       const spoken=normalizeDetectedLanguage(message.language);
-      if(spoken)payload.language=spoken;
+      if(spoken){
+        payload.language=spoken;
+        const probability=Number(message.languageConfidence);
+        if(Number.isFinite(probability)&&probability>=0.65&&probability<=1)
+          payload.languageConfidence=probability;
+      }
     }else if(type==='PIT_ASR_ERROR_VIEW')payload.message=String(message.message||'').slice(0,300);
     else {
       const m=message.metrics||{};
