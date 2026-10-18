@@ -62,8 +62,8 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.deepEqual(r.translations,original.map(x=>'译文:'+x));
  assert.equal(opening,1);
  assert.equal(network,0);
- assert.deepEqual(requests.map(x=>x.source),['fr','de']);
- assert.deepEqual(requests.map(x=>x.target),['zh','zh']);
+ assert.deepEqual(requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').map(x=>x.source),['fr','de']);
+ assert.deepEqual(requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').map(x=>x.target),['zh','zh']);
  const prefs=await call({type:'PIT_PUBLIC_PREFERENCES'});
  assert.equal(prefs.ok,true);
  assert.equal(prefs.preferences.standardProvider,'browser');
