@@ -74,8 +74,12 @@ export function PdfBilingualLab(){
      if(!response.ok)throw Error('云端高保真 PDF HTTP '+response.status+
        '；请检查部署、语言识别、BabelDOC 和 AI 服务额度');
      const blob=await response.blob();
-     if(blob.type!=='application/pdf'||blob.size<100)
-       throw Error('云端服务返回的不是有效 PDF');
+     // A proxy/server error body may be 200 with a PDF MIME type. Validate
+     // at least the real PDF signature before creating a user download.
+     const pdfHeader=await blob.slice(0,5).text();
+     if(blob.type.split(';')[0].trim()!=='application/pdf'||
+        blob.size<100||pdfHeader!=='%PDF-')
+       throw Error('云端服务没有返回有效的 PDF 文件，已阻止下载。');
      const objectUrl=URL.createObjectURL(blob);
      const a=document.createElement('a');
      a.href=objectUrl;a.download=file.name.replace(/\.pdf$/i,'')+'-babeldoc.pdf';
