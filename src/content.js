@@ -140,6 +140,7 @@
   async function request(texts,requestedMode,context) {
     const answer=await chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:requestedMode,
+      pageContext:'article',
       userInitiated:requestedMode==='ai',context
     });
     if(!answer?.ok)throw Error(answer?.error||'翻译服务未响应');
