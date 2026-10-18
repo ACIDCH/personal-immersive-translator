@@ -1,0 +1,38 @@
+name: Real keyless standard translation (external live evidence)
+
+on:
+  pull_request:
+    paths:
+      - 'src/lib/providers.js'
+      - 'src/lib/settings.js'
+      - 'benchmarks/live_mymemory_provider_probe.mjs'
+      - '.github/workflows/live-mymemory-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-default-free-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Call one real publicly documented low-volume MT endpoint (inconclusive allowed)
+        continue-on-error: true
+        run: node benchmarks/live_mymemory_provider_probe.mjs
+      - name: Report external truth separately from mock builds
+        if: always()
+        run: |
+          node -e "const f=require('fs');const x=f.existsSync('live-mymemory-observation.json')?JSON.parse(f.readFileSync('live-mymemory-observation.json')):{status:'NOT_EXECUTED'};console.log('EXTERNAL FREE MT GATE:',x.status);f.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'### External live provider: '+x.status+'\\n\\nThis step is non-gating because third-party rate limits/network may block GitHub runners; a blocked test is not a pass.\\n')"
+      - name: Upload aggregate no-content verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-keyless-mt-provider-verdict
+          path: live-mymemory-observation.json
+          if-no-files-found: ignore
+          retention-days: 7
