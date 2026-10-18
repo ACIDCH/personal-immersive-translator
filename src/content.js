@@ -11,6 +11,7 @@
   let processed = new WeakMap();
   let scope='smart',display='bilingual',theme='subtle';
   let hoverEnabled=false,inputEnabled=false;
+  let voiceSource='auto',voiceTarget='zh';
   let lastInput=null,inputTaps=0,inputTapAt=0;
   let hovered=null;
   const CONTENT_TARGETS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],div';
@@ -309,6 +310,15 @@
     }
     void translateContent(id);
   }
+  function speechLocale(code,text){
+    const locales={zh:'zh-CN',en:'en-US',fr:'fr-FR',ja:'ja-JP',
+      ko:'ko-KR',de:'de-DE',es:'es-ES'};
+    if(locales[code])return locales[code];
+    if(/[\u3040-\u30ff]/.test(text))return 'ja-JP';
+    if(/[\uac00-\ud7af]/.test(text))return 'ko-KR';
+    if(/[\u3400-\u9fff]/.test(text))return 'zh-CN';
+    return document.documentElement.lang||'en-US';
+  }
   function showSelectionCard(original,translated,rect){
     document.querySelector('.pit-selection-card')?.remove();
     const card=document.createElement('aside');
@@ -345,6 +355,7 @@
       }
       window.speechSynthesis.cancel();
       const utterance=new SpeechSynthesisUtterance(original);
+      utterance.lang=speechLocale(voiceSource,original);
       window.speechSynthesis.speak(utterance);
     });
     button('朗读译文',()=>{
@@ -353,6 +364,7 @@
       }
       window.speechSynthesis.cancel();
       const utterance=new SpeechSynthesisUtterance(translated);
+      utterance.lang=speechLocale(voiceTarget,translated);
       window.speechSynthesis.speak(utterance);
     });
     card.append(heading,source,output,actions);
@@ -455,6 +467,7 @@
     if(!answer?.ok||!answer.preferences)return;
     const p=answer.preferences;
     if(p.floatingControl===true)mountFloatingControl();
+    voiceSource=p.sourceLanguage||'auto';voiceTarget=p.targetLanguage||'zh';
     hoverEnabled=p.hoverTranslate===true;
     inputEnabled=p.inputTranslate===true;
     scope=p.webScope==='full'?'full':'smart';
