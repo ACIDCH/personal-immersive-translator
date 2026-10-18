@@ -334,13 +334,17 @@ async function handle(message, sender) {
     const target=normalizeDetectedLanguage(message.target);
     if(!source||!target)throw new TranslationError('请选择支持的原文与目标语言');
     if(source===target)return {status:'available',equalLanguage:true};
-    await nativeOffscreenReady();
+    const ping=await nativeOffscreenReady();
+    if(ping?.translatorApi!=='function'){
+      return {status:'unavailable',runtime:'offscreen',
+        code:'web_api_absent',reason:'Chrome Translator API 在 PIT 离屏执行环境中不可用'};
+    }
     const reply=await chrome.runtime.sendMessage({
       target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_STATUS',source,target
     });
-    if(!reply?.ok)return {status:'unavailable',
-      reason:String(reply?.error||'离屏 Translator API 不可用').slice(0,200),
-      code:String(reply?.code||'unavailable')};
+    if(!reply?.ok)return {status:'unavailable',runtime:'offscreen',
+      reason:String(reply?.error||'离屏语言包状态请求没有返回结果').slice(0,200),
+      code:String(reply?.code||(reply===undefined?'no_response':'unavailable'))};
     return {status:reply.status,runtime:'offscreen',code:'ok'};
   }
   if (message.type === 'GET_SETTINGS') {
