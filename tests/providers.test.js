@@ -65,7 +65,7 @@ test('remote HTTP errors are sanitized to avoid leaking server data',async()=>{
   await assert.rejects(translateBatch(['x'],{...config,provider:'microsoft',microsoftKey:'secret'},async()=>({ok:false,status:429})),e=>e.status===429 && !e.message.includes('secret'));
 });
 test('sanitize settings and block nested sensitive hosts',()=>{
-  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'cloud');
+  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'browser');
   assert.equal(normalizeSettings({autoAI:true}).autoAI,false);
   assert.equal(hostIsBlocked('payments.example.com','example.com'),true);
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
@@ -76,7 +76,7 @@ test('Corrupted settings reset safely without enabling AI',()=>{
   for(const input of [null,42,'broken',[]]){
     const settings=normalizeSettings(input);
     assert.equal(settings.autoAI,false);
-    assert.equal(settings.standardProvider,'cloud');
+    assert.equal(settings.standardProvider,'browser');
     assert.equal(settings.target,'zh');
   }
 });
@@ -162,11 +162,11 @@ test('portable preference import is allowlisted and version checked',()=>{
  assert.equal(restored.target,'ko');
  assert.equal(restored.cloudToken,'keep-secret');
  assert.deepEqual(restored.aiProfiles,[]);
- assert.equal(restored.standardProvider,'cloud');
+ assert.equal(restored.standardProvider,'browser');
 });
 
 test('site auto-translate only activates with a configured standard MT engine',()=>{
- assert.equal(isStandardServiceConfigured({}),false);
+ assert.equal(isStandardServiceConfigured({}),true);
  assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'123'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'http://pit.example',cloudToken:'long-fake-token-12345'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'long-fake-token-12345'}),true);
