@@ -195,6 +195,10 @@ async function start({streamId,tabId,token,sessionId,asrBackend='local',cloudEnd
 }
 chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
   if(msg?.target!=='offscreen')return false;
+  if(msg.type==='PIT_OFFSCREEN_PING'){
+    respond({ok:true,ready:true,translatorApi:typeof globalThis.Translator});
+    return false;
+  }
   if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS'){
     checkNativeTranslator(msg.source,msg.target)
       .then(status=>respond({ok:true,status}))
