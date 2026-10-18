@@ -54,9 +54,15 @@ test('background discards stale offscreen ASR events and closes a valid session'
  assert.equal((await request({type:'PIT_ASR_RESULT',tabId:31,sessionId:old,text:'stale'},media)).ignored,true);
  assert.equal(notices.length,n);
  assert.equal(offscreenOpen,true);
- const live=await request({type:'PIT_ASR_RESULT',tabId:31,sessionId:activeSession,text:'hello'},media);
+ const live=await request({type:'PIT_ASR_RESULT',tabId:31,sessionId:activeSession,
+  text:'Bonjour',language:'fr',languageConfidence:0.98},media);
  assert.equal(live.forwarded,true);
- assert.ok(notices.some(e=>e.type==='PIT_ASR_TEXT_VIEW'&&e.text==='hello'));
+ assert.ok(notices.some(e=>e.type==='PIT_ASR_TEXT_VIEW'&&e.text==='Bonjour'&&e.language==='fr'));
+ const invalid=await request({type:'PIT_ASR_RESULT',tabId:31,
+  sessionId:activeSession,text:'untrusted',language:'unsupported'},media);
+ assert.equal(invalid.forwarded,true);
+ assert.equal(notices.findLast(e=>e.type==='PIT_ASR_TEXT_VIEW').language,undefined,
+  'unknown Whisper languages may not become downstream MT hints');
  const ended=await request({type:'PIT_ASR_STREAM_ENDED',tabId:31,sessionId:activeSession},media);
  assert.equal(ended.stopped,true);
  assert.equal(offscreenOpen,false);
