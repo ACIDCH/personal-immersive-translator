@@ -12,6 +12,8 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
    onInstalled:{addListener(){}},onMessage:{addListener(fn){messageListener=fn;}},
    async sendMessage(msg){
     requests.push(msg);
+    if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS')
+     return {ok:true,status:'downloadable'};
     if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE')
      return {ok:true,translations:msg.texts.map(x=>'译文:'+x)};
     throw Error('Unknown offscreen message');
@@ -78,5 +80,21 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
   texts:['Bonjour notre prochain cours de finance et économie européenne.']});
  assert.equal(next.ok,true,JSON.stringify(next));
  assert.equal(opening,1,'must reuse existing offscreen document on Chrome 138-149');
+ chrome.tabs.detectLanguage=async tabId=>{
+  assert.equal(tabId,13);
+  return 'fr';
+ };
+ const short=await call({type:'TRANSLATE_BATCH',mode:'standard',
+  texts:['Bonjour']});
+ assert.equal(short.ok,true,JSON.stringify(short));
+ assert.equal(requests.at(-1).source,'fr',
+   'Short French headings must not default to English');
+ const diag=await call({type:'PIT_BROWSER_STATUS',source:'en',target:'zh'},
+   {id:chrome.runtime.id,
+    url:'chrome-extension://pit-native-engine-fixture/pit-options.html'});
+ assert.equal(diag.ok,true,JSON.stringify(diag));
+ assert.equal(diag.status,'downloadable');
+ assert.equal(diag.runtime,'offscreen');
+
 
 });
