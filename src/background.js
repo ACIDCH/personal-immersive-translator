@@ -365,9 +365,13 @@ async function handle(message, sender) {
   }
   const texts = message.type === 'TEST_PROVIDER' ? ['Hello, world!'] : message.texts;
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
-  const source = settings.source;
-  const pageSource=settings.source==='auto' && settings.standardProvider==='browser'
-    ? await tabLanguageHint(sender):null;
+  const captionLang=message.type==='TRANSLATE_BATCH'&&settings.source==='auto'
+    ? normalizeDetectedLanguage(message.captionSourceLanguage):null;
+  const source=captionLang||settings.source;
+  // A tab's page language describes article prose; it does not necessarily
+  // describe Netflix/YouTube captions, media SRT or input-box text.
+  const pageSource=source==='auto'&&settings.standardProvider==='browser'&&
+    message.pageContext==='article' ? await tabLanguageHint(sender):null;
   // Input enhancement is standard-MT only, explicitly user-triggered,
   // with target selected by the owner in extension options.
   const target = message.inputEnhancement===true && message.type==='TRANSLATE_BATCH' && !isAI
