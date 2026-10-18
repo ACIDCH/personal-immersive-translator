@@ -37,6 +37,8 @@
 <p class="muted">目标语言使用上方“目标语言”设置；例如英语→中文。自动识别原文仍通过 Chrome 的语言检测功能完成。</p>
 <div class="buttons"><button type="button" id="nativeModelCheck">检查语言包可用性</button>
 <button type="button" id="nativeModelDownload">主动下载／启用选中语言包</button></div>
+<p class="muted">如内置语言包不可用，可由你主动选择在线备用方案。此服务会将需要翻译的原文发送到 MyMemory；有第三方隐私及每日额度限制，绝不自动切换。</p>
+<div class="buttons"><button type="button" id="nativeFallbackMyMemory">改用 MyMemory 在线免 Key 翻译（明确授权发送原文）</button></div>
 <p id="nativeModelStatus" role="status" aria-live="polite" class="muted"></p>
 </section>
 <section id="standardKeys" class="panel"><h2>常规翻译凭据</h2><p class="muted">Chrome 无法使用内置模型时可手动选用 MyMemory：它会向第三方传输原文；不适合机密内容或长文档。PIT 设置了每天 4,500 字符的本地上限，服务端可能有更严格限制。不自动切换在线服务，也不自动消耗 AI 额度。</p><p class="muted">PIT 云端模型需要先部署 Cloudflare Worker，并绑定 Workers AI。未部署时不能使用；本模式不要求本机 Python。</p><label>PIT 云端 Worker HTTPS 地址<input name="cloudEndpoint" type="url" spellcheck="false" placeholder="https://pit-translate.yourname.workers.dev"></label><label>PIT 云端访问令牌（Worker PIT_ACCESS_TOKEN）<input name="cloudToken" type="password" autocomplete="off" placeholder="至少 16 个随机字符"></label>
