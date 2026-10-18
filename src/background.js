@@ -305,6 +305,10 @@ async function handle(message, sender) {
       payload.capturedAt=Number(message.capturedAt)||Date.now();
       payload.segmentMs=Math.min(6000,Math.max(0,Number(message.segmentMs)||0));
       payload.asrMs=Math.max(0,Number(message.asrMs)||0);
+      // Only validated ASR language tags go to the UI. In automatic source
+      // mode they outrank unreliable short-utterance CLD guesses.
+      const spoken=normalizeDetectedLanguage(message.language);
+      if(spoken)payload.language=spoken;
     }else if(type==='PIT_ASR_ERROR_VIEW')payload.message=String(message.message||'').slice(0,300);
     else {
       const m=message.metrics||{};
