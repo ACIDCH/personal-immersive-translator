@@ -12,6 +12,9 @@ export function PdfBilingualLab(){
    location.pathname==='/file-lab.html');
  const [file,setFile]=useState<File|null>(null);
  const [ocrLang,setOcrLang]=useState<OcrSelection>('auto');
+ // Cloud BabelDOC's auto detection is necessarily uncertain for short Latin
+ // extracts and low-quality scans; the user must be able to override it.
+ const [cloudSource,setCloudSource]=useState('auto');
  const [mode,setMode]=useState<PdfTranslationMode>('standard');
  const [busy,setBusy]=useState(false);
  const currentAbort=useRef<AbortController|null>(null);
@@ -64,7 +67,7 @@ export function PdfBilingualLab(){
      url.pathname=url.pathname.replace(/\/$/,'')+'/v1/pdf/translate';
      const body=new FormData();
      body.set('pdf',file,file.name);
-     body.set('source','auto');
+     body.set('source',cloudSource);
      body.set('target',setting.target||'zh');
      body.set('ocr','true');
      const response=await fetch(url.toString(),{
@@ -86,8 +89,9 @@ export function PdfBilingualLab(){
      document.body.append(a);a.click();a.remove();
      setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
      const detected=response.headers.get('X-PIT-Detected-Source')||'unknown';
-     setStatus('已下载 BabelDOC PDF，识别原文语言：'+detected+
-       '。请检查双栏、公式、表格和字体排版，不能仅凭下载成功判断质量。');
+     const confidence=response.headers.get('X-PIT-Detection-Confidence')||'unreported';
+     setStatus('已下载 BabelDOC PDF；原文语言：'+detected+
+       '（依据：'+confidence+'）。请检查双栏、公式、表格和字体排版，不能仅凭下载成功判断质量。');
    }catch(error){
      setStatus('云端 PDF 任务失败：'+String(error instanceof Error?error.message:error));
    }finally{currentAbort.current=null;setBusy(false);}
@@ -136,6 +140,16 @@ export function PdfBilingualLab(){
        <option value="auto">自动识别（英法日韩中 OCR）</option><option value="eng">英语</option><option value="fra">法语</option>
        <option value="chi_sim">简体中文</option><option value="jpn">日语</option>
        <option value="kor">韩语</option>
+     </select>
+   </label>
+   <label className="document-field">云端 BabelDOC 原文语言
+     <select aria-label="云端 PDF 原文语言" value={cloudSource}
+       onChange={e=>setCloudSource(e.target.value)}>
+       <option value="auto">自动识别（短文字/扫描件可能误判）</option>
+       <option value="en">English</option><option value="fr">Français</option>
+       <option value="de">Deutsch</option><option value="es">Español</option>
+       <option value="zh">中文</option><option value="ja">日本語</option>
+       <option value="ko">한국어</option>
      </select>
    </label>
    <div className="native-modes" role="group" aria-label="PDF 翻译服务">
