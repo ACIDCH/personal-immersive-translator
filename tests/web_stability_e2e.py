@@ -32,6 +32,10 @@ async def main():
           onMessage:{addListener:fn=>window.listeners.push(fn)},
           sendMessage:async message=>{
             window.calls.push(message);
+            if(message.texts?.some(t=>t.includes('Superseded slow'))){
+              window.slowEntered=true;
+              await new Promise(resolve=>{window.releaseSuperseded=resolve;});
+            }
             await new Promise(resolve=>setTimeout(resolve,2));
             return {ok:true,translations:message.texts.map(t=>'译文:'+t)};
           }
@@ -90,6 +94,31 @@ async def main():
       assert await page.evaluate("""()=>
         document.querySelector('#shadow-host').shadowRoot.querySelectorAll('.pit-translation').length""")==0
       assert "Original list item" in await page.locator("#list-item").inner_text()
+
+      # A previous provider call is still pending when the user immediately
+      # restores and starts translation again. The new session must not be
+      # blocked, and the old reply must not overwrite the fresh translation.
+      await page.evaluate("""() => {
+        document.body.innerHTML='<main><p id="race">Superseded slow academic paragraph.</p></main>';
+        window.slowEntered=false;
+      }""")
+      await page.evaluate("()=>window.action('PIT_START')")
+      await page.wait_for_function("()=>window.slowEntered===true",timeout=5000)
+      await page.evaluate("()=>window.action('PIT_RESTORE')")
+      await page.locator("#race").evaluate(
+        "(el)=>{el.textContent='Fresh translation after restart.'}")
+      await page.evaluate("()=>window.action('PIT_START')")
+      await page.wait_for_function("""()=>
+        document.querySelector('#race + .pit-translation')?.textContent===
+        '译文:Fresh translation after restart.'
+      """,timeout=1400)
+      assert await page.locator("#race + .pit-translation").count()==1
+      await page.evaluate("()=>window.releaseSuperseded()")
+      await page.wait_for_timeout(150)
+      assert await page.locator("#race + .pit-translation").count()==1
+      assert await page.locator("#race + .pit-translation").inner_text()==(
+        '译文:Fresh translation after restart.')
+      await page.evaluate("()=>window.action('PIT_RESTORE')")
       assert not errors,errors
       print("PASS: restore original text and remove injected bilingual nodes")
     finally:
