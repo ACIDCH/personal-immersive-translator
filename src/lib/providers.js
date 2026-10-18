@@ -1,6 +1,6 @@
 /** Provider adapters. All remote responses are data, never executable markup. */
 import {selectedAIProfile} from './ai-profiles.js';
-import {detectLanguages} from './language-detection.js';
+import {detectLanguagesWithContext} from './language-detection.js';
 export class TranslationError extends Error {
   constructor(message, status = null) {
     super(message); this.name = 'TranslationError'; this.status = status;
@@ -99,7 +99,7 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
       // low-confidence fallback rather than pretending it identified them.
       let body={texts,source,target};
       if(source==='auto'){
-        const hints=await detectLanguages(texts);
+        const hints=await detectLanguagesWithContext(texts);
         if(hints.some(x=>x.language!=='auto'))
           body={...body,sources:hints.map(x=>x.language)};
       }
