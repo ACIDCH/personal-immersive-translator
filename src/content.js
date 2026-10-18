@@ -53,12 +53,20 @@
     // textContent includes injected <div.pit-translation> for list/table nodes.
     // TreeWalker avoids accumulating the translation into subsequent requests.
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
-    const parts=[];let textNode;
+    const parts=[];let textNode,rawChars=0;
     while((textNode=walker.nextNode())) {
       const parent=textNode.parentElement;
       if(parent?.closest?.(SKIP))continue;
-      parts.push(textNode.nodeValue || '');
-      if(parts.length>5000)break;
+      const value=textNode.nodeValue||'';
+      // A 5,000-node stop silently truncated rich articles whose text is
+      // split across many spans. Bound by actual characters, not DOM nodes.
+      const remaining=MAX_PARAGRAPH_CHARS+1-rawChars;
+      if(value.length>=remaining){
+        parts.push(value.slice(0,remaining));
+        break; // Oversized paragraphs are explicitly counted in coverage.
+      }
+      parts.push(value);
+      rawChars+=value.length;
     }
     return parts.join('').replace(/\s+/g,' ').trim();
   }
