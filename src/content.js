@@ -467,7 +467,8 @@
   },true);
   // The background only returns a strictly limited preference subset, never
   // vendor keys. Without settings access the extension remains idle.
-  void chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES'}).then(answer=>{
+  void chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES',
+    pageLanguage:document.documentElement.lang||''}).then(answer=>{
     if(!answer?.ok||!answer.preferences)return;
     const p=answer.preferences;
     if(p.floatingControl===true)mountFloatingControl();
@@ -486,7 +487,9 @@
       // A first install must never silently fake translations or send API
       // calls to an unconfigured self-hosted Worker.
       if(p.standardReady===true)start('standard',{scope,display,theme});
-      else toast('该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
+      else toast(p.standardProvider==='browser'
+        ?'本网站已启用自动翻译，但 Chrome 内置模型未准备好或无法确定源语言；请在 PIT 设置检查/下载语言包。'
+        :'该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
     }
   }).catch(()=>{});
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
