@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {chooseDetectedLanguage,normalizeDetectedLanguage,detectLanguages}
+import {chooseDetectedLanguage,normalizeDetectedLanguage,detectLanguages,detectLanguagesWithContext}
   from '../src/lib/language-detection.js';
 import {translateBatch} from '../src/lib/providers.js';
 
@@ -59,4 +59,33 @@ test('real provider adapter passes per-paragraph CLD source hints without leakin
   assert.deepEqual(result,['你好','经济','混合语']);
   assert.deepEqual(observed.sources,['fr','de','auto']);
  }finally{globalThis.chrome=oldChrome;}
+});
+
+test('Chrome CLD propagates a reliable group language to short English and French headings',async()=>{
+ const detector=async text=>{
+  const french=text.includes('Nous étudions la finance internationale');
+  if(text.length<18)return {isReliable:false,languages:[]};
+  return {isReliable:true,languages:[{language:french?'fr':'en',percentage:92}]};
+ };
+ const result=await detectLanguagesWithContext([
+  'Bonjour','Nous étudions la finance internationale et le commerce mondial.'
+ ],detector);
+ assert.deepEqual(result.map(x=>x.language),['fr','fr']);
+ assert.equal(result[0].confidence,'group-cld');
+});
+test('group-level language does not overwrite text confidently detected in another language',async()=>{
+ const detector=async text=>{
+  if(text==='Hola')return {isReliable:false,languages:[]};
+  if(text.startsWith('Bonjour les étudiants'))
+   return {isReliable:true,languages:[{language:'fr',percentage:94}]};
+  if(text.startsWith('Die wirtschaftlichen'))
+   return {isReliable:true,languages:[{language:'de',percentage:93}]};
+  return {isReliable:true,languages:[{language:'fr',percentage:90}]};
+ };
+ const output=await detectLanguagesWithContext([
+  'Bonjour les étudiants et professeurs à notre université',
+  'Die wirtschaftlichen Veränderungen sind sehr wichtig für uns',
+  'Hola'
+ ],detector);
+ assert.deepEqual(output.map(x=>x.language),['fr','de','auto']);
 });
