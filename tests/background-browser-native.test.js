@@ -161,6 +161,39 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(unknownCaption.ok,false,
   'Unknown short subtitles must not silently inherit the host UI language');
 
+ // Owner opts in explicitly. Public external MT must be quota bounded across
+ // multiple concurrent webpage requests, with no paid AI fallback.
+ values.set('pit_settings_v1',{standardProvider:'mymemory',source:'en',target:'zh'});
+ let publicCalls=0;
+ globalThis.fetch=async (url,options)=>{
+  assert.match(String(url),/^https:\/\/api\.mymemory\.translated\.net\/get\?/);
+  assert.equal(options.method,'GET');
+  publicCalls++;
+  return {ok:true,status:200,json:async()=>({
+   responseStatus:200,responseData:{translatedText:'译文'}
+  })};
+ };
+ const publicOne=await call({type:'TRANSLATE_BATCH',mode:'standard',
+  texts:['Public academic sample with no API key']});
+ assert.equal(publicOne.ok,true,JSON.stringify(publicOne));
+ assert.equal(publicOne.provider,'mymemory');
+ assert.deepEqual(publicOne.translations,['译文']);
+ assert.ok(publicCalls>=1);
+ const dailyKey='pit_mymemory_usage_'+new Date().toISOString().slice(0,10);
+ assert.ok(Number(values.get(dailyKey))>=30);
+ // Reservations must not race: one 3000-character request succeeds and
+ // another one is rejected, even when both requests start concurrently.
+ values.set(dailyKey,0);
+ const outcomes=await Promise.all([
+  call({type:'TRANSLATE_BATCH',mode:'standard',texts:['C'.repeat(3000)]}),
+  call({type:'TRANSLATE_BATCH',mode:'standard',texts:['D'.repeat(3000)]})
+ ]);
+ assert.equal(outcomes.filter(r=>r.ok).length,1,JSON.stringify(outcomes));
+ assert.equal(outcomes.filter(r=>!r.ok).length,1);
+ assert.match(outcomes.find(r=>!r.ok).error,/4,500/);
+ assert.equal(values.get(dailyKey),3000);
+
+
 
 
 
