@@ -71,9 +71,25 @@ export function DocumentLab(){
   },[extensionFileLab]);
   function onSelect(event:ChangeEvent<HTMLInputElement>){
     const selected=event.target.files?.[0]??null;
-    setFile(selected);setText('');setProgress('');setOcrRegions([]);
-    if(selected&&selected.size>MAX_BYTES)setMessage('文件超过 12 MiB 限制');
-    else setMessage(selected?'已选择文件，等待你点击开始处理':'请选择文件');
+    setText('');setProgress('');setOcrRegions([]);
+    if(!selected){setFile(null);setMessage('请选择文件');return;}
+    if(selected.size>MAX_BYTES){
+      setFile(null);setMessage('文件超过 12 MiB 限制');return;
+    }
+    // Detect the expected parser from the filename and verify its actual
+    // structure during parsing. This is not a MIME/content signature audit.
+    const name=selected.name.toLowerCase();
+    const match=name.match(/\.(docx|pptx|xlsx)$/);
+    const detected:Engine|null=match?match[1] as Engine:
+      /\.(png|jpe?g|webp|bmp)$/.test(name)?'ocr':null;
+    if(!detected){
+      setFile(null);setMessage('此工作台仅支持 DOCX、PPTX、XLSX 与 PNG/JPG/WEBP/BMP；PDF、EPUB、TXT 请使用对应文件模块。');
+      return;
+    }
+    setMode(detected);
+    setFile(selected);
+    setMessage('已按扩展名识别为 '+(detected==='ocr'?'图片 OCR':detected.toUpperCase())+
+      '；开始读取时还会检查文件能否解析。');
   }
   async function process(){
     if(!file||busy)return;
@@ -181,8 +197,8 @@ export function DocumentLab(){
       <button type="button" aria-pressed={mode==='xlsx'} onClick={()=>{setMode('xlsx');setFile(null);setText('');setProgress('');}}>XLSX 表格</button>
       <button type="button" aria-pressed={mode==='ocr'} onClick={()=>{setMode('ocr');setFile(null);setText('');setProgress('');}}>图片 OCR</button>
     </div>
-    <label className="document-field">选择{mode==='ocr'?'图片':mode.toUpperCase()}文件（最多 12 MiB）
-      <input key={mode} type="file" accept={mode==='ocr'?'image/png,image/jpeg,image/webp,image/bmp':'.'+mode} onChange={onSelect}/>
+    <label className="document-field">选择文件（自动切换 DOCX / PPTX / XLSX / 图片模式，最多 12 MiB）
+      <input type="file" accept=".docx,.pptx,.xlsx,.png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" onChange={onSelect}/>
     </label>
     {mode==='ocr'&&<label className="document-field">识别语言
       <select value={language} onChange={e=>setLanguage(e.target.value as OCRLanguage)}>
