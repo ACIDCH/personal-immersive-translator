@@ -38,6 +38,19 @@ async def main():
                 options.on("pageerror",lambda e: errors.append("options:"+str(e)))
                 await options.goto(f"chrome-extension://{eid}/pit-options.html")
                 await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
+                # Initial settings have no self-hosted Worker endpoint.
+                # The owner must still be able to save reading preferences.
+                await options.locator('[name="webDisplay"]').select_option("translation-only")
+                await options.get_by_role("button",name="保存设置").click()
+                await options.get_by_text("设置已保存。").wait_for(timeout=8000)
+                saved=await options.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert saved["webDisplay"]=="translation-only"
+                assert saved["standardProvider"]=="cloud"
+                assert saved["cloudEndpoint"]==""
+                await options.locator('[name="webDisplay"]').select_option("bilingual")
+                print("PASS: first-run reading settings save without an undeployed cloud provider")
                 await options.locator('[name="microsoftKey"]').fill("fixture-only-never-sent")
                 await options.locator('[name="standardProvider"]').select_option("microsoft")
                 await options.get_by_role("button",name="保存设置").click()
