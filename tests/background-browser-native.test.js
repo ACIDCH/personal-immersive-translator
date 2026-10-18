@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 test('MV3 background routes default browser MT to offscreen with real CLD hints, no remote API key',async()=>{
- let messageListener=null,opening=0,requests=[],network=0;
+ let messageListener=null,opening=0,requests=[],network=0,nativeStatus='downloadable';
  const values=new Map([['pit_settings_v1',{
   standardProvider:'browser',source:'auto',target:'zh'}]]);
  globalThis.chrome={
@@ -13,7 +13,7 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
    async sendMessage(msg){
     requests.push(msg);
     if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS')
-     return {ok:true,status:'downloadable'};
+     return {ok:true,status:nativeStatus};
     if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE')
      return {ok:true,translations:msg.texts.map(x=>'译文:'+x)};
     throw Error('Unknown offscreen message');
@@ -95,6 +95,22 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(diag.ok,true,JSON.stringify(diag));
  assert.equal(diag.status,'downloadable');
  assert.equal(diag.runtime,'offscreen');
+ const saved=values.get('pit_settings_v1');
+ saved.autoTranslateHosts='example.org';
+ let ready=await call({type:'PIT_PUBLIC_PREFERENCES',pageLanguage:'fr'});
+ assert.equal(ready.ok,true);
+ assert.equal(ready.preferences.standardProvider,'browser');
+ assert.equal(ready.preferences.standardReady,false);
+ assert.equal(ready.preferences.browserModelStatus,'downloadable');
+ nativeStatus='available';
+ ready=await call({type:'PIT_PUBLIC_PREFERENCES',pageLanguage:'fr'});
+ assert.equal(ready.preferences.standardReady,true);
+ assert.equal(ready.preferences.browserModelStatus,'available');
+ saved.blockedHosts='example.org';
+ ready=await call({type:'PIT_PUBLIC_PREFERENCES',pageLanguage:'fr'});
+ assert.equal(ready.preferences.standardReady,true,
+  'excluded website does not invoke native model readiness probes');
+
 
 
 });
