@@ -55,6 +55,26 @@ async def main():
       await page.locator(".pit-caption-translated").get_by_text("译文:Final sentence").wait_for(timeout=5000)
       footer=await page.locator(".pit-live-meta").inner_text()
       assert "p95" in footer and "丢弃 4" in footer and "识别错误 1" in footer,footer
+      # A short ASR fragment cannot reliably be distinguished as French by
+      # CLD. The spoken-language metadata supplied by Whisper must reach MT.
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        text:'Bonjour',language:'fr',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Bonjour").wait_for(timeout=5000)
+      assert await page.evaluate("""()=>
+        window.requests.at(-1).captionSourceLanguage==='fr'
+      """),"Whisper spoken-language tag was not sent to transient MT"
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        text:'Unknown text',language:'xx',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Unknown text").wait_for(timeout=5000)
+      assert await page.evaluate("""()=>
+        window.requests.at(-1).captionSourceLanguage===''
+      """),"unsupported spoken-language claims must be discarded"
       # Old response must never hold the new session's translation queue.
       await page.evaluate("""()=>window.simulate({
         type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
