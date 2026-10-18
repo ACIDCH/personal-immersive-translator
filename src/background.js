@@ -1,6 +1,7 @@
 import {translateBatch, TranslationError} from './lib/providers.js';
 import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS, isStandardServiceConfigured} from './lib/settings.js';
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
+import {detectLanguages} from './lib/language-detection.js';
 
 chrome.runtime.onInstalled.addListener(async () => {
   try {
@@ -13,6 +14,61 @@ chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>
 async function getSettings() {
   const item = await chrome.storage.local.get(SETTINGS_KEY);
   return normalizeSettings(item[SETTINGS_KEY]);
+}
+// Chrome's free on-device Translator API runs in an extension document,
+// not in our MV3 network service worker. The existing ASR offscreen document
+// is reused, so neither feature needs the owner's Python installation.
+let nativeDocOpening=null;
+async function nativeOffscreenReady(){
+ if(await chrome.offscreen.hasDocument())return;
+ if(!nativeDocOpening){
+  nativeDocOpening=chrome.offscreen.createDocument({
+   url:'src/offscreen.html',reasons:['DOM_PARSER'],
+   justification:'Perform owner-selected Chrome built-in translation in a document context'
+  }).finally(()=>{nativeDocOpening=null;});
+ }
+ await nativeDocOpening;
+}
+function fallbackNativeSource(text){
+ const s=String(text||'');
+ if(/[\\u3040-\\u30ff]/.test(s))return 'ja';
+ if(/[\\uac00-\\ud7af]/.test(s))return 'ko';
+ if(/[\\u3400-\\u9fff]/.test(s))return 'zh';
+ // Short English UI headings have too little statistical evidence.
+ // Longer ambiguous Latin documents must not be silently called English.
+ if(s.length<32&&/[a-z]/i.test(s))return 'en';
+ throw new TranslationError('无法可靠检测此段的原文语言，请在 PIT 设置中手动选择原文语种。');
+}
+async function runStandardProvider(texts,opts){
+ if(opts.provider!=='browser')return translateBatch(texts,opts);
+ const hints=opts.source==='auto'?await detectLanguages(texts):
+   texts.map(()=>({language:opts.source,confidence:'explicit'}));
+ const out=new Array(texts.length);
+ for(let i=0;i<texts.length;){
+  const source=hints[i]?.language&&hints[i].language!=='auto'?
+   hints[i].language:fallbackNativeSource(texts[i]);
+  let n=i+1;
+  while(n<texts.length){
+   const other=hints[n]?.language&&hints[n].language!=='auto'?
+     hints[n].language:fallbackNativeSource(texts[n]);
+   if(other!==source||n-i>=6)break;
+   n++;
+  }
+  const part=texts.slice(i,n);
+  if(source===opts.target)out.splice(i,part.length,...part);
+  else{
+   await nativeOffscreenReady();
+   const result=await chrome.runtime.sendMessage({
+     target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_TRANSLATE',
+     texts:part,source,target:opts.target
+   });
+   if(!result?.ok||!Array.isArray(result.translations)||result.translations.length!==part.length)
+    throw new TranslationError(result?.error||'Chrome 内置翻译服务暂不可用，请在 PIT 设置下载语言包或切换服务商');
+   out.splice(i,part.length,...result.translations);
+  }
+  i=n;
+ }
+ return out;
 }
 function ensureSource(sender, type) {
   if (sender.id !== chrome.runtime.id) throw new TranslationError('无效的消息来源');
@@ -264,7 +320,7 @@ async function handle(message, sender) {
       if(count>=80)throw new TranslationError('本次实时 AI 字幕达到 80 次请求上限，请停止并明确重新启动');
       await chrome.storage.session.set({pit_live_ai_requests:count+1});
     }
-    const translations=await translateBatch(texts,{...settings,provider,source,target,context});
+    const translations=await runStandardProvider(texts,{...settings,provider,source,target,context});
     return {translations,provider,cached:false,transient:true};
   }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
@@ -273,7 +329,7 @@ async function handle(message, sender) {
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
   if (missing.length) {
-    const newly = await translateBatch(missing.map(x=>x.text), {...settings, provider, source,target,context});
+    const newly = await runStandardProvider(missing.map(x=>x.text), {...settings, provider, source,target,context});
     for (let j=0;j<newly.length;j++) {
       const i=missing[j].index;
       values[i]=newly[j];
