@@ -126,6 +126,23 @@ async def main():
                 await target.locator(".pit-translation").wait_for(state="detached",timeout=12000)
                 print("PASS: WXT React restores original DOM")
 
+                await target.bring_to_front()
+                await popup.get_by_role("button",name="设置与诊断").click()
+                await popup.get_by_text("当前网站：api.deepl.com").wait_for(timeout=10000)
+                await popup.get_by_role("button",name="自动翻译此网站").click()
+                rules=await popup.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert "api.deepl.com" in rules["autoTranslateHosts"]
+                await popup.get_by_role("button",name="取消本站自动翻译").click()
+                await popup.get_by_role("button",name="禁用此网站翻译").click()
+                rules=await popup.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert "api.deepl.com" in rules["blockedHosts"]
+                assert "api.deepl.com" not in rules["autoTranslateHosts"]
+                await popup.get_by_role("button",name="解除本站禁用").click()
+                print("PASS: real Settings tab adds/removes current-site allow/block rules")
                 # Keep model keys/settings only in extension contexts.
                 assert "fixture-only-never-sent" not in await target.content()
                 assert not errors,errors
