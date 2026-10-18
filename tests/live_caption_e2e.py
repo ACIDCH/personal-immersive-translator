@@ -66,6 +66,8 @@ async def main():
       assert await page.evaluate("""()=>
         window.requests.at(-1).captionSourceLanguage==='fr'
       """),"Whisper spoken-language tag was not sent to transient MT"
+      label=await page.locator('.pit-live-meta').inner_text()
+      assert '识别语种 fr' in label,label
       await page.evaluate("""()=>window.simulate({
         type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         text:'Unknown text',language:'xx',capturedAt:Date.now(),segmentMs:3000
