@@ -47,6 +47,7 @@
           const result=await chrome.runtime.sendMessage({
             type:'TRANSLATE_BATCH',texts:[item.text],mode:translationMode,transient:true,
             userInitiated:translationMode==='ai',sessionId:item.sessionId,
+            captionSourceLanguage:item.language||'',
             context:translationMode==='ai'?sourceHistory.slice(-2).join('\n').slice(0,1600):''
           });
           if(result?.ok && translationMode==='ai')sourceHistory=[...sourceHistory.slice(-2),item.text];
@@ -121,6 +122,9 @@
     if(!text)return;
     seq++;
     queued={text,sequence:seq,capturedAt:msg.capturedAt,segmentMs:msg.segmentMs,
+      // Leave source empty when Whisper gave no reliable language evidence.
+      // Backend settings.source is authoritative if manually configured.
+      language:['en','zh','fr','de','es','ja','ko'].includes(msg.language)?msg.language:'',
       sessionId:activeSession};
     draw(text,'正在翻译…');
     void drain();
