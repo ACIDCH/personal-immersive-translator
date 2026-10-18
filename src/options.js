@@ -143,8 +143,8 @@ async function nativeLanguagePack(download){
  status.textContent='正在检查 Chrome 内置翻译模型…';
  if(source===target){status.textContent='原文与目标语言相同，无需下载语言包。';return;}
  try{
-  const state=await checkNativeTranslator(source,target);
   if(!download){
+   const state=await checkNativeTranslator(source,target);
    const reply=await chrome.runtime.sendMessage({
      type:'PIT_BROWSER_STATUS',source,target
    });
@@ -156,7 +156,12 @@ async function nativeLanguagePack(download){
      (actual==='available'?'，可以发起实际翻译。':'。如可下载，请先点击语言包下载；若执行环境不支持，切换云端引擎。');
    return;
   }
-  const translator=await ensureNativeTranslator(source,target,{allowDownload:true});
+  const translator=await ensureNativeTranslator(source,target,{allowDownload:true,
+    onDownloadProgress:({loaded,total})=>{
+     const pct=total>0?Math.round(100*loaded/total):Math.round(100*loaded);
+     status.textContent='正在下载 Chrome 语言包：'+Math.max(0,Math.min(100,pct))+'%';
+    }
+   });
   // Prove a result was produced before reporting model readiness.
   const sample=source==='en'?'Hello, welcome to our class.':'PIT translation test';
   const text=await translator.translate(sample);
