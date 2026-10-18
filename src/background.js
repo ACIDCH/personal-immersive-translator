@@ -134,7 +134,9 @@ async function stopLiveAsr() {
   const session=await chrome.storage.session.get(['pit_live_asr_tab','pit_live_asr_session']);
   // Invalidate before teardown, so old offscreen callbacks are ignored.
   await chrome.storage.session.remove(['pit_live_asr_tab','pit_live_asr_session','pit_live_asr_mode','pit_live_ai_requests']);
-  try {if(await hasPITOffscreen()){
+  // The offscreen document is also the owner-selected Chrome built-in
+  // translator. Do not terminate it when no ASR session was running.
+  try {if(session.pit_live_asr_session&&await hasPITOffscreen()){
     await chrome.runtime.sendMessage({target:'offscreen',type:'PIT_OFFSCREEN_STOP'});
     await chrome.offscreen.closeDocument();
   }}catch {}
@@ -205,6 +207,10 @@ async function startLiveAsr(message){
   const remote=cloud?await verifyCloudAsr(await getSettings()):null;
   if(!cloud)await verifyLocalAsr(token);
   await stopLiveAsr();
+  // A free Chrome Translator session may have opened this offscreen
+  // document using DOM_PARSER. Recreate it specifically for user-approved
+  // tab capture so Chrome does not reject a second offscreen document.
+  if(await hasPITOffscreen())await chrome.offscreen.closeDocument();
   await chrome.offscreen.createDocument({url:'src/offscreen.html',reasons:['USER_MEDIA'],
     justification:'用户明确启动的本机实时音频字幕识别'});
   try{
