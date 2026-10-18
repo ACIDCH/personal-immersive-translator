@@ -16,11 +16,12 @@ import pathlib
 import secrets
 import subprocess
 import tempfile
+import time
 import unicodedata
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from services.babeldoc_bridge import run_pipeline, LANGS
 from services.babeldoc_preflight import inspect_babeldoc_cli
 
@@ -87,7 +88,9 @@ def health(authorization:str|None=Header(default=None)):
           (os.getenv("PIT_PDF_API_KEY") or os.getenv("DEEPSEEK_API_KEY"))),
         "engine":"BabelDOC cloud container",
         "cli":cli,"max_file_bytes":MAX_FILE,"max_pages":MAX_PAGES,
-        "source_auto":True
+        "source_auto":True,"async_jobs":True,
+        "job_storage":"ephemeral-single-process",
+        "job_retention_seconds":JOB_TTL_SECONDS
     }
 
 @app.post("/v1/pdf/translate")
@@ -134,3 +137,112 @@ async def translate(pdf:UploadFile=File(...),source:str=Form("auto"),
         "X-PIT-Detected-Source":chosen,
         "X-PIT-Detection-Confidence":confidence
     })
+
+# A real BabelDOC job may take far longer than an HTTP gateway request.
+# This is intentionally a single-process, bounded and EPHEMERAL queue; a
+# restart loses every job. Durable multi-instance recovery is NOT implemented.
+JOB_TTL_SECONDS=15*60
+JOB_MAX_OUTPUT_BYTES=100*1024*1024
+jobs:dict[str,dict]={}
+job_gate=asyncio.Lock()
+
+def job_reply(item):
+    return {"jobId":item["id"],"status":item["status"],
+            "detectedSource":item["source"],
+            "detectionConfidence":item["confidence"],
+            "storage":"ephemeral-single-process",
+            "retentionSeconds":JOB_TTL_SECONDS}
+
+def get_job(job_id,authorization):
+    require_bearer(authorization)
+    item=jobs.get(job_id)
+    if item is None:
+        raise HTTPException(status_code=404,detail="Job not found or expired; upload again")
+    return item
+
+async def forget_result_later(job_id):
+    await asyncio.sleep(JOB_TTL_SECONDS)
+    item=jobs.get(job_id)
+    if item is not None and item["status"] in ("completed","failed"):
+        jobs.pop(job_id,None)
+
+async def execute_pdf_job(job_id,data,source,target,ocr):
+    item=jobs[job_id]
+    try:
+        async with lock:
+            item["status"]="running"
+            with tempfile.TemporaryDirectory(prefix="pit-cloud-pdf-job-") as path:
+                root=pathlib.Path(path)
+                original=root/"original.pdf"
+                original.write_bytes(data)
+                output=await asyncio.to_thread(run_pipeline,original,root,source,target,ocr)
+            if not isinstance(output,bytes) or len(output)>JOB_MAX_OUTPUT_BYTES or not output.startswith(b"%PDF-"):
+                raise RuntimeError("Invalid or oversized PDF result")
+            item["output"]=output
+            item["status"]="completed"
+    except Exception:
+        # Return a neutral error, never upstream model keys, source text,
+        # file paths, command line, or BabelDOC subprocess stderr.
+        item["status"]="failed"
+    finally:
+        item["doneAt"]=time.monotonic()
+        item["expiryTask"]=asyncio.create_task(forget_result_later(job_id))
+
+@app.post("/v1/pdf/jobs")
+async def submit_pdf_job(pdf:UploadFile=File(...),source:str=Form("auto"),
+                         target:str=Form("zh"),ocr:bool=Form(True),
+                         authorization:str|None=Header(default=None)):
+    require_bearer(authorization)
+    if source not in (*LANGS.keys(),"auto") or target not in LANGS:
+        raise HTTPException(status_code=400,detail="Unsupported language")
+    data=await pdf.read(MAX_FILE+1)
+    if len(data)>MAX_FILE:
+        raise HTTPException(status_code=413,detail="PDF exceeds 25 MiB cloud limit")
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(status_code=415,detail="Invalid PDF header")
+    try:
+        import fitz
+        with fitz.open(stream=data,filetype="pdf") as doc:
+            if doc.needs_pass or not 1<=len(doc)<=MAX_PAGES:
+                raise ValueError("Password protected or over 300 pages")
+    except Exception as error:
+        raise HTTPException(status_code=422,detail="Invalid or oversized PDF") from error
+    chosen,confidence=await asyncio.to_thread(infer_source,data) if source=="auto" else (source,"explicit")
+    if chosen==target:
+        raise HTTPException(status_code=422,detail="Source and target are identical")
+    async with job_gate:
+        if lock.locked() or any(j["status"] in ("queued","running") for j in jobs.values()):
+            raise HTTPException(status_code=429,detail="Document worker is occupied")
+        # Completed results occupy at most 100 MiB. They are not durable
+        # records and are discarded when the next document starts.
+        for old_id,j in list(jobs.items()):
+            if j["status"] in ("completed","failed"):
+                jobs.pop(old_id,None)
+        job_id=secrets.token_urlsafe(24)
+        item={"id":job_id,"status":"queued","source":chosen,
+              "confidence":confidence,"output":None}
+        jobs[job_id]=item
+        item["task"]=asyncio.create_task(
+            execute_pdf_job(job_id,data,chosen,target,ocr))
+    return JSONResponse(job_reply(item),status_code=202,
+        headers={"Cache-Control":"no-store"})
+
+@app.get("/v1/pdf/jobs/{job_id}")
+async def status_pdf_job(job_id:str,authorization:str|None=Header(default=None)):
+    item=get_job(job_id,authorization)
+    return JSONResponse(job_reply(item),headers={"Cache-Control":"no-store"})
+
+@app.get("/v1/pdf/jobs/{job_id}/result")
+async def result_pdf_job(job_id:str,authorization:str|None=Header(default=None)):
+    item=get_job(job_id,authorization)
+    if item["status"]=="failed":
+        raise HTTPException(status_code=422,detail="BabelDOC job failed; retry after checking server logs")
+    if item["status"]!="completed":
+        raise HTTPException(status_code=409,detail="Document job is not yet complete")
+    return Response(item["output"],media_type="application/pdf",headers={
+        "Cache-Control":"no-store",
+        "Content-Disposition":'attachment; filename="bilingual.pdf"',
+        "X-PIT-Detected-Source":item["source"],
+        "X-PIT-Detection-Confidence":item["confidence"]
+    })
+
