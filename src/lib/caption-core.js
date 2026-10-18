@@ -40,6 +40,12 @@
     return cues.filter(c=>c.end>=time-.3 && c.start<=time+ahead)
       .slice(0, Math.min(10,Math.max(1,limit)));
   }
+  const LANGS=new Set(['en','zh','fr','de','es','ja','ko']);
+  function normalizeCaptionSource(value){
+    const code=String(value||'').toLowerCase().trim().replace(/_/g,'-');
+    const primary=code.split('-')[0];
+    return LANGS.has(primary)?primary:'';
+  }
   class CaptionCache {
     constructor(limit = 350) { this.limit=Math.max(1,limit); this.map=new Map(); this.inflight=new Set(); }
     get(key) { return this.map.get(key); }
@@ -63,5 +69,5 @@
     }
     clear(){this.map.clear();this.inflight.clear();}
   }
-  root.PITCaptionCore = Object.freeze({cleanText,normalizeCues,currentCue,upcomingCues,CaptionCache});
+  root.PITCaptionCore = Object.freeze({cleanText,normalizeCues,currentCue,upcomingCues,normalizeCaptionSource,CaptionCache});
 })(globalThis);

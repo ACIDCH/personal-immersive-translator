@@ -15,6 +15,7 @@ export function NativeWebControls(){
  const [display,setDisplay]=useState<'bilingual'|'translation-only'>('bilingual');
  const [scope,setScope]=useState<'smart'|'full'>('smart');
  const [captionFile,setCaptionFile]=useState<File|null>(null);
+ const [captionSource,setCaptionSource]=useState('auto');
  const [captionBusy,setCaptionBusy]=useState(false);
  const [asrToken,setAsrToken]=useState('');
  const [status,setStatus]=useState('打开普通网页后点击翻译。');
@@ -282,7 +283,7 @@ export function NativeWebControls(){
        if(!cues?.length)throw Error('SRT/VTT 文件没有可用的时间轴');
      }
      let response=await browser.tabs.sendMessage(tabId,
-       {type:'PIT_CAPTIONS_START',mode,cues},{frameId:0});
+       {type:'PIT_CAPTIONS_START',mode,cues,captionSourceLanguage:captionSource},{frameId:0});
      if(!response?.ok&&!cues?.length){
        // For user-visible iframe players, only choose an exact HTTPS
        // YouTube/Panopto iframe whose URL matches Chrome navigation frames.
@@ -308,7 +309,7 @@ export function NativeWebControls(){
        await browser.scripting.insertCSS({target:embedded,files:[rootCss]});
        await browser.scripting.executeScript({target:embedded,files:scripts as never});
        response=await browser.tabs.sendMessage(tabId,
-         {type:'PIT_CAPTIONS_START',mode,expectedUrl:allowed(frame.url)},{frameId:frame.frameId});
+         {type:'PIT_CAPTIONS_START',mode,expectedUrl:allowed(frame.url),captionSourceLanguage:captionSource},{frameId:frame.frameId});
        if(response?.ok)await browser.storage.session.set({[sessionKey]:frame.frameId});
      }
      if(!response?.ok)throw Error(response?.reason||'当前播放器没有可读取字幕轨或可见原文字幕');
@@ -359,7 +360,16 @@ export function NativeWebControls(){
        <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
        <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>AI 字幕精译</button>
      </div>
-     <p className="native-hint">优先读取视频本身的字幕。无字幕时可选择云端 Whisper 识别；字幕源受网站播放器限制。</p>
+     <p className="native-hint">优先读取视频原生字幕；短字幕无法识别源语言时可手动选择。无字幕时需主动允许 Whisper。</p>
+     <label className="pit-field">原始字幕语言
+       <select aria-label="原始字幕语言" value={captionSource} onChange={e=>setCaptionSource(e.target.value)}>
+         <option value="auto">自动检测（默认）</option>
+         <option value="en">英语</option><option value="fr">法语</option>
+         <option value="de">德语</option><option value="es">西班牙语</option>
+         <option value="zh">中文</option><option value="ja">日语</option>
+         <option value="ko">韩语</option>
+       </select>
+     </label>
      <div className="native-actions">
        <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
        <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>

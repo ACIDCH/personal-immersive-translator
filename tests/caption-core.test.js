@@ -52,3 +52,13 @@ test('long captions remain accessible after seeking 4000 seconds',()=>{
  assert.equal(currentCue(near,4050)?.text,'cue 4050');
  assert.ok(near.length<3000);
 });
+
+test('manual video subtitle source has strict ISO language validation',()=>{
+ const {normalizeCaptionSource}=globalThis.PITCaptionCore;
+ assert.equal(normalizeCaptionSource('fr-FR'),'fr');
+ assert.equal(normalizeCaptionSource('zh-Hans'),'zh');
+ assert.equal(normalizeCaptionSource('EN_us'),'en');
+ assert.equal(normalizeCaptionSource('auto'),'');
+ assert.equal(normalizeCaptionSource('unknown'),'');
+ assert.equal(normalizeCaptionSource(null),'');
+});

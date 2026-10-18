@@ -5,7 +5,7 @@
   const core = globalThis.PITCaptionCore;
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[]};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],manualSource:''};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -105,7 +105,7 @@
       type:'TRANSLATE_BATCH',texts,mode:state.mode,
       // Caption tracks provide a language ISO tag. The browser UI or LMS
       // language may differ from the actual spoken/subtitled language.
-      captionSourceLanguage:state.track?.language||'',
+      captionSourceLanguage:state.manualSource||state.track?.language||'',
       userInitiated:state.mode==='ai',context
     });
     if(!response?.ok) throw new Error(response?.error || '字幕翻译失败');
@@ -220,7 +220,7 @@
     clearInterval(state.timer);state.timer=null;
     releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.manualSource='';
   }
   function embeddedPlayerHint(){
     for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
@@ -237,7 +237,7 @@
     }
     return '';
   }
-  function start(mode, suppliedCues=[], expectedUrl=null) {
+  function start(mode, suppliedCues=[], expectedUrl=null, requestedSource='auto') {
     if(expectedUrl!==null && expectedUrl!==undefined){
       let matches=false;
       if(typeof expectedUrl==='string' && expectedUrl.length<=4096){
@@ -250,6 +250,8 @@
       if(!matches)return {ok:false,reason:'播放器录像已切换或身份校验失败，请重新开始字幕翻译。'};
     }
     stop();
+    // Manual source overrides unreliable short DOM subtitles, not page UI language.
+    state.manualSource=core.normalizeCaptionSource(requestedSource);
     const video=pickVideo();
     const adapter=platform?.identify(location.hostname);
     const visible=adapter && adapter.id!=='generic'
@@ -282,7 +284,7 @@
     return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察。请打开播放器原文字幕；适配器可能随网站更新而失效。':'原生字幕翻译已启动。'};
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
-    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues,msg.expectedUrl));
+    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));
     else if(msg?.type==='PIT_CAPTIONS_STOP'){stop();respond({ok:true});}
   });
 })();
