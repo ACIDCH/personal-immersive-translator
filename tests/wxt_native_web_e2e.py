@@ -81,6 +81,14 @@ async def main():
                 await options.locator('[name="target"]').select_option("zh")
                 print("PASS: real options JSON export excludes credentials, import preview preserves keys")
 
+                # MV3 event workers may be retired while a person edits the
+                # options page. An old Playwright Worker object then raises
+                # TargetClosedError; wake and reacquire the active instance.
+                await options.evaluate("""async()=>await chrome.runtime.sendMessage({
+                  type:'GET_SETTINGS'
+                })""")
+                sw=context.service_workers[-1] if context.service_workers else (
+                    await context.wait_for_event("serviceworker",timeout=15000))
                 # Replace ONLY network fetch on this temporary test service worker.
                 # All actual native message routing, cache, parsing and DOM
                 # injection execute inside Chromium.
