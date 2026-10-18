@@ -17,7 +17,7 @@ async def main():
             page.on("pageerror", lambda error: failures.append(str(error)))
             await page.set_content(
                 '<main><article><p id="cjk"></p><p id="latin"></p>'
-                '<p id="long"></p><p id="dense"></p><p id="oversized"></p>'
+                '<p id="long"></p><p id="dense"></p><p id="oversized"></p><p id="spaced"></p>'
                 '</article></main>'
             )
             originals = await page.evaluate("""() => {
@@ -30,6 +30,9 @@ async def main():
               // without a request, even though chunked translation works.
               const long=('A scientific discussion of global market structures. ').repeat(600).trim();
               const oversized='Z'.repeat(120100);
+              // Huge whitespace collapses after normalization: a naive
+              // 120001-char prefix would otherwise masquerade as full text.
+              const spaced='Opening '+(' '.repeat(120100))+' important final words';
               document.querySelector('#long').textContent=long;
               // Rich editor DOM: more than 5,000 text nodes in one paragraph.
               // The old extractor silently discarded everything after node 5001.
@@ -38,6 +41,7 @@ async def main():
               for(let i=0;i<5300;i++)denseNode.appendChild(
                 document.createTextNode('Text '));
               document.querySelector('#oversized').textContent=oversized;
+              document.querySelector('#spaced').textContent=spaced;
               window.calls=[];window.trimOutputs=false;
               window.listeners=[];
               window.chrome={runtime:{
@@ -52,7 +56,7 @@ async def main():
               window.action=type=>new Promise(resolve=>{
                 for(const listener of window.listeners)listener({type,mode:'standard'},{},resolve);
               });
-              return {cjk,latin,long,dense,oversized};
+              return {cjk,latin,long,dense,oversized,spaced};
             }""")
             assert len(originals["cjk"]) > 3200
             assert len(originals["latin"]) > 3200
@@ -76,11 +80,12 @@ async def main():
             assert actual["long"] == originals["long"], "20k+ paragraph was skipped or corrupted"
             assert actual["dense"] == originals["dense"].strip(), "rich editor dropped text after 5000 nodes"
             progress=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
-            assert progress["ok"] and progress["progress"]["skippedOversized"]==1,progress
+            assert progress["ok"] and progress["progress"]["skippedOversized"]==2,progress
             assert progress["progress"]["translated"]==4,progress
-            assert progress["progress"]["eligible"]==5,progress
-            assert progress["progress"]["coveragePercent"]==80,progress
+            assert progress["progress"]["eligible"]==6,progress
+            assert progress["progress"]["coveragePercent"]==66.67,progress
             assert await page.locator("#oversized + .pit-translation").count()==0
+            assert await page.locator("#spaced + .pit-translation").count()==0
             assert sum(map(len, actual["calls"])) >= 4, "fixture did not exercise chunking"
             for batch in actual["calls"]:
                 assert len(batch) <= 6
