@@ -90,7 +90,7 @@ export function NativeWebControls(){
        setSiteRules(null);return;
      }
      const hostname=new URL(tab.url).hostname.toLowerCase();
-     const setting=(await browser.storage.local.get('pit_settings_v1')).pit_settings_v1||{};
+     const setting=((await browser.storage.local.get('pit_settings_v1')).pit_settings_v1||{}) as Record<string,unknown>;
      const has=(value:unknown)=>String(value||'').toLowerCase()
        .split(/[\s,;]+/).filter(Boolean).includes(hostname);
      setSiteRules({hostname,automatic:has(setting.autoTranslateHosts),
@@ -100,7 +100,7 @@ export function NativeWebControls(){
  async function toggleSiteRule(key:'autoTranslateHosts'|'blockedHosts'){
    if(!siteRules)return;
    try{
-     const old=(await browser.storage.local.get('pit_settings_v1')).pit_settings_v1||{};
+     const old=((await browser.storage.local.get('pit_settings_v1')).pit_settings_v1||{}) as Record<string,unknown>;
      const hostname=siteRules.hostname;
      const list=(value:unknown)=>String(value||'').toLowerCase()
        .split(/[\s,;]+/).filter(Boolean);
