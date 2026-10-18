@@ -85,7 +85,7 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
   return 'fr';
  };
  const short=await call({type:'TRANSLATE_BATCH',mode:'standard',
-  texts:['Bonjour']});
+  texts:['Bonjour'],pageContext:'article'});
  assert.equal(short.ok,true,JSON.stringify(short));
  assert.equal(requests.at(-1).source,'fr',
    'Short French headings must not default to English');
@@ -110,6 +110,7 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  ready=await call({type:'PIT_PUBLIC_PREFERENCES',pageLanguage:'fr'});
  assert.equal(ready.preferences.standardReady,true,
   'excluded website does not invoke native model readiness probes');
+ saved.blockedHosts='';
  const caption=await call({
   type:'TRANSLATE_BATCH',mode:'standard',texts:['Hello'],
   captionSourceLanguage:'en'
