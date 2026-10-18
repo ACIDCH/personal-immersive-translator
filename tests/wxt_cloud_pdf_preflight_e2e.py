@@ -42,7 +42,9 @@ async def main():
                     'name':'real-pdf-fixture.pdf','mimeType':'application/pdf',
                     'buffer':pdf_fixture()
                 })
-                calls={'health':0,'upload':0,'ready':False,'valid_pdf':False}
+                await pdf.get_by_label('云端 PDF 原文语言').select_option('fr')
+                calls={'health':0,'upload':0,'ready':False,'valid_pdf':False,
+                       'sources':[]}
                 async def fake_service(route):
                     method=route.request.method
                     if method=='OPTIONS':
@@ -61,11 +63,16 @@ async def main():
                             headers={'Access-Control-Allow-Origin':'*'})
                     elif route.request.url.endswith('/v1/pdf/translate'):
                         calls['upload']+=1
+                        payload=route.request.post_data_buffer or b''
+                        assert b'name="source"' in payload and b'\r\n\r\nfr\r\n' in payload, (
+                            'cloud request ignored the user-selected original language')
+                        calls['sources'].append('fr')
                         await route.fulfill(status=200,content_type='application/pdf',
                             body=pdf_fixture() if calls['valid_pdf'] else b'INVALID_PDF_CONTENT'+b'X'*200,
                             headers={
                               'Access-Control-Allow-Origin':'*',
-                              'X-PIT-Detected-Source':'en'
+                              'X-PIT-Detected-Source':'fr',
+                              'X-PIT-Detection-Confidence':'explicit'
                             })
                     else:
                         await route.fulfill(status=404)
@@ -86,7 +93,9 @@ async def main():
                 downloaded=Path(await download.path()).read_bytes()
                 assert downloaded.startswith(b'%PDF-') and len(downloaded)>100
                 assert calls['health']==3 and calls['upload']==2,calls
-                await pdf.get_by_text('已下载 BabelDOC PDF',exact=False).wait_for(timeout=10000)
+                assert calls['sources']==['fr','fr'],calls
+                await pdf.get_by_text('原文语言：fr（依据：explicit）',
+                    exact=False).wait_for(timeout=10000)
                 assert not problems,problems
                 print('PASS: installed WXT blocks PDF upload when cloud health not ready')
                 print('PASS: installed WXT uploads only after explicit ready preflight')
