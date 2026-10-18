@@ -23,6 +23,7 @@
   let failedBatches=0, lastError='', succeededBatches=0;
   const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70, STANDARD_STEP = 600;
   const MAX_PARAGRAPH_CHARS = 120000; // 38 bounded 3,200-char segments maximum
+  const TRUNCATED_SOURCE_MARKER = '\uFFF0'; // Internal signal, never sent to MT
 
   function roots() {
     const found=[document],pending=[document],seen=new Set(found);
@@ -53,7 +54,7 @@
     // textContent includes injected <div.pit-translation> for list/table nodes.
     // TreeWalker avoids accumulating the translation into subsequent requests.
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
-    const parts=[];let textNode,rawChars=0;
+    const parts=[];let textNode,rawChars=0,truncated=false;
     while((textNode=walker.nextNode())) {
       const parent=textNode.parentElement;
       if(parent?.closest?.(SKIP))continue;
@@ -63,12 +64,16 @@
       const remaining=MAX_PARAGRAPH_CHARS+1-rawChars;
       if(value.length>=remaining){
         parts.push(value.slice(0,remaining));
-        break; // Oversized paragraphs are explicitly counted in coverage.
+        truncated=true;
+        break; // Content beyond this point must never count as translated.
       }
       parts.push(value);
       rawChars+=value.length;
     }
-    return parts.join('').replace(/\s+/g,' ').trim();
+    const normalized=parts.join('').replace(/\s+/g,' ').trim();
+    // Whitespace-heavy DOM nodes may shrink below 120k after normalization.
+    // Preserve the raw overflow signal so no incomplete prefix is translated.
+    return normalized+(truncated?TRUNCATED_SOURCE_MARKER:'');
   }
   function toast(message) {
     document.querySelector('.pit-toast')?.remove();
@@ -81,7 +86,8 @@
     // Avoid numeric-only UI counters while retaining short article headings
     // and normal CJK text. The former 12-character minimum discarded a large
     // class of legitimate short paragraphs without reporting any failure.
-    if(original.length>MAX_PARAGRAPH_CHARS||!/[\p{L}]/u.test(original))return false;
+    if(original.includes(TRUNCATED_SOURCE_MARKER)||
+       original.length>MAX_PARAGRAPH_CHARS||!/[\p{L}]/u.test(original))return false;
     const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
@@ -119,7 +125,8 @@
       if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
-      if(original.length>MAX_PARAGRAPH_CHARS && /[\p{L}]/u.test(original)){
+      if((original.includes(TRUNCATED_SOURCE_MARKER)||
+         original.length>MAX_PARAGRAPH_CHARS) && /[\p{L}]/u.test(original)){
         // Do not report 100% coverage when giant/possibly generated blocks
         // were deliberately not sent to a provider.
         skippedOversized++;
