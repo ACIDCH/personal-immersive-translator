@@ -465,7 +465,12 @@ async function handle(message, sender) {
     const translations=await runStandardProvider(texts,{...settings,provider,source,target,context,pageSource});
     return {translations,provider,cached:false,transient:true};
   }
-  const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
+  // A short ambiguous label (e.g. "Menu") can be French on one site and
+  // English on another. The browser model uses the detected page language as
+  // a fallback; the cache must encode that same hint or silently replay the
+  // wrong translation in another tab.
+  const cacheSource=source==='auto'&&pageSource?'auto:'+pageSource:source;
+  const payloads = texts.map(text => ({text, provider, source:cacheSource,target,model,glossary: isAI ? settings.glossary : '',context}));
   // Local cache is an optimization, never a prerequisite for translating.
   // Storage quota exhaustion should not discard a successful provider result.
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
