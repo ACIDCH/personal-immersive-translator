@@ -110,6 +110,20 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  ready=await call({type:'PIT_PUBLIC_PREFERENCES',pageLanguage:'fr'});
  assert.equal(ready.preferences.standardReady,true,
   'excluded website does not invoke native model readiness probes');
+ const caption=await call({
+  type:'TRANSLATE_BATCH',mode:'standard',texts:['Hello'],
+  captionSourceLanguage:'en'
+ });
+ assert.equal(caption.ok,true,JSON.stringify(caption));
+ assert.equal(requests.at(-1).source,'en',
+  'English caption source must not inherit the French page language');
+ const unknownCaption=await call({
+  type:'TRANSLATE_BATCH',mode:'standard',texts:['Hola'],
+  captionSourceLanguage:''
+ });
+ assert.equal(unknownCaption.ok,false,
+  'Unknown short subtitles must not silently inherit the host UI language');
+
 
 
 
