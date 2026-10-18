@@ -166,13 +166,16 @@
     }
     return out;
   }
-  async function requestBoundedParagraphs(items,requestedMode,context){
+  async function requestBoundedParagraphs(items,requestedMode,context,sessionId){
     const fragments=items.map(item=>splitParagraph(item.original));
     const queued=fragments.flatMap((pieces,owner)=>
       pieces.map((text,index)=>({text,owner,index})));
     const results=fragments.map(parts=>Array(parts.length).fill(''));
     let requests=0;
     for(let i=0;i<queued.length;){
+      // Restoring original text or navigating away cancels further queued
+      // provider requests, even when a previous browser message is pending.
+      if(!active||currentId!==sessionId)return null;
       const batch=[];let characters=0;
       while(i<queued.length&&batch.length<6){
         const item=queued[i];
@@ -243,7 +246,8 @@
           break;
         }
         const outcome=await requestBoundedParagraphs(chunk,mode,
-          [before,after].filter(Boolean).join('\n'));
+          [before,after].filter(Boolean).join('\n'),id);
+        if(!outcome)return;
         succeededBatches+=outcome.requests;
         if(!active || currentId!==id)return;
         for(let j=0;j<chunk.length;j++){
