@@ -145,6 +145,49 @@
     if(!Array.isArray(answer.translations)||answer.translations.length!==texts.length)throw Error('翻译结果与原文段落数量不符');
     return answer.translations;
   }
+  // The hosted engine enforces 4,000 chars/segment and all adapters
+  // enforce 12,000 chars/batch. The old loop sent six arbitrary 5,000-char
+  // paragraphs and silently failed whole sections at the first large batch.
+  function splitParagraph(source){
+    const chars=Array.from(source);
+    const out=[];
+    for(let i=0;i<chars.length;){
+      let end=Math.min(i+3200,chars.length);
+      if(end<chars.length){
+        for(let probe=end;probe>i+2400;probe--){
+          if(/[\s,.;:!?。！？；，]/u.test(chars[probe-1])){
+            end=probe;break;
+          }
+        }
+      }
+      out.push(chars.slice(i,end).join(''));
+      i=end;
+    }
+    return out;
+  }
+  async function requestBoundedParagraphs(items,requestedMode,context){
+    const fragments=items.map(item=>splitParagraph(item.original));
+    const queued=fragments.flatMap((pieces,owner)=>
+      pieces.map((text,index)=>({text,owner,index})));
+    const results=fragments.map(parts=>Array(parts.length).fill(''));
+    let requests=0;
+    for(let i=0;i<queued.length;){
+      const batch=[];let characters=0;
+      while(i<queued.length&&batch.length<6){
+        const item=queued[i];
+        if(batch.length&&characters+item.text.length>9500)break;
+        batch.push(item);characters+=item.text.length;i++;
+      }
+      const reply=await request(batch.map(x=>x.text),requestedMode,context);
+      requests++;
+      for(let k=0;k<batch.length;k++){
+        const item=batch[k];
+        results[item.owner][item.index]=reply[k];
+      }
+    }
+    return {translations:results.map(parts=>parts.join(' ')),
+      segments:queued.length,requests};
+  }
   function schedule(id,delay=300) {
     if(!active || currentId!==id)return;
     clearTimeout(timer);
@@ -193,13 +236,19 @@
         const chunk=targets.slice(i,i+6);
         const before=targets[i-1]?.original?.slice(-300)||'';
         const after=targets[i+6]?.original?.slice(0,300)||'';
-        const translations=await request(chunk.map(x=>x.original),mode,[before,after].filter(Boolean).join('\n'));
-        succeededBatches++;
+        const segmentCount=chunk.reduce((n,item)=>n+splitParagraph(item.original).length,0);
+        if(mode==='ai'&&aiCount+segmentCount>AI_MAX_PER_ACTION){
+          lastError='AI 本次段落额度不足，长段需要多次分段；请手动重新选择或使用常规翻译。';
+          break;
+        }
+        const outcome=await requestBoundedParagraphs(chunk,mode,
+          [before,after].filter(Boolean).join('\n'));
+        succeededBatches+=outcome.requests;
         if(!active || currentId!==id)return;
         for(let j=0;j<chunk.length;j++){
-          if(attach(chunk[j].el,chunk[j].original,translations[j],mode==='ai'))count++;
+          if(attach(chunk[j].el,chunk[j].original,outcome.translations[j],mode==='ai'))count++;
         }
-        if(mode==='ai')aiCount+=chunk.length;
+        if(mode==='ai')aiCount+=outcome.segments;
         else standardSpent+=chunk.length;
       }
       if(count)toast('已翻译 '+count+' 个新段落 · '+(mode==='ai'?'AI':'标准')+'模式');
