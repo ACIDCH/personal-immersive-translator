@@ -14,7 +14,7 @@
 <form id="optionsForm"><section id="baseSettings" class="panel"><h2>基础设置</h2>
 <label>目标语言<select name="target"><option value="zh">简体中文</option><option value="en">English</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
 <label>原文语言<select name="source"><option value="auto">自动识别</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ko">한국어</option></select></label>
-<label>默认机器翻译服务<select name="standardProvider"><option value="cloud">PIT 云端机器翻译（自托管 Workers AI）</option><option value="microsoft">Microsoft Translator</option><option value="google">Google Cloud Translation</option><option value="deepl">DeepL</option><option value="libre">LibreTranslate (自有服务)</option></select></label>
+<label>默认机器翻译服务<select name="standardProvider"><option value="browser">Chrome 内置免费翻译（无需 API Key；需支持并下载语言包）</option><option value="cloud">PIT 云端机器翻译（自托管 Workers AI）</option><option value="microsoft">Microsoft Translator</option><option value="google">Google Cloud Translation</option><option value="deepl">DeepL</option><option value="libre">LibreTranslate (自有服务)</option></select></label>
 <label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="custom">自定义 AI 配置（多服务商）</option></select></label>
 <label class="inline"><input type="checkbox" name="contextAI">AI 翻译时包含相邻段落作为上下文</label></section>
 <section id="readingSettings" class="panel"><h2>网页阅读模式与交互</h2>
@@ -28,6 +28,17 @@
 <label>输入框目标语言<select name="inputTarget"><option value="en">English</option><option value="zh">简体中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
 <label>进入以下网站自动翻译（每行一个域名）<textarea name="autoTranslateHosts" rows="3" placeholder="example.org"></textarea></label>
 <p class="muted">快捷键 Alt+A：翻译/恢复；Alt+W：整页翻译。Chrome 允许在扩展快捷键管理页重新设置。网站例外规则优先于自动翻译。</p></section>
+<section class="panel" id="browserModelSettings"><h2>Chrome 内置翻译（免 API Key）</h2>
+<p class="muted">Chrome 138+ 桌面版提供内置 Translator API。它可在首次主动下载语言包后于浏览器设备上翻译，不需要自行安装 Python、注册翻译 API 或部署云端服务；不支持或下载失败时请选云端/其他翻译引擎。Chrome 语言包可能占用设备空间，不能承诺在所有浏览器可用。</p>
+<label>安装语言包的原文语言<select id="nativeModelSource">
+<option value="en">English</option><option value="zh">简体中文</option><option value="fr">Français</option>
+<option value="de">Deutsch</option><option value="es">Español</option><option value="ja">日本語</option><option value="ko">한국어</option>
+</select></label>
+<p class="muted">目标语言使用上方“目标语言”设置；例如英语→中文。自动识别原文仍通过 Chrome 的语言检测功能完成。</p>
+<div class="buttons"><button type="button" id="nativeModelCheck">检查语言包可用性</button>
+<button type="button" id="nativeModelDownload">主动下载／启用选中语言包</button></div>
+<p id="nativeModelStatus" role="status" aria-live="polite" class="muted"></p>
+</section>
 <section id="standardKeys" class="panel"><h2>常规翻译凭据</h2><p class="muted">PIT 云端模型需要先部署 Cloudflare Worker，并绑定 Workers AI。未部署时不能使用；本模式不要求本机 Python。</p><label>PIT 云端 Worker HTTPS 地址<input name="cloudEndpoint" type="url" spellcheck="false" placeholder="https://pit-translate.yourname.workers.dev"></label><label>PIT 云端访问令牌（Worker PIT_ACCESS_TOKEN）<input name="cloudToken" type="password" autocomplete="off" placeholder="至少 16 个随机字符"></label>
 <label>Microsoft Key<input name="microsoftKey" type="password" autocomplete="off" placeholder="仅存于本地浏览器"></label>
 <label>Microsoft Region（全球单服务资源可留空）<input name="microsoftRegion" type="text" placeholder="例如 eastus"></label>
