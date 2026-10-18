@@ -18,7 +18,7 @@
 
   let active = false, currentId = 0, mode = 'standard';
   let observer = null, observedRoots = new Set();
-  let busy = false, queued = false, timer = null;
+  let busySession = null, queued = false, timer = null;
   let aiCount = 0, standardSpent = 0, standardBudget = 600;
   let failedBatches=0, lastError='', succeededBatches=0;
   const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70, STANDARD_STEP = 600;
@@ -136,7 +136,7 @@
       skippedOversized,
       coveragePercent:(eligible+skippedOversized)
         ?Math.round(10000*translated/(eligible+skippedOversized))/100:null,
-      failedBatches,succeededBatches,busy,lastError,
+      failedBatches,succeededBatches,busy:busySession===currentId,lastError,
       budgetRemaining:mode==='standard'?Math.max(0,standardBudget-standardSpent):
         Math.max(0,AI_MAX_PER_ACTION-aiCount)
     };
@@ -266,8 +266,10 @@
   }
   async function translateContent(id){
     if(!active || id!==currentId)return;
-    if(busy){queued=true;return;}
-    busy=true;
+    if(busySession===id){queued=true;return;}
+    // A superseded provider request can take many seconds to settle.
+    // Never let that old session block the user's new START after RESTORE.
+    busySession=id;
     try{
       const limit=mode==='ai' ? Math.max(0,AI_MAX_PER_ACTION-aiCount)
         : Math.min(STANDARD_BATCH,Math.max(0,standardBudget-standardSpent));
@@ -311,15 +313,19 @@
         toast('翻译失败：'+lastError);
       }
     }finally{
-      busy=false;
-      if(queued && active){
-        queued=false;schedule(currentId,200);
+      // A prior session may complete after a new one has started. It must
+      // neither clear the new session's busy state nor schedule its queue.
+      if(busySession===id){
+        busySession=null;
+        if(queued && active && currentId===id){
+          queued=false;schedule(id,200);
+        }
       }
     }
   }
   function restore(){
     active=false;currentId++;
-    clearTimeout(timer);timer=null;queued=false;
+    clearTimeout(timer);timer=null;queued=false;busySession=null;
     observer?.disconnect();observer=null;observedRoots.clear();
     for(const root of roots()){
       root.querySelectorAll('.pit-translation').forEach(node=>node.remove());
