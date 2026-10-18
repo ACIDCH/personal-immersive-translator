@@ -273,7 +273,35 @@ async function handle(message, sender) {
   if(message.type==='PIT_PUBLIC_PREFERENCES'){
     if(!sender.tab)throw new TranslationError('只允许网站的原生内容脚本读取非敏感阅读偏好');
     const settings=await getSettings();
-    const blocked=(settings.blockedHosts||'').split(/[\s,;]+/).filter(Boolean);
+    let standardReady=isStandardServiceConfigured(settings);
+    let browserModelStatus=null;
+    if(settings.standardProvider==='browser'&&standardReady){
+      try{
+        const host=new URL(sender.url||sender.tab.url).hostname;
+        // Check language pack readiness only for sites the owner explicitly
+        // added to auto-translate: page loads must not download models.
+        if(hostIsBlocked(host,settings.autoTranslateHosts)&&
+           !hostIsBlocked(host,settings.blockedHosts)){
+          const source=settings.source==='auto'
+            ? (await tabLanguageHint(sender))||
+              normalizeDetectedLanguage(message.pageLanguage)
+            : settings.source;
+          if(!source||source===settings.target){
+            standardReady=false;
+            browserModelStatus=source===settings.target
+              ? 'already_target_language':'source_unknown';
+          }else{
+            await nativeOffscreenReady();
+            const probe=await chrome.runtime.sendMessage({
+              target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_STATUS',
+              source,target:settings.target
+            });
+            browserModelStatus=probe?.ok?probe.status:'unavailable';
+            standardReady=browserModelStatus==='available';
+          }
+        }
+      }catch{standardReady=false;browserModelStatus='diagnostic_failed';}
+    }
     return {preferences:{
       webDisplay:settings.webDisplay,webScope:settings.webScope,
       sourceLanguage:settings.source,targetLanguage:settings.target,
@@ -284,7 +312,7 @@ async function handle(message, sender) {
       // No API keys or provider auth tokens are returned to content scripts.
       blockedHosts:settings.blockedHosts,
       standardProvider:settings.standardProvider,
-      standardReady:isStandardServiceConfigured(settings)
+      standardReady,browserModelStatus
     }};
   }
   if(message.type==='PIT_BROWSER_STATUS'){
