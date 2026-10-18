@@ -188,6 +188,21 @@ async function nativeLanguagePack(download){
         checked?.status||'unknown')+'。请改选在线备用服务。';
  }catch(error){status.textContent='内置模型准备失败：'+String(error.message||error);}
 }
+// Explicit fallback after Chrome denies or cannot download an on-device pack.
+// Never send website text to a third party just because a local model failed.
+pick('nativeFallbackMyMemory').addEventListener('click',async()=>{
+ const output=pick('nativeModelStatus');
+ try{
+  const provider=form.elements.namedItem('standardProvider');
+  if(!provider)throw Error('常规翻译服务选项不存在');
+  provider.value='mymemory';
+  const saved=await saveSettings();
+  if(saved.standardProvider!=='mymemory')throw Error('在线备用翻译设置没有保存');
+  output.textContent='已主动切换至 MyMemory 在线备用翻译：翻译原文将发送第三方服务，每日限额 4,500 字符；AI 仍需单独启用。';
+ }catch(error){
+  output.textContent='备用翻译切换失败：'+String(error?.message||error);
+ }
+});
 pick('nativeModelCheck').addEventListener('click',()=>void nativeLanguagePack(false));
 pick('nativeModelDownload').addEventListener('click',()=>void nativeLanguagePack(true));
 // Backup is intentionally an allowlisted preference snapshot, never a
