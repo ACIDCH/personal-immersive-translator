@@ -64,6 +64,20 @@ async def main():
                       flush=True)
 
 
+                # User-click-only public fallback: confirm a real saved engine
+                # switch, no implicit remote request or paid AI selection.
+                await options.locator('#nativeFallbackMyMemory').click()
+                await options.locator('#nativeModelStatus').get_by_text(
+                    '已主动切换至 MyMemory', exact=False).wait_for(timeout=8000)
+                fallback=await options.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert fallback["standardProvider"]=="mymemory", fallback
+                assert fallback["autoAI"] is False, fallback
+                # Restore default on-device preference for subsequent tests.
+                await options.locator('[name="standardProvider"]').select_option("browser")
+                await options.get_by_role("button",name="保存设置").click()
+                await options.get_by_text("设置已保存。").wait_for(timeout=8000)
                 # Initial settings have no self-hosted Worker endpoint.
                 # The owner must still be able to save reading preferences.
                 await options.locator('[name="webDisplay"]').select_option("translation-only")
