@@ -199,6 +199,7 @@ async function handle(message, sender) {
     const blocked=(settings.blockedHosts||'').split(/[\s,;]+/).filter(Boolean);
     return {preferences:{
       webDisplay:settings.webDisplay,webScope:settings.webScope,
+      sourceLanguage:settings.source,targetLanguage:settings.target,
       translationTheme:settings.translationTheme,hoverTranslate:settings.hoverTranslate,
       floatingControl:settings.floatingControl,
       inputTranslate:settings.inputTranslate,inputTarget:settings.inputTarget,
