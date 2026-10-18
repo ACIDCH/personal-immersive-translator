@@ -21,6 +21,7 @@ export function NativeWebControls(){
  const [progress,setProgress]=useState<Progress|null>(null);
  const [working,setWorking]=useState(false);
  const [siteAccessNeeded,setSiteAccessNeeded]=useState(false);
+ const [siteRules,setSiteRules]=useState<{hostname:string;automatic:boolean;blocked:boolean}|null>(null);
  const [tabId,setTabId]=useState<number|null>(null);
  const timer=useRef<ReturnType<typeof setInterval>|null>(null);
  const latest=useRef(0);
@@ -32,6 +33,15 @@ export function NativeWebControls(){
      if(!active||!settings)return;
      setDisplay(settings.webDisplay==='translation-only'?'translation-only':'bilingual');
      setScope(settings.webScope==='full'?'full':'smart');
+     void browser.tabs.query({active:true,currentWindow:true}).then(([tab])=>{
+       if(!active||!tab?.url||!/^https?:\/\//.test(tab.url))return;
+       const hostname=new URL(tab.url).hostname.toLowerCase();
+       const rules=(value:unknown)=>String(value||'').toLowerCase()
+         .split(/[\s,;]+/).filter(Boolean);
+       setSiteRules({hostname,
+         automatic:rules(settings.autoTranslateHosts).includes(hostname),
+         blocked:rules(settings.blockedHosts).includes(hostname)});
+     }).catch(()=>{});
      if(settings.standardProvider==='cloud'&&
        (!settings.cloudEndpoint||!settings.cloudToken)){
        setStatus('云端翻译未部署/配置。请先在「配置翻译服务」填写已部署的 PIT Worker 地址与访问令牌；当前没有可用的默认翻译引擎。');
@@ -72,6 +82,33 @@ export function NativeWebControls(){
      setStatus(key==='webDisplay'?'阅读模式已保存并应用于当前已翻译段落。':
        '翻译范围已保存，下次开启网页翻译时生效。');
    }catch(error){setStatus('阅读设置保存失败：'+String(error instanceof Error?error.message:error));}
+ }
+ async function toggleSiteRule(key:'autoTranslateHosts'|'blockedHosts'){
+   if(!siteRules)return;
+   try{
+     const old=(await browser.storage.local.get('pit_settings_v1')).pit_settings_v1||{};
+     const hostname=siteRules.hostname;
+     const list=(value:unknown)=>String(value||'').toLowerCase()
+       .split(/[\s,;]+/).filter(Boolean);
+     const auto=new Set(list(old.autoTranslateHosts));
+     const blocked=new Set(list(old.blockedHosts));
+     const group=key==='autoTranslateHosts'?auto:blocked;
+     if(group.has(hostname))group.delete(hostname);
+     else{
+       group.add(hostname);
+       if(key==='autoTranslateHosts')blocked.delete(hostname);
+       else auto.delete(hostname);
+     }
+     await browser.storage.local.set({pit_settings_v1:{
+       ...old,autoTranslateHosts:[...auto].join('\n'),blockedHosts:[...blocked].join('\n')
+     }});
+     setSiteRules({hostname,automatic:auto.has(hostname),blocked:blocked.has(hostname)});
+     if(blocked.has(hostname)){
+       const [tab]=await browser.tabs.query({active:true,currentWindow:true});
+       if(tab?.id)await browser.tabs.sendMessage(tab.id,{type:'PIT_RESTORE'}).catch(()=>{});
+     }
+     setStatus('已更新 '+hostname+' 的站点规则。自动翻译从重新加载该页面起生效。');
+   }catch(error){setStatus('站点规则保存失败：'+String(error instanceof Error?error.message:error));}
  }
  async function run(action:'PIT_START'|'PIT_CONTINUE'|'PIT_SELECTION'|'PIT_RESTORE'){
    if(working)return;
@@ -335,6 +372,17 @@ export function NativeWebControls(){
    </section>}
    {feature==='settings'&&<section className="pit-feature-section" aria-label="翻译设置与诊断">
      <p className="native-hint">阅读显示、悬停、输入框、自动站点、语言识别、机器翻译、AI 模型和云端配置统一由完整设置页面管理。</p>
+     {siteRules&&<div className="pit-site-rule">
+       <strong>当前网站：{siteRules.hostname}</strong>
+       <div className="native-actions">
+         <button type="button" onClick={()=>void toggleSiteRule('autoTranslateHosts')}>
+           {siteRules.automatic?'取消本站自动翻译':'自动翻译此网站'}
+         </button>
+         <button type="button" onClick={()=>void toggleSiteRule('blockedHosts')}>
+           {siteRules.blocked?'解除本站禁用':'禁用此网站翻译'}
+         </button>
+       </div>
+     </div>}
      <div className="native-actions">
        <button type="button" onClick={()=>void browser.runtime.openOptionsPage()}>打开完整设置</button>
        <button type="button" onClick={()=>void browser.tabs.create({url:'chrome://extensions/shortcuts'})}>快捷键管理</button>
