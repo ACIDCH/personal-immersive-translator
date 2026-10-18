@@ -22,6 +22,7 @@
   let aiCount = 0, standardSpent = 0, standardBudget = 600;
   let failedBatches=0, lastError='', succeededBatches=0;
   const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70, STANDARD_STEP = 600;
+  const MAX_PARAGRAPH_CHARS = 120000; // 38 bounded 3,200-char segments maximum
 
   function roots() {
     const found=[document],pending=[document],seen=new Set(found);
@@ -72,7 +73,7 @@
     // Avoid numeric-only UI counters while retaining short article headings
     // and normal CJK text. The former 12-character minimum discarded a large
     // class of legitimate short paragraphs without reporting any failure.
-    if(original.length>20000||!/[\p{L}]/u.test(original))return false;
+    if(original.length>MAX_PARAGRAPH_CHARS||!/[\p{L}]/u.test(original))return false;
     const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
@@ -105,19 +106,28 @@
   // Actual DOM coverage is measured, not inferred from a successful
   // translate-command response. No original text is returned in these stats.
   function coverage() {
-    let eligible=0,translated=0;
+    let eligible=0,translated=0,skippedOversized=0;
     for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
       if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
+      if(original.length>MAX_PARAGRAPH_CHARS && /[\p{L}]/u.test(original)){
+        // Do not report 100% coverage when giant/possibly generated blocks
+        // were deliberately not sent to a provider.
+        skippedOversized++;
+        continue;
+      }
       if(!translatable(el,original))continue;
       eligible++;
       const done=processed.get(el);
       if(done && done.source===original && done.node?.isConnected)translated++;
     }
     return {
-      active,mode,eligible,translated,remaining:Math.max(0,eligible-translated),
-      coveragePercent:eligible?Math.round(10000*translated/eligible)/100:null,
+      active,mode,eligible:eligible+skippedOversized,translated,
+      remaining:Math.max(0,eligible-translated)+skippedOversized,
+      skippedOversized,
+      coveragePercent:(eligible+skippedOversized)
+        ?Math.round(10000*translated/(eligible+skippedOversized))/100:null,
       failedBatches,succeededBatches,busy,lastError,
       budgetRemaining:mode==='standard'?Math.max(0,standardBudget-standardSpent):
         Math.max(0,AI_MAX_PER_ACTION-aiCount)
