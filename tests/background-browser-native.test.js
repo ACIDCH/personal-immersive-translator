@@ -162,6 +162,25 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(unknownCaption.ok,false,
   'Unknown short subtitles must not silently inherit the host UI language');
 
+ // Cache identity must distinguish page-language fallback for otherwise
+ // ambiguous short labels on separate, differently-language tabs.
+ chrome.tabs.detectLanguage=async id=>id===13?'fr':'de';
+ const beforeCrossSite=requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').length;
+ const frenchMenu=await call({type:'TRANSLATE_BATCH',mode:'standard',
+  texts:['Menu'],pageContext:'article'});
+ assert.equal(frenchMenu.ok,true,JSON.stringify(frenchMenu));
+ const germanMenu=await call({type:'TRANSLATE_BATCH',mode:'standard',
+  texts:['Menu'],pageContext:'article'},{
+   id:chrome.runtime.id,
+   tab:{id:17,url:'https://example.org/de/lesson'},
+   url:'https://example.org/de/lesson'
+  });
+ assert.equal(germanMenu.ok,true,JSON.stringify(germanMenu));
+ const pageCalls=requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE')
+   .slice(beforeCrossSite);
+ assert.deepEqual(pageCalls.map(x=>x.source),['fr','de'],
+   'same short text must not return cached French translation on German tab');
+
  // Owner opts in explicitly. Public external MT must be quota bounded across
  // multiple concurrent webpage requests, with no paid AI fallback.
  values.set('pit_settings_v1',{standardProvider:'mymemory',source:'en',target:'zh'});
