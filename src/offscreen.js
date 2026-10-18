@@ -4,6 +4,7 @@
  */
 import {encodeMonoPcm16,averageEnergy,resampleChunks,ASR_SAMPLE_RATE} from './lib/wav.js';
 import {LiveStats,BoundedAudioQueue,makeAudioContext,MAX_ASR_REQUESTS,asrLimitReached} from './lib/live-pipeline.js';
+import {translateWithNative} from './lib/browser-native.js';
 const SEGMENT_MS=3000;
 let current=null;
 let epoch=0;
@@ -194,6 +195,13 @@ async function start({streamId,tabId,token,sessionId,asrBackend='local',cloudEnd
 }
 chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
   if(msg?.target!=='offscreen')return false;
+  if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE'){
+    translateWithNative(msg.texts,{source:msg.source,target:msg.target})
+      .then(translations=>respond({ok:true,translations}))
+      .catch(error=>respond({ok:false,error:String(error.message||error),
+        code:String(error.code||'native_failed')}));
+    return true;
+  }
   if(msg.type==='PIT_OFFSCREEN_START'){
     start(msg).then(respond).catch(e=>respond({ok:false,error:String(e.message||e)}));
     return true;
