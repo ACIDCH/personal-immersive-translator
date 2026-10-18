@@ -89,7 +89,14 @@ export async function translateWithNative(texts,{source,target,api=globalThis.Tr
     throw Error('Empty translation');
    translations.push(translation);
   }catch(error){
-   // Some Chrome model sessions become invalid after memory pressure or a\n   // language-pack update. Never leave a poisoned session in the cache.\n   const key=source+'>'+target;\n   if(sessions.get(key)===translator){\n    sessions.delete(key);\n    try{translator.destroy?.();}catch{}\n   }\n   throw new NativeTranslationUnavailable('浏览器内置翻译执行失败，已清理失效会话；请重试或切换在线服务','translate_failed');
+   // Some Chrome model sessions become invalid after memory pressure or a
+   // language-pack update. Never leave a poisoned session in the cache.
+   const key=source+'>'+target;
+   if(sessions.get(key)===translator){
+    sessions.delete(key);
+    try{translator.destroy?.();}catch{}
+   }
+   throw new NativeTranslationUnavailable('浏览器内置翻译执行失败，已清理失效会话；请重试或切换在线服务','translate_failed');
   }
  }
  return translations;
