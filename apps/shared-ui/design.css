@@ -40,3 +40,7 @@ footer{color:#7188aa;font-size:11px;margin-top:18px;line-height:1.5}
 .pit-reader-console .native-status{margin-top:14px;padding:9px 10px;border:1px solid #32475f;border-radius:9px;background:#142239;min-height:39px}
 .pit-reader-console .hero{margin-bottom:16px}
 .pit-reader-console footer{border-top:1px solid #243750;padding-top:12px}
+
+.pit-site-rule{margin:14px 0;padding:11px;border:1px solid #334b68;border-radius:10px;background:#14263e}
+.pit-site-rule strong{color:#dceafa;font-size:12px;word-break:break-word}
+.pit-site-rule .native-actions{margin-top:8px}
