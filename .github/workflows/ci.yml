@@ -66,6 +66,8 @@ jobs:
         run: python tests/web_stability_e2e.py
       - name: Check automatic provider-call budget and manual continuation
         run: python tests/web_request_budget_e2e.py
+      - name: Check lossless CJK and Latin long-paragraph reconstruction
+        run: python tests/web_long_paragraph_e2e.py
       - name: Run YouTube Netflix Panopto simulated player compatibility
         run: python tests/player_compat_e2e.py
       - name: Run real Chrome ASR subtitle backpressure and latency UI test
