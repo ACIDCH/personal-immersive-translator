@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import type {ChangeEvent} from 'react';
 import type {OcrRegion} from './imageTranslate';
 
@@ -29,6 +29,7 @@ function downloadFile(bytes:Uint8Array,name:string){
 export function DocumentLab(){
   const [mode,setMode]=useState<Engine>('docx');
   const [file,setFile]=useState<File|null>(null);
+  const pickerRef=useRef<HTMLInputElement|null>(null);
   const [language,setLanguage]=useState<OCRLanguage>('eng');
   const [text,setText]=useState('');
   const [message,setMessage]=useState('文件仅在当前浏览器读取；翻译前需自行选择服务。');
@@ -69,12 +70,16 @@ export function DocumentLab(){
     });
     return ()=>{mounted=false;};
   },[extensionFileLab]);
+  function selectEngine(next:Engine){
+    setMode(next);setFile(null);setText('');setProgress('');setOcrRegions([]);
+    if(pickerRef.current)pickerRef.current.value='';
+  }
   function onSelect(event:ChangeEvent<HTMLInputElement>){
     const selected=event.target.files?.[0]??null;
     setText('');setProgress('');setOcrRegions([]);
     if(!selected){setFile(null);setMessage('请选择文件');return;}
     if(selected.size>MAX_BYTES){
-      setFile(null);setMessage('文件超过 12 MiB 限制');return;
+      setFile(null);event.currentTarget.value='';setMessage('文件超过 12 MiB 限制');return;
     }
     // Detect the expected parser from the filename and verify its actual
     // structure during parsing. This is not a MIME/content signature audit.
@@ -83,7 +88,7 @@ export function DocumentLab(){
     const detected:Engine|null=match?match[1] as Engine:
       /\.(png|jpe?g|webp|bmp)$/.test(name)?'ocr':null;
     if(!detected){
-      setFile(null);setMessage('此工作台仅支持 DOCX、PPTX、XLSX 与 PNG/JPG/WEBP/BMP；PDF、EPUB、TXT 请使用对应文件模块。');
+      setFile(null);event.currentTarget.value='';setMessage('此工作台仅支持 DOCX、PPTX、XLSX 与 PNG/JPG/WEBP/BMP；PDF、EPUB、TXT 请使用对应文件模块。');
       return;
     }
     setMode(detected);
@@ -192,13 +197,13 @@ export function DocumentLab(){
     <h2>文件与图片处理</h2>
     <p>DOCX、PPTX、XLSX 文档文字提取与结构保留翻译；图片 WASM OCR 和双语 PNG。学术 PDF 保真需独立处理服务。</p>
     <div className="native-modes">
-      <button type="button" aria-pressed={mode==='docx'} onClick={()=>{setMode('docx');setFile(null);setText('');setProgress('');}}>DOCX 文档</button>
-      <button type="button" aria-pressed={mode==='pptx'} onClick={()=>{setMode('pptx');setFile(null);setText('');setProgress('');}}>PPTX 演示文稿</button>
-      <button type="button" aria-pressed={mode==='xlsx'} onClick={()=>{setMode('xlsx');setFile(null);setText('');setProgress('');}}>XLSX 表格</button>
-      <button type="button" aria-pressed={mode==='ocr'} onClick={()=>{setMode('ocr');setFile(null);setText('');setProgress('');}}>图片 OCR</button>
+      <button type="button" aria-pressed={mode==='docx'} onClick={()=>selectEngine('docx')}>DOCX 文档</button>
+      <button type="button" aria-pressed={mode==='pptx'} onClick={()=>selectEngine('pptx')}>PPTX 演示文稿</button>
+      <button type="button" aria-pressed={mode==='xlsx'} onClick={()=>selectEngine('xlsx')}>XLSX 表格</button>
+      <button type="button" aria-pressed={mode==='ocr'} onClick={()=>selectEngine('ocr')}>图片 OCR</button>
     </div>
     <label className="document-field">选择文件（自动切换 DOCX / PPTX / XLSX / 图片模式，最多 12 MiB）
-      <input type="file" accept=".docx,.pptx,.xlsx,.png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" onChange={onSelect}/>
+      <input ref={pickerRef} type="file" accept=".docx,.pptx,.xlsx,.png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" onChange={onSelect}/>
     </label>
     {mode==='ocr'&&<label className="document-field">识别语言
       <select value={language} onChange={e=>setLanguage(e.target.value as OCRLanguage)}>
