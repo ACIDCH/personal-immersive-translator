@@ -6,6 +6,8 @@ binary on a PDF fixture and verifies output. This suite tests cloud
 authentication, payload validation, language inference and response.
 """
 import os
+import time
+import threading
 import unittest
 from unittest.mock import patch
 import fitz
@@ -70,6 +72,61 @@ class CloudDocumentTests(unittest.TestCase):
         with fitz.open(stream=res.content,filetype="pdf") as doc:
             self.assertEqual(len(doc),13)
         self.assertEqual(calls,[("en","zh",True)])
+
+    def test_ephemeral_async_job_polling_result_and_single_worker_limit(self):
+        sample=fixture(pages=13)
+        engaged=threading.Event()
+        release=threading.Event()
+        calls=[]
+
+        def engine(original,directory,source,target,ocr):
+            calls.append((source,target,ocr))
+            engaged.set()
+            if not release.wait(timeout=8):
+                raise RuntimeError("Fake renderer was not released")
+            return sample
+
+        cloud.jobs.clear()
+        try:
+            with patch.object(cloud,"run_pipeline",side_effect=engine), TestClient(cloud.app) as client:
+                data={"source":"en","target":"zh","ocr":"true"}
+                upload={"pdf":("finance.pdf",sample,"application/pdf")}
+                self.assertEqual(client.get("/v1/pdf/jobs/unknown").status_code,401)
+                create=client.post("/v1/pdf/jobs",headers=self.auth,
+                    data=data,files=upload)
+                self.assertEqual(create.status_code,202,create.text)
+                job=create.json()
+                self.assertEqual(job["status"],"queued")
+                self.assertEqual(job["storage"],"ephemeral-single-process")
+                job_id=job["jobId"]
+                self.assertTrue(engaged.wait(timeout=4),"Background BabelDOC task did not start")
+                current=client.get("/v1/pdf/jobs/"+job_id,headers=self.auth)
+                self.assertEqual(current.status_code,200)
+                self.assertEqual(current.json()["status"],"running")
+                busy=client.post("/v1/pdf/jobs",headers=self.auth,data=data,files=upload)
+                self.assertEqual(busy.status_code,429)
+                premature=client.get("/v1/pdf/jobs/"+job_id+"/result",headers=self.auth)
+                self.assertEqual(premature.status_code,409)
+                release.set()
+                finished=None
+                for _ in range(100):
+                    check=client.get("/v1/pdf/jobs/"+job_id,headers=self.auth)
+                    if check.json()["status"]=="completed":
+                        finished=check.json()
+                        break
+                    time.sleep(0.03)
+                self.assertIsNotNone(finished,"Asynchronous PDF result never completed")
+                self.assertEqual(finished["detectedSource"],"en")
+                download=client.get("/v1/pdf/jobs/"+job_id+"/result",headers=self.auth)
+                self.assertEqual(download.status_code,200)
+                self.assertEqual(download.headers["content-type"],"application/pdf")
+                self.assertEqual(download.headers["x-pit-detection-confidence"],"explicit")
+                with fitz.open(stream=download.content,filetype="pdf") as translated:
+                    self.assertEqual(len(translated),13)
+                self.assertEqual(calls,[("en","zh",True)])
+        finally:
+            release.set()
+            cloud.jobs.clear()
 
     def test_auto_script_zh_and_ja(self):
         self.assertEqual(cloud.infer_source(fixture("这是中国金融市场发展趋势"))[0],"zh")
