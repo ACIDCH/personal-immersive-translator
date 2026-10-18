@@ -30,7 +30,7 @@ export function chooseDetectedLanguage(result,sourceText){
    return {language:'auto',confidence:'ambiguous'};
  return {language,confidence:'chrome-cld'};
 }
-export async function detectLanguages(texts,detector=globalThis.chrome?.i18n?.detectLanguage){
+export async function detectLanguages(texts,detector=globalThis.chrome?.i18n?.detectLanguage?.bind(globalThis.chrome.i18n)){
  if(!Array.isArray(texts))throw Error('Invalid language-detection input');
  if(typeof detector!=='function')
    return texts.map(()=>({language:'auto',confidence:'not-available'}));
