@@ -7,7 +7,18 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
     const data = await chrome.storage.local.get(SETTINGS_KEY);
-    if (!data[SETTINGS_KEY]) await chrome.storage.local.set({[SETTINGS_KEY]: normalizeSettings()});
+    if (!data[SETTINGS_KEY]){
+      await chrome.storage.local.set({[SETTINGS_KEY]: normalizeSettings()});
+    }else if(data[SETTINGS_KEY]?.standardProvider==='cloud' &&
+             !String(data[SETTINGS_KEY].cloudEndpoint||'').trim() &&
+             !String(data[SETTINGS_KEY].cloudToken||'').trim()){
+      // Earlier PIT builds defaulted to an undeployed empty Worker and could
+      // never translate. Migrate only this unusable legacy selection to local
+      // Chrome; retain actual configured cloud accounts and every other pref.
+      await chrome.storage.local.set({[SETTINGS_KEY]: {
+        ...normalizeSettings(data[SETTINGS_KEY]),standardProvider:'browser'
+      }});
+    }
   } catch (error) { console.warn('PIT setup failed', error); }
 });
 chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});

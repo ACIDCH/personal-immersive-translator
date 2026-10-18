@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 
 test('MV3 background routes default browser MT to offscreen with real CLD hints, no remote API key',async()=>{
  let messageListener=null,opening=0,requests=[],network=0,nativeStatus='downloadable';
+ const onInstalled=[];
  const values=new Map([['pit_settings_v1',{
   standardProvider:'browser',source:'auto',target:'zh'}]]);
  globalThis.chrome={
   runtime:{
    id:'pit-native-engine-fixture',
    getURL:path=>'chrome-extension://pit-native-engine-fixture/'+path,
-   onInstalled:{addListener(){}},onMessage:{addListener(fn){messageListener=fn;}},
+   onInstalled:{addListener(fn){onInstalled.push(fn);}},onMessage:{addListener(fn){messageListener=fn;}},
    async sendMessage(msg){
     requests.push(msg);
     if(msg.type==='PIT_OFFSCREEN_PING')
@@ -42,8 +43,8 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
      if(key==='pit_settings_v1')return {pit_settings_v1:values.get(key)};
      return {};
     },
-    set:async()=>{},
-    remove:async()=>{}
+    set:async data=>{for(const [key,val] of Object.entries(data))values.set(key,val);},
+    remove:async key=>values.delete(key)
    },
    session:{get:async()=>({}),set:async()=>{},remove:async()=>{}}
   },
@@ -51,6 +52,19 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  };
  globalThis.fetch=async()=>{network++;throw Error('Browser MT must not use remote provider');};
  await import('../src/background.js');
+ const obsolete={standardProvider:'cloud',source:'fr',target:'zh',
+  cloudEndpoint:'',cloudToken:''};
+ values.set('pit_settings_v1',obsolete);
+ for(const handler of onInstalled)await handler({reason:'update'});
+ assert.equal(values.get('pit_settings_v1').standardProvider,'browser');
+ assert.equal(values.get('pit_settings_v1').source,'fr','migration retains reading language');
+ const configured={...obsolete,cloudEndpoint:'https://my-worker.example',
+  cloudToken:'valid-private-key-12345'};
+ values.set('pit_settings_v1',configured);
+ for(const handler of onInstalled)await handler({reason:'update'});
+ assert.equal(values.get('pit_settings_v1').standardProvider,'cloud',
+  'never rewrite a real configured provider');
+ values.set('pit_settings_v1',{standardProvider:'browser',source:'auto',target:'zh'});
  const call=(message,sender={id:chrome.runtime.id,
    tab:{id:13,url:'https://example.org/course'},
    url:'https://example.org/course'})=>
