@@ -31,9 +31,9 @@ async function nativeOffscreenReady(){
 }
 function fallbackNativeSource(text){
  const s=String(text||'');
- if(/[\\u3040-\\u30ff]/.test(s))return 'ja';
- if(/[\\uac00-\\ud7af]/.test(s))return 'ko';
- if(/[\\u3400-\\u9fff]/.test(s))return 'zh';
+ if(/[ぁ-ヿ]/u.test(s))return 'ja';
+ if(/[가-힣]/u.test(s))return 'ko';
+ if(/[㐀-鿿]/u.test(s))return 'zh';
  // Short English UI headings have too little statistical evidence.
  // Longer ambiguous Latin documents must not be silently called English.
  if(s.length<32&&/[a-z]/i.test(s))return 'en';
