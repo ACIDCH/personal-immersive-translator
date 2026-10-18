@@ -4,6 +4,7 @@ import {browser} from '#imports';
 type Mode='standard'|'ai';
 type Progress={
   eligible:number;translated:number;remaining:number;coveragePercent:number|null;
+  skippedOversized?:number;
   succeededBatches:number;failedBatches:number;busy:boolean;lastError:string;
 };
 const rootFile='pit-native.js';
@@ -351,6 +352,7 @@ export function NativeWebControls(){
      {progress&&<p role="status" className="native-progress">正文覆盖 {progress.translated}/{progress.eligible}
        （{progress.coveragePercent===null?'暂无':progress.coveragePercent+'%'}）；未处理 {progress.remaining}；
        成功批次 {progress.succeededBatches}，失败批次 {progress.failedBatches}
+       {progress.skippedOversized?' · 超过单段 12 万字符的内容 '+progress.skippedOversized+' 处未翻译（请分段处理或使用文件翻译）':''}
        {progress.busy?' · 处理中':''}{progress.lastError?' · '+progress.lastError:''}
      </p>}
      <p className="native-hint">Alt+A 翻译/恢复 · Alt+W 整页阅读 · Shift+悬停可选 · 输入框连按三次空格可选。</p>
