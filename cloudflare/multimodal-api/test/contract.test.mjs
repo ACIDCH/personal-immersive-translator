@@ -113,3 +113,32 @@ test('real extension cross-origin CORS preflight permits bearer and JSON',async(
  assert.match(preflight.headers.get('access-control-allow-methods'),/POST/);
  assert.equal(preflight.headers.get('access-control-allow-origin'),'*');
 });
+
+test('accepts Chrome per-segment language hints for French and German without false English guess',async()=>{
+ const recorded=[];
+ const bound={PIT_ACCESS_TOKEN:secret,AI:{
+  run:async(model,payload)=>{recorded.push(payload);return {translated_text:'有效译文'};}
+ }};
+ const res=await api.fetch(request('/v1/translate','POST',{
+  texts:['Bonjour mes chers étudiants, bienvenue à notre cours',
+         'Die Wirtschaftsleistung und die Beschäftigung sind gestiegen'],
+  source:'auto',target:'zh',sources:['fr','de']}),bound);
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.deepEqual(body.translations,['有效译文','有效译文']);
+ assert.deepEqual(body.detected.map(d=>d.confidence),['chrome-cld','chrome-cld']);
+ assert.deepEqual(recorded.map(x=>x.source_lang),['fr','de']);
+ assert.equal(body.autoWarning,false);
+});
+test('rejects malformed or unauthorized per-segment language claims',async()=>{
+ for(const sources of [['xx'],['de','fr'],['zh']]){
+  const x=await api.fetch(request('/v1/translate','POST',{
+   texts:['Bonjour les étudiants et les professeurs'],source:'auto',target:'zh',sources
+  }),env);
+  assert.equal(x.status,400);
+ }
+ const y=await api.fetch(request('/v1/translate','POST',{
+  texts:['Financial systems'],source:'en',target:'zh',sources:['en']
+ }),env);
+ assert.equal(y.status,400);
+});
