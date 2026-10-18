@@ -104,6 +104,7 @@ async def main():
           const track=v.addTextTrack('subtitles','English','en');
           track.mode='showing';
           track.addCue(new VTTCue(0,30,'Hello world from the lecture video'));
+          track.addCue(new VTTCue(0,30,'A second overlapping lecture subtitle'));
         }""")
         popup=await ctx.new_page()
         await popup.goto(f'chrome-extension://{eid}/popup.html')
@@ -111,7 +112,11 @@ async def main():
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=10000)
         await video.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
-        await video.locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=22000)
+        await video.locator('.pit-caption-translated').get_by_text(
+          '译文:A second overlapping lecture subtitle',exact=False).wait_for(timeout=22000)
+        both=await video.locator('.pit-caption-translated').inner_text()
+        assert '译文:Hello world from the lecture video' in both,both
+        assert '译文:A second overlapping lecture subtitle' in both,both
         report['video_cues']='pass'
         await popup.get_by_role('button',name='停止字幕翻译').click()
         await video.locator('.pit-caption-overlay').wait_for(state='detached',timeout=10000)
