@@ -44,7 +44,9 @@ async def main():
                 })
                 await pdf.get_by_label('云端 PDF 原文语言').select_option('fr')
                 calls={'health':0,'upload':0,'ready':False,'valid_pdf':False,
-                       'sources':[]}
+                       'sources':[],'status':0,'download':0,'legacy':0,
+                       'async_enabled':True}
+                job_id='pit-test-pdf-job-1234567890'
                 async def fake_service(route):
                     method=route.request.method
                     if method=='OPTIONS':
@@ -59,21 +61,44 @@ async def main():
                         calls['health']+=1
                         await route.fulfill(status=200,content_type='application/json',
                             body='{"ready":'+('true' if calls['ready'] else 'false')+
+                                ',"async_jobs":'+('true' if calls['async_enabled'] else 'false')+
                                 ',"max_file_bytes":26214400}',
                             headers={'Access-Control-Allow-Origin':'*'})
-                    elif route.request.url.endswith('/v1/pdf/translate'):
+                    elif route.request.url.endswith('/v1/pdf/jobs') and method=='POST':
                         calls['upload']+=1
                         payload=route.request.post_data_buffer or b''
                         assert b'name="source"' in payload and b'\r\n\r\nfr\r\n' in payload, (
-                            'cloud request ignored the user-selected original language')
+                            'cloud job ignored the explicitly selected source language')
                         calls['sources'].append('fr')
+                        await route.fulfill(status=202,content_type='application/json',
+                            body='{"jobId":"'+job_id+'","status":"queued"}',
+                            headers={'Access-Control-Allow-Origin':'*'})
+                    elif route.request.url.endswith('/v1/pdf/jobs/'+job_id):
+                        assert method=='GET'
+                        calls['status']+=1
+                        await route.fulfill(status=200,content_type='application/json',
+                            body='{"jobId":"'+job_id+'","status":"completed",'
+                                 '"detectedSource":"fr","detectionConfidence":"explicit"}',
+                            headers={'Access-Control-Allow-Origin':'*'})
+                    elif route.request.url.endswith('/v1/pdf/jobs/'+job_id+'/result'):
+                        assert method=='GET'
+                        calls['download']+=1
                         await route.fulfill(status=200,content_type='application/pdf',
                             body=pdf_fixture() if calls['valid_pdf'] else b'INVALID_PDF_CONTENT'+b'X'*200,
-                            headers={
+                            headers={'Access-Control-Allow-Origin':'*',
+                                     'Access-Control-Expose-Headers':'X-PIT-Detected-Source,X-PIT-Detection-Confidence',
+                                     'X-PIT-Detected-Source':'fr',
+                                     'X-PIT-Detection-Confidence':'explicit'})
+                    elif route.request.url.endswith('/v1/pdf/translate'):
+                        calls['legacy']+=1
+                        assert method=='POST'
+                        payload=route.request.post_data_buffer or b''
+                        assert b'\r\n\r\nfr\r\n' in payload
+                        await route.fulfill(status=200,content_type='application/pdf',
+                            body=pdf_fixture(),headers={
                               'Access-Control-Allow-Origin':'*',
                               'X-PIT-Detected-Source':'fr',
-                              'X-PIT-Detection-Confidence':'explicit'
-                            })
+                              'X-PIT-Detection-Confidence':'explicit'})
                     else:
                         await route.fulfill(status=404)
                 await ctx.route('https://pit-docs.example.test/**',fake_service)
@@ -93,9 +118,17 @@ async def main():
                 downloaded=Path(await download.path()).read_bytes()
                 assert downloaded.startswith(b'%PDF-') and len(downloaded)>100
                 assert calls['health']==3 and calls['upload']==2,calls
+                assert calls['status']==2 and calls['download']==2,calls
                 assert calls['sources']==['fr','fr'],calls
                 await pdf.get_by_text('原文语言：fr（依据：explicit）',
                     exact=False).wait_for(timeout=10000)
+                # Older privately deployed containers still provide only
+                # the synchronous route. Their supported path must not break.
+                calls['async_enabled']=False
+                async with page.expect_download(timeout=20000) as old_info:
+                    await button.click()
+                assert (await old_info.value).suggested_filename.endswith('-babeldoc.pdf')
+                assert calls['legacy']==1 and calls['upload']==2,calls
                 assert not problems,problems
                 print('PASS: installed WXT blocks PDF upload when cloud health not ready')
                 print('PASS: installed WXT uploads only after explicit ready preflight')
