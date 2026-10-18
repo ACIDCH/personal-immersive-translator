@@ -96,7 +96,7 @@ async def main():
               }
               const p=document.createElement('p');
               p.id='oversized-paragraph';
-              p.textContent=('international financial economics and transport. ').repeat(96);
+              p.textContent=('international financial economics and transport. ').repeat(185);
               container.append(p);
               main.append(container);
             }""")
