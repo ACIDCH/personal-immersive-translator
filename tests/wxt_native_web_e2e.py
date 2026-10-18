@@ -51,6 +51,18 @@ async def main():
                 assert native["detectorReady"],native
                 print("REAL CHROME CLD:",native["languages"],
                       "; built-in Translator object:",native["translatorApi"],flush=True)
+                actual=await options.evaluate("""async()=>{
+                  return await chrome.runtime.sendMessage({
+                    type:'PIT_BROWSER_STATUS',source:'en',target:'zh'
+                  });
+                }""")
+                assert actual.get("ok") is True,actual
+                assert actual.get("status") in (
+                    "available","downloadable","downloading","unavailable"),actual
+                print("REAL CHROME OFFSCREEN Translator availability:",
+                      actual.get("status"),actual.get("reason",""),
+                      flush=True)
+
 
                 # Initial settings have no self-hosted Worker endpoint.
                 # The owner must still be able to save reading preferences.
