@@ -4,6 +4,7 @@ Network translation is mocked INSIDE the real extension service worker:
 this verifies runtime wiring without paid API traffic or user credentials.
 """
 import asyncio
+import json
 import tempfile
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -41,6 +42,32 @@ async def main():
                 await options.locator('[name="standardProvider"]').select_option("microsoft")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
+                # Exercise the real options UI, not just the pure helper:
+                # exported JSON cannot contain credentials or translation data.
+                async with options.expect_download(timeout=12000) as exported:
+                    await options.get_by_role("button",name="导出非敏感偏好 JSON").click()
+                downloaded=await exported.value
+                exported_text=Path(await downloaded.path()).read_text(encoding="utf-8")
+                snapshot=json.loads(exported_text)
+                assert snapshot["kind"]=="pit-preferences"
+                assert "fixture-only-never-sent" not in exported_text
+                assert "microsoftKey" not in exported_text
+                snapshot["settings"]["webDisplay"]="translation-only"
+                snapshot["settings"]["target"]="fr"
+                await options.locator("#importPreferences").set_input_files({
+                    "name":"pit-preferences.json","mimeType":"application/json",
+                    "buffer":json.dumps(snapshot).encode("utf-8")
+                })
+                await options.get_by_text("已预览导入的非敏感偏好",exact=False).wait_for(timeout=8000)
+                assert await options.locator('[name="webDisplay"]').input_value()=="translation-only"
+                assert await options.locator('[name="target"]').input_value()=="fr"
+                assert await options.locator('[name="microsoftKey"]').input_value()=="fixture-only-never-sent"
+                # Import only fills the form; the owner must explicitly save.
+                # Leave the previously saved English-to-Chinese fixture intact.
+                await options.locator('[name="webDisplay"]').select_option("bilingual")
+                await options.locator('[name="target"]').select_option("zh")
+                print("PASS: real options JSON export excludes credentials, import preview preserves keys")
+
                 # Replace ONLY network fetch on this temporary test service worker.
                 # All actual native message routing, cache, parsing and DOM
                 # injection execute inside Chromium.
