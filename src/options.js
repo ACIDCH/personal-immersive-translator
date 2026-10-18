@@ -1,5 +1,6 @@
 import {normalizeSettings, SETTINGS_KEY, portablePreferences, applyPortablePreferences} from './lib/settings.js';
 import {validateAIProfile} from './lib/ai-profiles.js';
+import {checkNativeTranslator,ensureNativeTranslator} from './lib/browser-native.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
 const checkboxKeys=['contextAI','hoverTranslate','inputTranslate','floatingControl'];
@@ -135,6 +136,29 @@ document.getElementById('clearCache').addEventListener('click',async()=>{
   const res=await chrome.runtime.sendMessage({type:'CLEAR_CACHE'});
   status.textContent=res.ok?'缓存已清空':'清理失败：'+res.error;
 });
+async function nativeLanguagePack(download){
+ const status=pick('nativeModelStatus');
+ const source=pick('nativeModelSource').value;
+ const target=form.elements.namedItem('target').value;
+ status.textContent='正在检查 Chrome 内置翻译模型…';
+ if(source===target){status.textContent='原文与目标语言相同，无需下载语言包。';return;}
+ try{
+  const state=await checkNativeTranslator(source,target);
+  if(!download){
+   status.textContent='Chrome '+source+' → '+target+' 语言包状态：'+state+
+     (state==='available'?'，现在可用于本机翻译。':'。点击下载按钮以主动安装（若浏览器支持）。');
+   return;
+  }
+  const translator=await ensureNativeTranslator(source,target,{allowDownload:true});
+  // Prove a result was produced before reporting model readiness.
+  const sample=source==='en'?'Hello, welcome to our class.':'PIT translation test';
+  const text=await translator.translate(sample);
+  if(!text?.trim())throw Error('模型没有返回译文');
+  status.textContent='浏览器已准备 '+source+' → '+target+' 内置语言包，测试已成功。无需翻译 API Key。';
+ }catch(error){status.textContent='内置模型准备失败：'+String(error.message||error);}
+}
+pick('nativeModelCheck').addEventListener('click',()=>void nativeLanguagePack(false));
+pick('nativeModelDownload').addEventListener('click',()=>void nativeLanguagePack(true));
 // Backup is intentionally an allowlisted preference snapshot, never a
 // copy of local browser storage. Credentials and custom AI profiles stay local.
 pick('exportPreferences').addEventListener('click',async()=>{
