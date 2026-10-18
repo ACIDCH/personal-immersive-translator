@@ -131,7 +131,7 @@ test('accepts Chrome per-segment language hints for French and German without fa
  assert.equal(body.autoWarning,false);
 });
 test('rejects malformed or unauthorized per-segment language claims',async()=>{
- for(const sources of [['xx'],['de','fr'],['zh']]){
+ for(const sources of [['xx'],['de','fr'],['zh','en']]){
   const x=await api.fetch(request('/v1/translate','POST',{
    texts:['Bonjour les étudiants et les professeurs'],source:'auto',target:'zh',sources
   }),env);
