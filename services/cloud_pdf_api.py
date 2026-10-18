@@ -27,7 +27,8 @@ from services.babeldoc_preflight import inspect_babeldoc_cli
 
 app=FastAPI(title="PIT Cloud Document",docs_url=None,redoc_url=None,openapi_url=None)
 app.add_middleware(CORSMiddleware,allow_origin_regex=r"^chrome-extension://[a-z]{32}$",
-    allow_methods=["GET","POST","OPTIONS"],allow_headers=["Authorization","Content-Type"])
+    allow_methods=["GET","POST","OPTIONS"],allow_headers=["Authorization","Content-Type"],
+    expose_headers=["X-PIT-Detected-Source","X-PIT-Detection-Confidence"])
 lock=asyncio.Lock()
 MAX_FILE=25*1024*1024
 MAX_PAGES=300
@@ -116,7 +117,7 @@ async def translate(pdf:UploadFile=File(...),source:str=Form("auto"),
     if chosen==target:
         raise HTTPException(status_code=422,
           detail="Detected source and target are identical; explicitly choose source")
-    if lock.locked():
+    if lock.locked() or any(j["status"] in ("queued","running") for j in jobs.values()):
         raise HTTPException(status_code=429,detail="Document worker is occupied")
     async with lock:
         with tempfile.TemporaryDirectory(prefix="pit-cloud-doc-") as directory:
