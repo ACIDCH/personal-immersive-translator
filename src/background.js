@@ -262,6 +262,7 @@ async function handle(message, sender) {
       autoTranslateHosts:settings.autoTranslateHosts,
       // No API keys or provider auth tokens are returned to content scripts.
       blockedHosts:settings.blockedHosts,
+      standardProvider:settings.standardProvider,
       standardReady:isStandardServiceConfigured(settings)
     }};
   }
