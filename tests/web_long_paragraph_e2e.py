@@ -25,14 +25,15 @@ async def main():
                 +'punctuation, and translation fragment boundaries. ').repeat(105).trim();
               document.querySelector('#cjk').textContent=cjk;
               document.querySelector('#latin').textContent=latin;
-              window.calls=[];
+              window.calls=[];window.trimOutputs=false;
               window.listeners=[];
               window.chrome={runtime:{
                 onMessage:{addListener:fn=>window.listeners.push(fn)},
                 sendMessage:async msg=>{
                   if(msg.type!=='TRANSLATE_BATCH')throw Error('unexpected message');
                   window.calls.push(msg.texts);
-                  return {ok:true,translations:msg.texts};
+                  return {ok:true,translations:window.trimOutputs
+                    ?msg.texts.map(s=>s.trim()):msg.texts};
                 }
               }};
               window.action=type=>new Promise(resolve=>{
@@ -60,6 +61,17 @@ async def main():
                 assert sum(map(len, batch)) <= 9500
             assert not failures, failures
             print("PASS: actual Chromium DOM preserves CJK/Latin after mock segmented translation")
+            # Real providers may trim the edges of their returned fragments.
+            await page.evaluate("()=>window.action('PIT_RESTORE')")
+            await page.evaluate("()=>{window.trimOutputs=true;}")
+            await page.evaluate("()=>window.action('PIT_START')")
+            await page.locator("#latin + .pit-translation").wait_for(timeout=25000)
+            trimmed = await page.evaluate("""() => ({
+              cjk:document.querySelector('#cjk + .pit-translation').textContent,
+              latin:document.querySelector('#latin + .pit-translation').textContent
+            })""")
+            assert trimmed["cjk"] == originals["cjk"], "trimmed CJK translation changed"
+            assert trimmed["latin"] == originals["latin"], "trimmed Latin fragments fused together"
             await page.evaluate("()=>window.action('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
         finally:
