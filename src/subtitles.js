@@ -143,7 +143,15 @@
       if (!platform) return;
       const info=platform.readVisibleCaptions(document,location.hostname);
       const text=info.text;
-      if(!text){state.latestDomText='';render('');return;}
+      if(!text){
+        state.latestDomText='';
+        // An authorized platform may not expose captions until CC is enabled
+        // or its player initializes. Stay armed rather than falsely failing.
+        // Once a caption has appeared, clear the overlay when CC disappears.
+        render(state.seenAny?'':'正在等待播放器显示原文字幕；请开启 CC 字幕。');
+        return;
+      }
+      state.seenAny=true;
       state.latestDomText=text;
       const key='dom:'+text;
       if(state.cache.has(key)){render(state.cache.get(key));return;}
@@ -266,7 +274,14 @@
       ? core.normalizeCues(imported,video.currentTime).length>0 : false;
     if(validImport && !video)return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器不提供。'};
     const track=validImport ? null : video ? chooseTrack(video) : null;
-    if(!track && !validImport && !visible?.text) return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
+    // Real platform players often create their TextTrack or visible caption
+    // layer *after* the user clicks PIT. A visible, connected video on a
+    // known adapter is enough to arm observation; no text is uploaded until
+    // caption content actually appears. Generic sites remain fail-closed.
+    const waitForPlatformCaptions=Boolean(video && video.isConnected &&
+      adapter?.id && adapter.id!=='generic');
+    if(!track && !validImport && !visible?.text && !waitForPlatformCaptions)
+      return {ok:false,reason:'当前页面没有原生字幕轨，也没有已验证的站点字幕适配器。可使用字幕文件或授权的 ASR。'};
     state.active=true;state.mode=mode;state.video=video;state.track=track;
     // Full-page SPA navigation also changes recording identity; only the
     // document fragment is ignored. An embedded player remains exactly bound
@@ -281,7 +296,7 @@
     state.overlay=createOverlay();state.cache=new core.CaptionCache(350);
     state.timer=setInterval(()=>{void tick();},450);
     void tick();
-    return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察。请打开播放器原文字幕；适配器可能随网站更新而失效。':'原生字幕翻译已启动。'};
+    return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察：将等待播放器加载/显示原文字幕，未出现字幕前不发送翻译请求。':'原生字幕翻译已启动。'};
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
     if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));
