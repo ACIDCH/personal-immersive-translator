@@ -2,6 +2,8 @@ import {useRef,useState} from 'react';
 import type {ChangeEvent} from 'react';
 import type {OcrSelection,PdfTranslationMode} from './pdfBilingual';
 
+type CloudPendingJob={jobId:string;endpoint:string;fileName:string};
+const CLOUD_JOB_KEY='pit_cloud_pdf_pending_v1';
 type MessageResult={ok?:boolean;error?:string;translations?:string[];settings?:{cloudPdfEndpoint?:string;cloudPdfToken?:string;source?:string;target?:string}};
 type BrowserRuntime={id?:string;sendMessage?:(arg:unknown)=>Promise<MessageResult>};
 const getRuntime=():BrowserRuntime|undefined=>
@@ -16,6 +18,21 @@ export function PdfBilingualLab(){
  // extracts and low-quality scans; the user must be able to override it.
  const [cloudSource,setCloudSource]=useState('auto');
  const [mode,setMode]=useState<PdfTranslationMode>('standard');
+ const [pendingJob,setPendingJob]=useState<CloudPendingJob|null>(()=>{
+   try{
+     const j=JSON.parse(localStorage.getItem(CLOUD_JOB_KEY)||'null');
+     return j&&typeof j.jobId==='string'&&/^[A-Za-z0-9_-]{16,80}$/.test(j.jobId)
+       &&typeof j.endpoint==='string'&&typeof j.fileName==='string'?j:null;
+   }catch{return null;}
+ });
+ function rememberJob(job:CloudPendingJob){
+   localStorage.setItem(CLOUD_JOB_KEY,JSON.stringify(job));
+   setPendingJob(job);
+ }
+ function forgetJob(){
+   localStorage.removeItem(CLOUD_JOB_KEY);
+   setPendingJob(null);
+ }
  const [busy,setBusy]=useState(false);
  const currentAbort=useRef<AbortController|null>(null);
  const [progress,setProgress]=useState('');
@@ -24,6 +41,68 @@ export function PdfBilingualLab(){
  const onSelect=(e:ChangeEvent<HTMLInputElement>)=>{
    setFile(e.target.files?.[0]||null);setProgress('');
  };
+ async function downloadCloudResponse(response:Response,fileName:string,
+   detectedFromJob='',confidenceFromJob=''){
+   if(!response.ok)throw Error('云端高保真 PDF HTTP '+response.status+
+     '；请检查部署、语言识别、BabelDOC 和 AI 服务额度');
+   const blob=await response.blob();
+   const signature=await blob.slice(0,5).text();
+   if(blob.type.split(';')[0].trim()!=='application/pdf'||
+      blob.size<100||signature!=='%PDF-')
+     throw Error('云端服务没有返回有效的 PDF 文件，已阻止下载。');
+   const objectUrl=URL.createObjectURL(blob);
+   const a=document.createElement('a');
+   a.href=objectUrl;
+   a.download=fileName.replace(/\\.pdf$/i,'')+'-babeldoc.pdf';
+   document.body.append(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+   const detected=response.headers.get('X-PIT-Detected-Source')||detectedFromJob||'unknown';
+   const confidence=response.headers.get('X-PIT-Detection-Confidence')||confidenceFromJob||'unreported';
+   setStatus('已下载 BabelDOC PDF；原文语言：'+detected+
+     '（依据：'+confidence+'）。请检查双栏、公式、表格和字体排版，不能仅凭下载成功判断质量。');
+ }
+ async function recoverCloudJob(){
+   if(!pendingJob||busy||!runtime?.sendMessage)return;
+   const config=await runtime.sendMessage({type:'GET_SETTINGS'});
+   const setting=config.settings||{};
+   const secret=String(setting.cloudPdfToken||'');
+   let endpoint='';
+   try{endpoint=new URL(String(setting.cloudPdfEndpoint||'')).toString().replace(/\\/$/,'');}
+   catch{setStatus('云端 PDF 服务地址无效，请先恢复原来的配置。');return;}
+   if(secret.length<16||endpoint!==pendingJob.endpoint){
+     setStatus('请恢复提交任务时使用的云容器地址与访问令牌；不会向其他服务器发送旧任务号。');
+     return;
+   }
+   const controller=new AbortController();currentAbort.current=controller;
+   setBusy(true);
+   try{
+     const path=endpoint+'/v1/pdf/jobs/'+pendingJob.jobId;
+     const headers={Authorization:'Bearer '+secret};
+     const statusResponse=await fetch(path,{headers,
+       signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)])});
+     if(statusResponse.status===404){
+       forgetJob();throw Error('服务已重启或任务已过期，需要重新上传。');
+     }
+     if(!statusResponse.ok)throw Error('任务检查失败 HTTP '+statusResponse.status);
+     const state=await statusResponse.json();
+     if(state?.jobId!==pendingJob.jobId)throw Error('云端任务号不匹配');
+     if(state.status==='failed'){
+       forgetJob();throw Error('云端翻译任务失败，需要重新上传文件。');
+     }
+     if(state.status==='queued'||state.status==='running'){
+       setStatus('云端任务仍'+(state.status==='queued'?'在排队':'在运行')+
+         '；暂未重新上传。完成后再次点击“取回上次任务”。');
+       return;
+     }
+     if(state.status!=='completed')throw Error('云端返回无效任务状态');
+     const downloaded=await fetch(path+'/result',{headers,signal:controller.signal});
+     await downloadCloudResponse(downloaded,pendingJob.fileName,
+       String(state.detectedSource||''),String(state.detectionConfidence||''));
+     forgetJob();
+   }catch(error){
+     setStatus('检查上次 PDF 任务失败：'+String(error instanceof Error?error.message:error));
+   }finally{currentAbort.current=null;setBusy(false);}
+ }
  async function runCloud(){
    if(!file||busy||!runtime?.sendMessage)return;
    const config=await runtime.sendMessage({type:'GET_SETTINGS'});
@@ -92,6 +171,10 @@ export function PdfBilingualLab(){
        const jobId=String(initial?.jobId||'');
        if(!/^[A-Za-z0-9_-]{16,80}$/.test(jobId))
          throw Error('云端未返回有效文档任务 ID');
+       // The token stays in PIT Settings. Keep only a short-lived pointer
+       // so refreshing this window never forces a duplicate paid upload.
+       rememberJob({jobId,endpoint:url.toString().replace(/\\/$/,''),
+         fileName:file.name});
        const stateUrl=new URL(jobsUrl.toString());
        stateUrl.pathname+='/'+jobId;
        let complete=false;
@@ -101,6 +184,7 @@ export function PdfBilingualLab(){
            method:'GET',headers:authHeaders,
            signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)])
          });
+         if(stateResponse.status===404)forgetJob();
          if(!stateResponse.ok)
            throw Error('文档任务状态查询失败 HTTP '+stateResponse.status+
              '，任务可能已经过期或服务已重启');
@@ -110,7 +194,9 @@ export function PdfBilingualLab(){
            throw Error('云端返回了不可信的任务状态');
          detectedFromJob=String(state.detectedSource||'');
          confidenceFromJob=String(state.detectionConfidence||'');
-         if(state.status==='failed')throw Error('BabelDOC 服务端处理失败，请检查部署和模型设置');
+         if(state.status==='failed'){
+           forgetJob();throw Error('BabelDOC 服务端处理失败，请检查部署和模型设置');
+         }
          if(state.status==='completed'){complete=true;break;}
          setStatus('云端文档任务'+(state.status==='running'?'正在排版翻译':'正在排队')+
            '；任务号 '+jobId.slice(0,8)+'…（服务重启可能丢失任务）');
@@ -135,24 +221,8 @@ export function PdfBilingualLab(){
          method:'POST',headers:authHeaders,body,signal:controller.signal
        });
      }
-     if(!response.ok)throw Error('云端高保真 PDF HTTP '+response.status+
-       '；请检查部署、语言识别、BabelDOC 和 AI 服务额度');
-     const blob=await response.blob();
-     // A proxy/server error body may be 200 with a PDF MIME type. Validate
-     // at least the real PDF signature before creating a user download.
-     const pdfHeader=await blob.slice(0,5).text();
-     if(blob.type.split(';')[0].trim()!=='application/pdf'||
-        blob.size<100||pdfHeader!=='%PDF-')
-       throw Error('云端服务没有返回有效的 PDF 文件，已阻止下载。');
-     const objectUrl=URL.createObjectURL(blob);
-     const a=document.createElement('a');
-     a.href=objectUrl;a.download=file.name.replace(/\.pdf$/i,'')+'-babeldoc.pdf';
-     document.body.append(a);a.click();a.remove();
-     setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
-     const detected=response.headers.get('X-PIT-Detected-Source')||detectedFromJob||'unknown';
-     const confidence=response.headers.get('X-PIT-Detection-Confidence')||confidenceFromJob||'unreported';
-     setStatus('已下载 BabelDOC PDF；原文语言：'+detected+
-       '（依据：'+confidence+'）。请检查双栏、公式、表格和字体排版，不能仅凭下载成功判断质量。');
+     await downloadCloudResponse(response,file.name,detectedFromJob,confidenceFromJob);
+     if(health.async_jobs===true)forgetJob();
    }catch(error){
      setStatus(controller.signal.aborted
        ?'已停止等待云端 PDF；服务端任务可能仍在执行并产生费用。当前任务为临时内存任务，尚无跨重启恢复。'
@@ -225,6 +295,10 @@ export function PdfBilingualLab(){
    <button type="button" disabled={!file||busy} onClick={()=>void run()}>
      {busy?'正在处理…':'翻译并导出双语 PDF'}
    </button>
+   {pendingJob&&<button type="button" disabled={busy}
+     onClick={()=>void recoverCloudJob()}>
+     取回上次云端 PDF 任务（无需重新上传）
+   </button>}
    {busy&&<button type="button" onClick={()=>{currentAbort.current?.abort();setStatus('取消请求已提交，当前 OCR / API 操作结束后停止。');}}>取消 PDF 处理</button>}
    {progress&&<p role="status">{progress}</p>}
    <p aria-live="polite">{status}</p>
