@@ -38,6 +38,20 @@ async def main():
                 options.on("pageerror",lambda e: errors.append("options:"+str(e)))
                 await options.goto(f"chrome-extension://{eid}/pit-options.html")
                 await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
+                # Chrome CLD is an actual built-in extension language detector;
+                # the standalone Translator model may be absent on CI runners.
+                native=await options.evaluate("""async()=>{
+                  const detection=await chrome.i18n.detectLanguage(
+                    'Bonjour, nous sommes étudiants et nous étudions la finance internationale.'
+                  );
+                  return {translatorApi:typeof globalThis.Translator,
+                    detectorReady:Array.isArray(detection?.languages),
+                    languages:detection?.languages?.map(x=>x.language)||[]};
+                }""")
+                assert native["detectorReady"],native
+                print("REAL CHROME CLD:",native["languages"],
+                      "; built-in Translator object:",native["translatorApi"],flush=True)
+
                 # Initial settings have no self-hosted Worker endpoint.
                 # The owner must still be able to save reading preferences.
                 await options.locator('[name="webDisplay"]').select_option("translation-only")
