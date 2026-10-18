@@ -216,7 +216,8 @@ export function NativeWebControls(){
    if(action==='start' && backend==='local' && asrToken.trim().length<16){
      setStatus('请填写本机 Whisper 服务令牌（至少 16 字符）');return;
    }
-   setCaptionBusy(true);setStatus('正在连接本机语音识别服务…');
+   const backendName=backend==='cloud'?'云端':'本机';
+   setCaptionBusy(true);setStatus('正在连接'+backendName+' Whisper 语音识别服务…');
    try{
      const [tab]=await browser.tabs.query({active:true,currentWindow:true});
      if(action==='start'){
@@ -233,10 +234,10 @@ export function NativeWebControls(){
        userInitiated:action==='start'&&(mode==='ai'||backend==='cloud'),
        asrBackend:action==='start'?backend:undefined
      });
-     if(!res?.ok)throw Error(res?.error||'本机 ASR 请求失败');
-     setStatus(action==='start'?'本机 Whisper 音频字幕已启动；可随时停止。':'本机 Whisper 音频字幕已停止');
+     if(!res?.ok)throw Error(res?.error||backendName+' ASR 请求失败');
+     setStatus(action==='start'?backendName+' Whisper 音频字幕已启动；可随时停止。':'实时 Whisper 音频字幕已停止');
      setAsrToken('');
-   }catch(error){setStatus('本机 ASR 错误：'+String(error instanceof Error?error.message:error));}
+   }catch(error){setStatus(backendName+' ASR 错误：'+String(error instanceof Error?error.message:error));}
    finally{setCaptionBusy(false);}
  }
  async function captions(action:'start'|'stop'){
