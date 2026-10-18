@@ -89,7 +89,11 @@ function collect() {
 async function requestLibrePermission(settings) {
   if (!['libre','cloud'].includes(settings.standardProvider)) return;
   let url;
-  try { url=new URL(settings.standardProvider==='cloud'?settings.cloudEndpoint:settings.libreUrl); }
+  const endpoint=settings.standardProvider==='cloud'?settings.cloudEndpoint:settings.libreUrl;
+  // Saving reading preferences must not force an unconfigured free/self-hosted
+  // service to exist. Only request host permission once owner enters a URL.
+  if(!String(endpoint||'').trim())return;
+  try { url=new URL(endpoint); }
   catch {throw new Error('翻译服务 URL 无效');}
   if (url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw new Error('翻译服务必须使用无内嵌凭据的 HTTPS URL');
   const granted=await chrome.permissions.request({origins:[url.origin+'/*']});
@@ -98,6 +102,9 @@ async function requestLibrePermission(settings) {
 async function requestAIProfilePermission(settings){
   if(settings.aiProvider!=='custom')return;
   const profile=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);
+  // An empty custom profile slot can be saved while the owner configures
+  // non-AI features. Provider readiness is checked before actual AI calls.
+  if(!profile)return;
   const valid=validateAIProfile(profile);
   const granted=await chrome.permissions.request({origins:[new URL(valid.baseUrl).origin+'/*']});
   if(!granted)throw new Error('未授予该 AI 服务商的网络访问权限');
