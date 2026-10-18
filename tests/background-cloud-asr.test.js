@@ -48,6 +48,9 @@ test('explicit cloud ASR initializes remote Whisper without local Python',async(
   }
   if(String(url)==='https://pit-cloud.example/v1/translate'){
    mt++;
+   const body=JSON.parse(init.body);
+   assert.equal(body.source,'fr',
+     'explicit Whisper speech language must outrank short-text English fallback');
    return {ok:true,json:async()=>({translations:['实时云端译文']})};
   }
   throw Error('Unexpected network URL '+url);
@@ -72,7 +75,8 @@ test('explicit cloud ASR initializes remote Whisper without local Python',async(
  const site={id:chrome.runtime.id,tab:{id:33,url:'https://example.org/video'},
              url:'https://example.org/video'};
  const translated=await dispatch({type:'TRANSLATE_BATCH',mode:'standard',
-   transient:true,sessionId:started.sessionId,texts:['Lecture']},site);
+   transient:true,sessionId:started.sessionId,texts:['Bonjour'],
+   captionSourceLanguage:'fr'},site);
  assert.equal(translated.ok,true,JSON.stringify(translated));
  assert.deepEqual(translated.translations,['实时云端译文']);
  assert.equal(mt,1);
