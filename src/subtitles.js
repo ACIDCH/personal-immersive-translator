@@ -103,6 +103,9 @@
       ?String(nearbyText||'').slice(0,1600):'';
     const response=await chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:state.mode,
+      // Caption tracks provide a language ISO tag. The browser UI or LMS
+      // language may differ from the actual spoken/subtitled language.
+      captionSourceLanguage:state.track?.language||'',
       userInitiated:state.mode==='ai',context
     });
     if(!response?.ok) throw new Error(response?.error || '字幕翻译失败');
