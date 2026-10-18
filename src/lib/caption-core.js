@@ -34,6 +34,18 @@
     }
     return found;
   }
+  function activeCues(cues,time,limit=3){
+    if(!Array.isArray(cues)||!Number.isFinite(time))return [];
+    const matches=[],texts=new Set();
+    for(const cue of cues){
+      if(cue.start>time+.15)break;
+      if(cue.start<=time+.15 && cue.end>=time-.10 && !texts.has(cue.text)){
+        texts.add(cue.text);
+        matches.push(cue);
+      }
+    }
+    return matches.slice(-Math.min(5,Math.max(1,limit)));
+  }
   function upcomingCues(cues, time, rate=1, limit=5) {
     const r = Math.max(.25, Math.min(4, Number(rate)||1));
     const ahead = Math.max(12,18*r);
@@ -69,5 +81,5 @@
     }
     clear(){this.map.clear();this.inflight.clear();}
   }
-  root.PITCaptionCore = Object.freeze({cleanText,normalizeCues,currentCue,upcomingCues,normalizeCaptionSource,CaptionCache});
+  root.PITCaptionCore = Object.freeze({cleanText,normalizeCues,currentCue,activeCues,upcomingCues,normalizeCaptionSource,CaptionCache});
 })(globalThis);
