@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autoTranslateHosts: '',
   translationTheme: 'subtle'
 });
-export const STANDARD_PROVIDERS = ['browser', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
+export const STANDARD_PROVIDERS = ['browser', 'mymemory', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
@@ -103,6 +103,7 @@ export function isStandardServiceConfigured(value){
  const s=normalizeSettings(value);
  switch(s.standardProvider){
  case 'browser':return true; // Free on-device Chrome API; pack readiness is checked at runtime.
+ case 'mymemory':return true; // Owner explicitly opts in to public MT.
  case 'cloud':
   try{
    const u=new URL(s.cloudEndpoint);

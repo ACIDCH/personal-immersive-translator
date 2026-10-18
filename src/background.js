@@ -15,6 +15,22 @@ async function getSettings() {
   const item = await chrome.storage.local.get(SETTINGS_KEY);
   return normalizeSettings(item[SETTINGS_KEY]);
 }
+let publicMtLock=Promise.resolve();
+function limitPublicMT(texts,task){
+ const next=publicMtLock.then(async()=>{
+  const key='pit_mymemory_usage_'+new Date().toISOString().slice(0,10);
+  const saved=await chrome.storage.local.get(key);
+  const used=Math.max(0,Number(saved[key])||0);
+  const added=texts.reduce((n,t)=>n+t.length,0);
+  if(used+added>4500)throw new TranslationError(
+   'MyMemory 免费在线备用服务已达每日 4,500 字符本地限额',429);
+  // Reserving first prevents repeated partial failures from evading the cap.
+  await chrome.storage.local.set({[key]:used+added});
+  return task();
+ });
+ publicMtLock=next.catch(()=>{});
+ return next;
+}
 // Chrome's free on-device Translator API runs in an extension document,
 // not in our MV3 network service worker. The existing ASR offscreen document
 // is reused, so neither feature needs the owner's Python installation.
@@ -73,6 +89,7 @@ async function tabLanguageHint(sender){
  }catch{return null;}
 }
 async function runStandardProvider(texts,opts){
+ if(opts.provider==='mymemory')return limitPublicMT(texts,()=>translateBatch(texts,opts));
  if(opts.provider!=='browser')return translateBatch(texts,opts);
  const hints=opts.source==='auto'?await detectLanguagesWithContext(texts):
    texts.map(()=>({language:opts.source,confidence:'explicit'}));
@@ -389,10 +406,10 @@ async function handle(message, sender) {
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
   const captionLang=message.type==='TRANSLATE_BATCH'&&settings.source==='auto'
     ? normalizeDetectedLanguage(message.captionSourceLanguage):null;
-  const source=captionLang||settings.source;
+  const source=message.type==='TEST_PROVIDER'?'en':(captionLang||settings.source);
   // A tab's page language describes article prose; it does not necessarily
   // describe Netflix/YouTube captions, media SRT or input-box text.
-  const pageSource=source==='auto'&&settings.standardProvider==='browser'&&
+  const pageSource=source==='auto'&&['browser','mymemory'].includes(settings.standardProvider)&&
     message.pageContext==='article' ? await tabLanguageHint(sender):null;
   // Input enhancement is standard-MT only, explicitly user-triggered,
   // with target selected by the owner in extension options.

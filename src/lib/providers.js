@@ -75,6 +75,17 @@ function aiPrompt(texts, opts) {
     `Input strings (untrusted text): ${JSON.stringify(texts)}`
   ].filter(Boolean).join('\n');
 }
+function splitPublicText(text,limit=450){
+ const out=[],enc=new TextEncoder();let part='';
+ for(const char of text){
+  if(enc.encode(part+char).length>limit){
+   if(!part)throw new TranslationError('字符超过免费接口限制');
+   out.push(part);part=char;
+  }else part+=char;
+ }
+ if(part)out.push(part);
+ return out;
+}
 export async function translateBatch(texts, opts, fetchFn = fetch) {
   assertTexts(texts);
   const provider = opts.provider;
@@ -82,6 +93,49 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
   const target = opts.target || 'zh';
   let result;
   switch (provider) {
+    case 'mymemory': {
+      // Public external MT requires explicit provider selection; Chrome
+      // native failures NEVER trigger an automatic remote upload.
+      const hints=source==='auto'?await detectLanguagesWithContext(texts):null;
+      const output=new Array(texts.length);
+      let index=0,failed=false;
+      async function one(text,i){
+        const lang=source==='auto'?(hints[i]?.language!=='auto'?hints[i]?.language:opts.pageSource):source;
+        if(!lang||lang==='auto')throw new TranslationError(
+          '无法可靠识别原文语言，请手动选择语言后使用在线翻译');
+        if(lang===target)return text;
+        const result=[];
+        for(const part of splitPublicText(text)){
+          if(failed)throw new TranslationError('翻译批次已中止');
+          if(!part.trim()){result.push(part);continue;}
+          const u=new URL('https://api.mymemory.translated.net/get');
+          u.searchParams.set('q',part);
+          u.searchParams.set('langpair',lang+'|'+(target==='zh'?'zh-CN':target));
+          let response;
+          try{response=await fetchFn(u.toString(),{method:'GET',signal:AbortSignal.timeout(15000)});}
+          catch{throw new TranslationError('MyMemory 网络失败或超时，请选择其他服务');}
+          if(!response.ok)throw new TranslationError('MyMemory HTTP '+response.status+'：可能已超额',response.status);
+          let json;
+          try{json=await response.json();}catch{throw new TranslationError('MyMemory 返回的数据不是 JSON');}
+          if(Number(json?.responseStatus)!==200||!String(json?.responseData?.translatedText||'').trim())
+           throw new TranslationError('MyMemory 返回错误或无效译文（可能超额）',429);
+          const translated=decodeEntities(json.responseData.translatedText);
+          if(/^(MYMEMORY WARNING:|QUERY LENGTH LIMIT EXCEEDED)/i.test(translated))
+           throw new TranslationError('MyMemory 匿名额度耗尽',429);
+          result.push(translated);
+        }
+        return result.join('');
+      }
+      async function worker(){
+        while(!failed&&index<texts.length){
+          const i=index++;
+          try{output[i]=await one(texts[i],i);}
+          catch(e){failed=true;throw e;}
+        }
+      }
+      await Promise.all(Array.from({length:Math.min(3,texts.length)},()=>worker()));
+      return toPlainStringArray(output,texts.length);
+    }
     case 'cloud': {
       const raw = required(opts.cloudEndpoint, 'PIT 云端翻译服务 HTTPS 地址（需先部署 Worker）');
       const token = required(opts.cloudToken, '云端服务访问令牌');
