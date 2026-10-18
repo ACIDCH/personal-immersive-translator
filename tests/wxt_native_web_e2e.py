@@ -67,8 +67,7 @@ async def main():
                 # User-click-only public fallback: confirm a real saved engine
                 # switch, no implicit remote request or paid AI selection.
                 await options.locator('#nativeFallbackMyMemory').click()
-                await options.locator('#nativeModelStatus').get_by_text(
-                    '已主动切换至 MyMemory', exact=False).wait_for(timeout=8000)
+                await options.get_by_text('已主动切换至 MyMemory', exact=False).wait_for(timeout=8000)
                 fallback=await options.evaluate("""async()=>(
                   await chrome.storage.local.get('pit_settings_v1')
                 ).pit_settings_v1""")
