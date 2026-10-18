@@ -42,7 +42,7 @@ async def main():
                     'name':'real-pdf-fixture.pdf','mimeType':'application/pdf',
                     'buffer':pdf_fixture()
                 })
-                calls={'health':0,'upload':0,'ready':False}
+                calls={'health':0,'upload':0,'ready':False,'valid_pdf':False}
                 async def fake_service(route):
                     method=route.request.method
                     if method=='OPTIONS':
@@ -62,7 +62,8 @@ async def main():
                     elif route.request.url.endswith('/v1/pdf/translate'):
                         calls['upload']+=1
                         await route.fulfill(status=200,content_type='application/pdf',
-                            body=pdf_fixture(),headers={
+                            body=pdf_fixture() if calls['valid_pdf'] else b'INVALID_PDF_CONTENT'+b'X'*200,
+                            headers={
                               'Access-Control-Allow-Origin':'*',
                               'X-PIT-Detected-Source':'en'
                             })
@@ -74,13 +75,17 @@ async def main():
                 await pdf.get_by_text('服务尚未就绪',exact=False).wait_for(timeout=11000)
                 assert calls['health']==1 and calls['upload']==0,calls
                 calls['ready']=True
+                await button.click()
+                await pdf.get_by_text('没有返回有效的 PDF 文件',exact=False).wait_for(timeout=10000)
+                assert calls['health']==2 and calls['upload']==1,calls
+                calls['valid_pdf']=True
                 async with page.expect_download(timeout=20000) as info:
                     await button.click()
                 download=await info.value
                 assert download.suggested_filename.endswith('-babeldoc.pdf')
                 downloaded=Path(await download.path()).read_bytes()
                 assert downloaded.startswith(b'%PDF-') and len(downloaded)>100
-                assert calls['health']==2 and calls['upload']==1,calls
+                assert calls['health']==3 and calls['upload']==2,calls
                 await pdf.get_by_text('已下载 BabelDOC PDF',exact=False).wait_for(timeout=10000)
                 assert not problems,problems
                 print('PASS: installed WXT blocks PDF upload when cloud health not ready')
