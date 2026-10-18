@@ -83,6 +83,20 @@ export function NativeWebControls(){
        '翻译范围已保存，下次开启网页翻译时生效。');
    }catch(error){setStatus('阅读设置保存失败：'+String(error instanceof Error?error.message:error));}
  }
+ async function refreshSiteRules(){
+   try{
+     const [tab]=await browser.tabs.query({active:true,currentWindow:true});
+     if(!tab?.url||!/^https?:\/\//.test(tab.url)){
+       setSiteRules(null);return;
+     }
+     const hostname=new URL(tab.url).hostname.toLowerCase();
+     const setting=(await browser.storage.local.get('pit_settings_v1')).pit_settings_v1||{};
+     const has=(value:unknown)=>String(value||'').toLowerCase()
+       .split(/[\s,;]+/).filter(Boolean).includes(hostname);
+     setSiteRules({hostname,automatic:has(setting.autoTranslateHosts),
+       blocked:has(setting.blockedHosts)});
+   }catch{setSiteRules(null);}
+ }
  async function toggleSiteRule(key:'autoTranslateHosts'|'blockedHosts'){
    if(!siteRules)return;
    try{
@@ -306,7 +320,7 @@ export function NativeWebControls(){
      <button type="button" aria-current={feature==='web'?'page':undefined} onClick={()=>setFeature('web')}>网页翻译</button>
      <button type="button" aria-current={feature==='video'?'page':undefined} onClick={()=>setFeature('video')}>视频字幕</button>
      <button type="button" aria-current={feature==='files'?'page':undefined} onClick={()=>setFeature('files')}>文件与图片</button>
-     <button type="button" aria-current={feature==='settings'?'page':undefined} onClick={()=>setFeature('settings')}>设置与诊断</button>
+     <button type="button" aria-current={feature==='settings'?'page':undefined} onClick={()=>{setFeature('settings');void refreshSiteRules();}}>设置与诊断</button>
    </nav>
    {feature==='web'&&<section className="pit-feature-section" aria-label="网页阅读">
      <div className="native-modes" role="group" aria-label="翻译模式">
