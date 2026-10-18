@@ -24,7 +24,7 @@
 - 服务器需要安全环境变量 PIT_CLOUD_PDF_TOKEN 与 PIT_PDF_API_KEY/PIT_PDF_MODEL/PIT_PDF_BASE_URL。**真实翻译仍可能产生 AI API 费用**，不能存储凭据在客户端公共仓库。
 - 容器运行在支持 Python、外部二进制、足够 CPU/RAM、任务运行时间的云平台上；Cloudflare Worker/Supabase Edge Function 不等同于这种算力环境。需按目标平台配置 HTTPS、私有访问与费用限制。
 
-当前是服务端可运行入口，**尚未部署、没有和浏览器高保真文件按钮打通、没有真实付费学术论文质量验收**。浏览器内“300 页 PDF”只是分卷栅格的回退方式；不能混淆为高保真 BabelDOC。
+浏览器 WXT 文件工作台现已连接 `/v1/pdf/translate` 上传与下载接口，并在上传前通过 `GET /health` 检查服务就绪状态，下载前检查真实 PDF 文件头；该连接行为已在安装版 Chromium 中使用**模拟 HTTPS 容器**通过 L1 测试。**PDF 容器尚未实际部署，没有云端 BabelDOC 真实推理或付费学术论文排版质量验收**；200 响应及文件下载成功不能作为高保真质量证据。浏览器内“300 页 PDF”仍是分卷栅格的回退方式，不能混淆为 BabelDOC。
 
 ## 3. 发布硬门槛
 
