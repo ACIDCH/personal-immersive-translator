@@ -37,9 +37,19 @@ async def public_site(ctx,popup,entry):
             row["page_state"]="public_page_unavailable";return row
         row["page_state"]="http_loaded"
         await page.wait_for_timeout(4500)
-        # Never force a website button if its public UI is unavailable.
+        # Do not toggle captions OFF when the public player already draws
+        # readable CC. Otherwise try the website's normal visible UI once.
+        visible=page.locator(selector)
+        existing=await visible.count()
+        initially_showing=False
+        for i in range(min(existing,10)):
+            if await visible.nth(i).is_visible():
+                initially_showing=True
+                break
         cc=page.locator(button).first
-        if await cc.count() and await cc.is_visible():
+        if initially_showing:
+            row["caption_toggle"]="already_visible"
+        elif await cc.count() and await cc.is_visible():
             try:
                 await cc.click(timeout=3500)
                 row["caption_toggle"]="clicked"
@@ -48,7 +58,6 @@ async def public_site(ctx,popup,entry):
         else:
             row["caption_toggle"]="not_exposed"
         await page.wait_for_timeout(2000)
-        visible=page.locator(selector)
         captions=await visible.count()
         row["visible_caption_elements"]=min(captions,300)
         if captions<1:
