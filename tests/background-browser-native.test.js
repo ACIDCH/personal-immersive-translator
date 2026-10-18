@@ -82,6 +82,17 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
   texts:['Bonjour notre prochain cours de finance et économie européenne.']});
  assert.equal(next.ok,true,JSON.stringify(next));
  assert.equal(opening,1,'must reuse existing offscreen document on Chrome 138-149');
+ const stopping=await call({type:'PIT_ASR_STOP'},{
+  id:chrome.runtime.id,url:chrome.runtime.getURL('pit-options.html')
+ });
+ assert.equal(stopping.ok,true);
+ assert.equal(opening,1,'ASR stop without a recording must not destroy browser MT');
+ const translatedAgain=await call({type:'TRANSLATE_BATCH',mode:'standard',texts:[
+  'Die Volkswirtschaft wächst mit neuen Investitionen und Exporten.'
+ ]});
+ assert.equal(translatedAgain.ok,true,JSON.stringify(translatedAgain));
+ assert.equal(opening,1);
+
  chrome.tabs.detectLanguage=async tabId=>{
   assert.equal(tabId,13);
   return 'fr';
