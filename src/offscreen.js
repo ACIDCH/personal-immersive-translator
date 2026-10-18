@@ -81,7 +81,7 @@ async function flush(c){
     if(asrMs>12000){
       c.stats.drop(1);
       await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
-        message:'本机识别延迟超过 12 秒，已跳过过期字幕。请使用较小的 Whisper 模型。'});
+        message:(hosted?'云端':'本机')+' Whisper 识别延迟超过 12 秒，已跳过过期字幕；请检查网络或模型响应。'});
     }else if(text){
       await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
     }
@@ -92,11 +92,11 @@ async function flush(c){
       c.retryAt=Date.now()+Math.min(30000,3000*Math.pow(2,Math.min(c.failures-1,4)));
       if(c.failures>=4 || /Whisper HTTP (401|403|503)/.test(String(e?.message||e))){
         await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
-          message:'本机识别连续失败，音频已自动停止，请核查模型、令牌和服务配置。'});
+          message:(c.asrBackend==='cloud'?'云端':'本机')+' Whisper 识别连续失败，音频已自动停止；请检查服务和令牌。'});
         await stop();
         await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId});
       }else await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
-        message:'本机识别失败，将在稍后重试，不会累积过期音频。'});
+        message:(c.asrBackend==='cloud'?'云端':'本机')+' Whisper 识别失败，稍后重试（不累积过期音频）。'});
     }
   }finally{
     if(current===c){
