@@ -43,15 +43,22 @@ async function nativeOffscreenReady(){
  }
  await nativeDocOpening;
 }
-function fallbackNativeSource(text){
+function fallbackNativeSource(text,pageSource){
  const s=String(text||'');
  if(/[ぁ-ヿ]/u.test(s))return 'ja';
  if(/[가-힣]/u.test(s))return 'ko';
  if(/[㐀-鿿]/u.test(s))return 'zh';
- // Short English UI headings have too little statistical evidence.
- // Longer ambiguous Latin documents must not be silently called English.
- if(s.length<32&&/[a-z]/i.test(s))return 'en';
- throw new TranslationError('无法可靠检测此段的原文语言，请在 PIT 设置中手动选择原文语种。');
+ // Use Chrome's whole-tab language only for otherwise inconclusive
+ // paragraphs. A French "Bonjour" must NOT silently become English.
+ if(pageSource&&pageSource!=='auto')return pageSource;
+ throw new TranslationError('无法可靠识别此段原文语言。请打开 PIT 设置手动选择原文语种，或使用支持自动检测的在线服务。');
+}
+async function tabLanguageHint(sender){
+ if(!sender?.tab?.id||typeof chrome.tabs?.detectLanguage!=='function'||
+    !/^https?:\/\//.test(sender.url||sender.tab.url||''))return null;
+ try{
+  return normalizeDetectedLanguage(await chrome.tabs.detectLanguage(sender.tab.id));
+ }catch{return null;}
 }
 async function runStandardProvider(texts,opts){
  if(opts.provider!=='browser')return translateBatch(texts,opts);
@@ -60,11 +67,11 @@ async function runStandardProvider(texts,opts){
  const out=new Array(texts.length);
  for(let i=0;i<texts.length;){
   const source=hints[i]?.language&&hints[i].language!=='auto'?
-   hints[i].language:fallbackNativeSource(texts[i]);
+   hints[i].language:fallbackNativeSource(texts[i],opts.pageSource);
   let n=i+1;
   while(n<texts.length){
    const other=hints[n]?.language&&hints[n].language!=='auto'?
-     hints[n].language:fallbackNativeSource(texts[n]);
+     hints[n].language:fallbackNativeSource(texts[n],opts.pageSource);
    if(other!==source||n-i>=6)break;
    n++;
   }
@@ -331,6 +338,8 @@ async function handle(message, sender) {
   const texts = message.type === 'TEST_PROVIDER' ? ['Hello, world!'] : message.texts;
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
   const source = settings.source;
+  const pageSource=settings.source==='auto' && settings.standardProvider==='browser'
+    ? await tabLanguageHint(sender):null;
   // Input enhancement is standard-MT only, explicitly user-triggered,
   // with target selected by the owner in extension options.
   const target = message.inputEnhancement===true && message.type==='TRANSLATE_BATCH' && !isAI
@@ -351,7 +360,7 @@ async function handle(message, sender) {
       if(count>=80)throw new TranslationError('本次实时 AI 字幕达到 80 次请求上限，请停止并明确重新启动');
       await chrome.storage.session.set({pit_live_ai_requests:count+1});
     }
-    const translations=await runStandardProvider(texts,{...settings,provider,source,target,context});
+    const translations=await runStandardProvider(texts,{...settings,provider,source,target,context,pageSource});
     return {translations,provider,cached:false,transient:true};
   }
   const payloads = texts.map(text => ({text, provider, source,target,model,glossary: isAI ? settings.glossary : '',context}));
@@ -360,7 +369,7 @@ async function handle(message, sender) {
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
   if (missing.length) {
-    const newly = await runStandardProvider(missing.map(x=>x.text), {...settings, provider, source,target,context});
+    const newly = await runStandardProvider(missing.map(x=>x.text), {...settings, provider, source,target,context,pageSource});
     for (let j=0;j<newly.length;j++) {
       const i=missing[j].index;
       values[i]=newly[j];
