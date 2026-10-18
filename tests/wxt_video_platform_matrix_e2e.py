@@ -67,6 +67,37 @@ async def main():
           await page.close()
           print('PLATFORM VISIBLE-CC FIXTURE:',json.dumps(result,ensure_ascii=False),flush=True)
 
+        # P0 regression: known video platforms often load their caption
+        # layer only after PIT has started. Do not fail at first empty frame.
+        delayed='https://www.youtube.com/watch?v=pit-delayed-captions'
+        async def delayed_html(route):
+          await route.fulfill(status=200,content_type='text/html',
+            body='<html><body><video id="late-player" width="640" height="360" controls></video></body></html>')
+        await ctx.route(delayed,delayed_html)
+        page=await ctx.new_page()
+        await page.goto(delayed)
+        await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await popup.get_by_role('button',name='停止字幕翻译').wait_for(timeout=10000)
+        await page.locator('.pit-caption-translated').get_by_text(
+          '正在等待播放器显示原文字幕',exact=False).wait_for(timeout=11000)
+        before=await sw.evaluate("""()=>globalThis.pitPendingTranslationCount||0""")
+        await page.evaluate("""()=>{
+          const layer=document.createElement('div');
+          layer.className='ytp-caption-window-container';
+          layer.innerHTML='<span class="ytp-caption-segment">Subtitles appeared after player setup</span>';
+          document.body.append(layer);
+        }""")
+        await page.locator('.pit-caption-translated').get_by_text(
+          '译文:Subtitles appeared after player setup',exact=True).wait_for(timeout=23000)
+        await page.evaluate("""()=>{
+          document.querySelector('.ytp-caption-window-container').remove();
+        }""")
+        await page.locator('.pit-caption-translated').wait_for(state='detached',timeout=12000)
+        results.append({'platform':'youtube-delayed-cc','fixture_visible_caption':'pass'})
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        await page.close()
+
         parent='https://lms.example.org/course/one'
         child='https://sample.panopto.com/Panopto/Pages/Embed.aspx?id=lesson1'
         async def child_html(route):
@@ -104,6 +135,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==6 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==7 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
