@@ -94,7 +94,8 @@ async function flush(c){
         ?lang:null;
       await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,
         text,capturedAt,segmentMs:SEGMENT_MS,asrMs,
-        ...(audioLanguage?{language:audioLanguage}:{})});
+        ...(audioLanguage?{language:audioLanguage,
+          ...(typeof conf==='number'?{languageConfidence:conf}:{})}:{})});
     }
   }catch(e){
     if(current===c){
