@@ -167,6 +167,23 @@
     }
     return out;
   }
+  function joinTranslatedFragments(translated,sourceFragments){
+    let combined='';
+    for(let i=0;i<translated.length;i++){
+      const next=translated[i];
+      const before=sourceFragments[i-1]||'',after=sourceFragments[i]||'';
+      // Some MT engines trim the whitespace at the edge of each request.
+      // Restore Latin word boundaries that appeared in the original source,
+      // but never inject arbitrary spaces between CJK text fragments.
+      const sourceBoundary=/\s$/u.test(before)||/^\s/u.test(after)||
+        /[.!?。！？]$/u.test(before);
+      if(i>0 && sourceBoundary && /[A-Za-z0-9,.;:!?]$/u.test(combined) &&
+         /^[A-Za-z0-9]/u.test(next) && !/\s$/u.test(combined))
+        combined+=' ';
+      combined+=next;
+    }
+    return combined;
+  }
   async function requestBoundedParagraphs(items,requestedMode,context,sessionId){
     const fragments=items.map(item=>splitParagraph(item.original));
     const queued=fragments.flatMap((pieces,owner)=>
@@ -193,7 +210,7 @@
     // Fragments come from contiguous source slices. Inserting spaces here
     // corrupts CJK and punctuation, and changes previously adjacent words.
     // Preserve exactly the whitespace returned by each translated fragment.
-    return {translations:results.map(parts=>parts.join('')),
+    return {translations:results.map((parts,index)=>joinTranslatedFragments(parts,fragments[index])),
       segments:queued.length,requests};
   }
   function schedule(id,delay=300) {
