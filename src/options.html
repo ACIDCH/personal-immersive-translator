@@ -3,18 +3,31 @@
 <p class="muted">七种主要语言 · 标准翻译优先 · AI 仅主动启用</p></div>
 <nav class="options-nav" aria-label="设置分类快速定位">
   <a href="#baseSettings">基础及语言</a>
+  <a href="#readingSettings">阅读与交互</a>
   <a href="#standardKeys">常规服务</a>
   <a href="#aiKeys">AI 服务</a>
   <a href="#privacySettings">隐私与规则</a>
+  <a href="#backupSettings">偏好备份</a>
   <a href="#saveActions">保存与测试</a>
 </nav>
-<p class="options-note">此页配置的是翻译服务，不代表本机 OCR、Whisper 或 BabelDOC 已安装。请到“图片 / PDF 翻译工具”检查本机引擎状态。</p>
+<p class="options-note">日常网页翻译不要求安装本机 Python；首次使用必须先配置真正可访问的机器翻译服务。Whisper 与高保真 PDF 优先使用可配置的云端服务，尚未部署前不会伪装为可用。阅读和网站偏好即使没有 API Key 也能先保存。</p>
 <form id="optionsForm"><section id="baseSettings" class="panel"><h2>基础设置</h2>
 <label>目标语言<select name="target"><option value="zh">简体中文</option><option value="en">English</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
 <label>原文语言<select name="source"><option value="auto">自动识别</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ko">한국어</option></select></label>
 <label>默认机器翻译服务<select name="standardProvider"><option value="cloud">PIT 云端机器翻译（自托管 Workers AI）</option><option value="microsoft">Microsoft Translator</option><option value="google">Google Cloud Translation</option><option value="deepl">DeepL</option><option value="libre">LibreTranslate (自有服务)</option></select></label>
 <label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="custom">自定义 AI 配置（多服务商）</option></select></label>
 <label class="inline"><input type="checkbox" name="contextAI">AI 翻译时包含相邻段落作为上下文</label></section>
+<section id="readingSettings" class="panel"><h2>网页阅读模式与交互</h2>
+<p class="muted">参照成熟沉浸式阅读交互重新组织设置。只有启用后功能才会生效；未配置翻译服务时不执行伪翻译。</p>
+<label>显示模式<select name="webDisplay"><option value="bilingual">双语对照（原文＋译文）</option><option value="translation-only">仅显示译文</option></select></label>
+<label>翻译范围<select name="webScope"><option value="smart">智能正文优先</option><option value="full">尽可能翻译整页（仍排除输入框及功能控件）</option></select></label>
+<label>译文样式<select name="translationTheme"><option value="subtle">自然段落</option><option value="underline">译文下划线</option><option value="highlight">柔和高亮</option></select></label>
+<label class="inline"><input type="checkbox" name="floatingControl">启用页面侧边悬浮翻译按钮（可随时开启/恢复）</label>
+<label class="inline"><input type="checkbox" name="hoverTranslate">按住 Shift 悬停正文时翻译该段（常规翻译）</label>
+<label class="inline"><input type="checkbox" name="inputTranslate">在非密码输入框快速按三次空格翻译当前内容（默认关闭）</label>
+<label>输入框目标语言<select name="inputTarget"><option value="en">English</option><option value="zh">简体中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
+<label>进入以下网站自动翻译（每行一个域名）<textarea name="autoTranslateHosts" rows="3" placeholder="example.org"></textarea></label>
+<p class="muted">快捷键 Alt+A：翻译/恢复；Alt+W：整页翻译。Chrome 允许在扩展快捷键管理页重新设置。网站例外规则优先于自动翻译。</p></section>
 <section id="standardKeys" class="panel"><h2>常规翻译凭据</h2><p class="muted">PIT 云端模型需要先部署 Cloudflare Worker，并绑定 Workers AI。未部署时不能使用；本模式不要求本机 Python。</p><label>PIT 云端 Worker HTTPS 地址<input name="cloudEndpoint" type="url" spellcheck="false" placeholder="https://pit-translate.yourname.workers.dev"></label><label>PIT 云端访问令牌（Worker PIT_ACCESS_TOKEN）<input name="cloudToken" type="password" autocomplete="off" placeholder="至少 16 个随机字符"></label>
 <label>Microsoft Key<input name="microsoftKey" type="password" autocomplete="off" placeholder="仅存于本地浏览器"></label>
 <label>Microsoft Region（全球单服务资源可留空）<input name="microsoftRegion" type="text" placeholder="例如 eastus"></label>
@@ -44,4 +57,10 @@
 <section id="privacySettings" class="panel"><h2>隐私及站点规则</h2>
 <label>禁止翻译的域名（每行一个，包含子域名）<textarea name="blockedHosts" rows="4" placeholder="example.com&#10;banking.example"></textarea></label>
 <p class="muted">API Key 保存在 chrome.storage.local，不使用同步存储。浏览器本地扩展存储本身不是端到端加密保险箱，不建议在共用设备输入生产级高权限凭据。</p></section>
+<section class="panel" id="backupSettings"><h2>偏好设置导入与导出</h2>
+<p class="muted">仅导出语言、阅读样式、站点规则和常规偏好；**不导出任何 API Key、Token、自定义模型凭据或翻译记录**。导入只填入表单，须点击「保存设置」后才生效。</p>
+<div class="buttons"><button type="button" id="exportPreferences">导出非敏感偏好 JSON</button>
+<label>导入偏好 JSON（最多 64 KiB）<input type="file" id="importPreferences" accept=".json,application/json"></label></div>
+<p id="preferencesStatus" role="status" aria-live="polite" class="muted"></p>
+</section>
 <section id="saveActions" class="buttons"><button class="primary" type="submit">保存设置</button><button type="button" id="test">测试当前所选服务</button><button type="button" id="clearCache">清理翻译缓存</button></section><p id="status" role="status" aria-live="polite"></p></form></main><script type="module" src="options.js"></script></body></html>

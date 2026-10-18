@@ -7,8 +7,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   cloudToken: '',
   cloudPdfEndpoint: '',
   cloudPdfToken: '',
-  cloudPdfEndpoint: '',
-  cloudPdfToken: '',
   aiProvider: 'gemini',
   autoAI: false,
   contextAI: true,
@@ -26,7 +24,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
   aiProfiles: [],
   activeAIProfileId: '',
   glossary: '',
-  blockedHosts: ''
+  blockedHosts: '',
+  webDisplay: 'bilingual',
+  webScope: 'smart',
+  hoverTranslate: false,
+  floatingControl: false,
+  inputTranslate: false,
+  inputTarget: 'en',
+  autoTranslateHosts: '',
+  translationTheme: 'subtle'
 });
 export const STANDARD_PROVIDERS = ['cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
@@ -46,6 +52,14 @@ export function normalizeSettings(value = {}) {
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
+  if (!['bilingual','translation-only'].includes(clean.webDisplay)) clean.webDisplay='bilingual';
+  if (!['smart','full'].includes(clean.webScope)) clean.webScope='smart';
+  if (!['subtle','underline','highlight'].includes(clean.translationTheme)) clean.translationTheme='subtle';
+  if (!LANGUAGES.includes(clean.inputTarget)) clean.inputTarget='en';
+  clean.hoverTranslate=Boolean(clean.hoverTranslate);
+  clean.floatingControl=Boolean(clean.floatingControl);
+  clean.inputTranslate=Boolean(clean.inputTranslate);
+  clean.autoTranslateHosts=typeof clean.autoTranslateHosts==='string'?clean.autoTranslateHosts.slice(0,4000):'';
   clean.autoAI = false;
   clean.contextAI = Boolean(clean.contextAI);
   return clean;
@@ -56,4 +70,50 @@ export function hostIsBlocked(hostname, blockedHosts = '') {
     const rule = raw.toLowerCase().replace(/^\*\./, '');
     return host === rule || host.endsWith('.' + rule);
   });
+}
+
+/** Portable settings contain no API credentials, private service URLs,
+ * provider profiles, cache entries or conversation/translation history.
+ * Import only enumerated preferences and require a normal Save action.
+ */
+export const PORTABLE_PREF_KEYS=Object.freeze([
+ 'target','source','standardProvider','aiProvider','contextAI',
+ 'webDisplay','webScope','translationTheme','hoverTranslate','inputTranslate',
+ 'floatingControl','inputTarget','autoTranslateHosts','blockedHosts','glossary'
+]);
+export function portablePreferences(value={}){
+ const settings=normalizeSettings(value);
+ return {kind:'pit-preferences',version:1,
+  settings:Object.fromEntries(PORTABLE_PREF_KEYS.map(key=>[key,settings[key]]))};
+}
+export function applyPortablePreferences(current,data){
+ if(!data||typeof data!=='object'||Array.isArray(data)||
+    data.kind!=='pit-preferences'||data.version!==1||
+    !data.settings||typeof data.settings!=='object'||
+    Array.isArray(data.settings))throw Error('不是受支持的 PIT 偏好设置备份');
+ const imported={};
+ for(const key of PORTABLE_PREF_KEYS){
+  if(Object.hasOwn(data.settings,key))imported[key]=data.settings[key];
+ }
+ return normalizeSettings({...normalizeSettings(current),...imported});
+}
+
+/** Non-secret readiness, NOT a network/credit or accuracy guarantee. */
+export function isStandardServiceConfigured(value){
+ const s=normalizeSettings(value);
+ switch(s.standardProvider){
+ case 'cloud':
+  try{
+   const u=new URL(s.cloudEndpoint);
+   return u.protocol==='https:'&&!u.username&&!u.password&&
+     String(s.cloudToken).length>=16;
+  }catch{return false;}
+ case 'microsoft':return Boolean(String(s.microsoftKey||'').trim());
+ case 'google':return Boolean(String(s.googleKey||'').trim());
+ case 'deepl':return Boolean(String(s.deeplKey||'').trim());
+ case 'libre':
+  try{return new URL(s.libreUrl).protocol==='https:';}
+  catch{return false;}
+ default:return false;
+ }
 }

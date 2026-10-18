@@ -17,7 +17,7 @@ export default defineConfig({
     content_security_policy:{
       extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     },
-    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture'],
+    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture','contextMenus'],
     // A translator must work on arbitrary normal sites, not just API
     // provider domains. One install-time permission avoids per-site prompts.
     // Browser internal pages remain restricted.
@@ -26,6 +26,23 @@ export default defineConfig({
   hooks:{
     'build:manifestGenerated': (_wxt,manifest)=>{
       manifest.options_page='pit-options.html';
+      // Passive content bootstrap is necessary for deliberate hover gestures
+      // and site auto-translate without requiring the popup to remain open.
+      // It only reads the safe, non-credential preference subset.
+      manifest.content_scripts=[{
+        matches:['https://*/*','http://*/*'],
+        js:['pit-native.js'],css:['pit-native.css'],run_at:'document_idle'
+      }];
+      manifest.commands={
+        'pit-toggle-translation':{
+          suggested_key:{default:'Alt+A'},
+          description:'Translate current page or show original'
+        },
+        'pit-translate-whole-page':{
+          suggested_key:{default:'Alt+W'},
+          description:'Translate all readable page text'
+        }
+      };
       // A first-party module service worker is copied without Vite rewriting
       // cache/storage logic. React UI remains built and managed by WXT.
       manifest.background={service_worker:'pit-background.js',type:'module'};

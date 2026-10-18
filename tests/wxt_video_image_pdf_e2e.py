@@ -107,6 +107,7 @@ async def main():
         }""")
         popup=await ctx.new_page()
         await popup.goto(f'chrome-extension://{eid}/popup.html')
+        await popup.get_by_role('button',name='视频字幕',exact=True).click()
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=10000)
         await video.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()

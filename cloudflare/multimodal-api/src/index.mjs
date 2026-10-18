@@ -57,7 +57,7 @@ export default {
    return json({ready:Boolean(env?.AI),model:MODEL,
     routes:{translate:env?.AI?'ready':'ai-binding-missing',ocr:'not-deployed',
             asr:env?.AI?'ready':'ai-binding-missing',pdf:'not-deployed'},
-    languages:[...LANGUAGES],auto_detection:'CJK script; Latin fallback unverified'});
+    languages:[...LANGUAGES],auto_detection:'Chrome CLD hints, CJK script and conservative Latin fallback'});
   }
   if(u.pathname==='/v1/asr'){
    if(request.method!=='POST')return json({error:'method_not_allowed'},405);
@@ -104,16 +104,27 @@ export default {
    let body;
    try{body=await request.json();}catch{return json({error:'invalid_json'},400);}
    const texts=body?.texts,source=body?.source||'auto',target=body?.target;
+   const sources=body?.sources;
    if(!Array.isArray(texts)||!texts.length||texts.length>10||
       texts.some(x=>typeof x!=='string'||!x.trim()||x.length>4000)||
       texts.reduce((n,x)=>n+x.length,0)>12000)
     return json({error:'invalid_segments'},400);
    if(!LANGUAGES.has(target)||!(source==='auto'||LANGUAGES.has(source)))
     return json({error:'unsupported_language'},400);
+   if(sources!==undefined&&(!Array.isArray(sources)||
+      sources.length!==texts.length||
+      sources.some(x=>x!=='auto'&&!LANGUAGES.has(x))||
+      source!=='auto'))return json({error:'invalid_sources'},400);
    const translations=[],detected=[];
    try{
-    for(const text of texts){
-     const choice=source==='auto'?detectSource(text):{language:source,confidence:'explicit'};
+    for(let i=0;i<texts.length;i++){
+     const text=texts[i];
+     const hint=sources?.[i];
+     const choice=source!=='auto'
+       ? {language:source,confidence:'explicit'}
+       : hint&&hint!=='auto'
+         ? {language:hint,confidence:'chrome-cld'}
+         : detectSource(text);
      detected.push(choice);
      if(choice.language===target){translations.push(text);continue;}
      const answer=await env.AI.run(MODEL,{

@@ -4,6 +4,7 @@ Network translation is mocked INSIDE the real extension service worker:
 this verifies runtime wiring without paid API traffic or user credentials.
 """
 import asyncio
+import json
 import tempfile
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -37,10 +38,57 @@ async def main():
                 options.on("pageerror",lambda e: errors.append("options:"+str(e)))
                 await options.goto(f"chrome-extension://{eid}/pit-options.html")
                 await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
+                # Initial settings have no self-hosted Worker endpoint.
+                # The owner must still be able to save reading preferences.
+                await options.locator('[name="webDisplay"]').select_option("translation-only")
+                await options.get_by_role("button",name="保存设置").click()
+                await options.get_by_text("设置已保存。").wait_for(timeout=8000)
+                saved=await options.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert saved["webDisplay"]=="translation-only"
+                assert saved["standardProvider"]=="cloud"
+                assert saved["cloudEndpoint"]==""
+                await options.locator('[name="webDisplay"]').select_option("bilingual")
+                print("PASS: first-run reading settings save without an undeployed cloud provider")
                 await options.locator('[name="microsoftKey"]').fill("fixture-only-never-sent")
                 await options.locator('[name="standardProvider"]').select_option("microsoft")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
+                # Exercise the real options UI, not just the pure helper:
+                # exported JSON cannot contain credentials or translation data.
+                async with options.expect_download(timeout=12000) as exported:
+                    await options.get_by_role("button",name="导出非敏感偏好 JSON").click()
+                downloaded=await exported.value
+                exported_text=Path(await downloaded.path()).read_text(encoding="utf-8")
+                snapshot=json.loads(exported_text)
+                assert snapshot["kind"]=="pit-preferences"
+                assert "fixture-only-never-sent" not in exported_text
+                assert "microsoftKey" not in exported_text
+                snapshot["settings"]["webDisplay"]="translation-only"
+                snapshot["settings"]["target"]="fr"
+                await options.locator("#importPreferences").set_input_files({
+                    "name":"pit-preferences.json","mimeType":"application/json",
+                    "buffer":json.dumps(snapshot).encode("utf-8")
+                })
+                await options.get_by_text("已预览导入的非敏感偏好",exact=False).wait_for(timeout=8000)
+                assert await options.locator('[name="webDisplay"]').input_value()=="translation-only"
+                assert await options.locator('[name="target"]').input_value()=="fr"
+                assert await options.locator('[name="microsoftKey"]').input_value()=="fixture-only-never-sent"
+                # Import only fills the form; the owner must explicitly save.
+                # Leave the previously saved English-to-Chinese fixture intact.
+                await options.locator('[name="webDisplay"]').select_option("bilingual")
+                await options.locator('[name="target"]').select_option("zh")
+                print("PASS: real options JSON export excludes credentials, import preview preserves keys")
+
+                # MV3 event workers may be retired while a person edits the
+                # options page. An old Playwright Worker object then raises
+                # TargetClosedError; wake and reacquire the active instance.
+                await options.evaluate("""async()=>await chrome.runtime.sendMessage({
+                  type:'GET_SETTINGS'
+                })""")
+                sw=context.service_workers[-1] if context.service_workers else (
+                    await context.wait_for_event("serviceworker",timeout=15000))
                 # Replace ONLY network fetch on this temporary test service worker.
                 # All actual native message routing, cache, parsing and DOM
                 # injection execute inside Chromium.
@@ -86,6 +134,23 @@ async def main():
                 await target.locator(".pit-translation").wait_for(state="detached",timeout=12000)
                 print("PASS: WXT React restores original DOM")
 
+                await target.bring_to_front()
+                await popup.get_by_role("button",name="设置与诊断").click()
+                await popup.get_by_text("当前网站：api.deepl.com").wait_for(timeout=10000)
+                await popup.get_by_role("button",name="自动翻译此网站").click()
+                rules=await popup.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert "api.deepl.com" in rules["autoTranslateHosts"]
+                await popup.get_by_role("button",name="取消本站自动翻译").click()
+                await popup.get_by_role("button",name="禁用此网站翻译").click()
+                rules=await popup.evaluate("""async()=>(
+                  await chrome.storage.local.get('pit_settings_v1')
+                ).pit_settings_v1""")
+                assert "api.deepl.com" in rules["blockedHosts"]
+                assert "api.deepl.com" not in rules["autoTranslateHosts"]
+                await popup.get_by_role("button",name="解除本站禁用").click()
+                print("PASS: real Settings tab adds/removes current-site allow/block rules")
                 # Keep model keys/settings only in extension contexts.
                 assert "fixture-only-never-sent" not in await target.content()
                 assert not errors,errors

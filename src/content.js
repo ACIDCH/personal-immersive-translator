@@ -6,9 +6,16 @@
   if (globalThis.__PIT_TRANSLATOR_V1__) return;
   globalThis.__PIT_TRANSLATOR_V1__ = true;
 
-  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast';
+  const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast,.pit-selection-card';
   const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
+  let scope='smart',display='bilingual',theme='subtle';
+  let hoverEnabled=false,inputEnabled=false;
+  let voiceSource='auto',voiceTarget='zh';
+  let lastInput=null,inputTaps=0,inputTapAt=0;
+  let hovered=null;
+  const CONTENT_TARGETS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],div';
+
   let active = false, currentId = 0, mode = 'standard';
   let observer = null, observedRoots = new Set();
   let busy = false, queued = false, timer = null;
@@ -35,7 +42,8 @@
   function isUnsafe(el) {
     let part=el;
     while(part) {
-      if(part.closest?.(SKIP) || part.closest?.('form'))return true;
+      if(part.closest?.(scope==='full'?SKIP.replace(',footer,header',''):SKIP) ||
+        part.closest?.('form'))return true;
       part=part.getRootNode?.().host || null;
     }
     return false;
@@ -64,7 +72,7 @@
     // Avoid numeric-only UI counters while retaining short article headings
     // and normal CJK text. The former 12-character minimum discarded a large
     // class of legitimate short paragraphs without reporting any failure.
-    if(original.length>5000||!/[\p{L}]/u.test(original))return false;
+    if(original.length>20000||!/[\p{L}]/u.test(original))return false;
     const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
@@ -79,13 +87,14 @@
   }
   function candidates() {
     const result=[];
-    for(const el of queryDeep(TARGETS)){
-      if(!el.isConnected || isUnsafe(el) || !el.getClientRects().length)continue;
+    for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
+      if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
       const record=processed.get(el);
       if(record && (record.source!==original || !record.node?.isConnected)){
         record.node?.remove();
+        el.classList.remove('pit-source-block','pit-original-concealed');
         processed.delete(el);
       }
       if(!translatable(el,original) || processed.has(el))continue;
@@ -97,8 +106,8 @@
   // translate-command response. No original text is returned in these stats.
   function coverage() {
     let eligible=0,translated=0;
-    for(const el of queryDeep(TARGETS)){
-      if(!el.isConnected || isUnsafe(el) || !el.getClientRects().length)continue;
+    for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
+      if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
       if(!translatable(el,original))continue;
@@ -120,6 +129,9 @@
     node.className='pit-translation'+(isAI?' pit-ai':'');
     node.textContent=translation;
     node.dataset.pit='translation';
+    node.dataset.theme=theme;
+    el.classList.add('pit-source-block');
+    el.classList.toggle('pit-original-concealed',display==='translation-only');
     if(el.matches('li,td,th'))el.append(node);
     else el.insertAdjacentElement('afterend',node);
     processed.set(el,{source,node});
@@ -133,6 +145,52 @@
     if(!answer?.ok)throw Error(answer?.error||'翻译服务未响应');
     if(!Array.isArray(answer.translations)||answer.translations.length!==texts.length)throw Error('翻译结果与原文段落数量不符');
     return answer.translations;
+  }
+  // The hosted engine enforces 4,000 chars/segment and all adapters
+  // enforce 12,000 chars/batch. The old loop sent six arbitrary 5,000-char
+  // paragraphs and silently failed whole sections at the first large batch.
+  function splitParagraph(source){
+    const chars=Array.from(source);
+    const out=[];
+    for(let i=0;i<chars.length;){
+      let end=Math.min(i+3200,chars.length);
+      if(end<chars.length){
+        for(let probe=end;probe>i+2400;probe--){
+          if(/[\s,.;:!?。！？；，]/u.test(chars[probe-1])){
+            end=probe;break;
+          }
+        }
+      }
+      out.push(chars.slice(i,end).join(''));
+      i=end;
+    }
+    return out;
+  }
+  async function requestBoundedParagraphs(items,requestedMode,context,sessionId){
+    const fragments=items.map(item=>splitParagraph(item.original));
+    const queued=fragments.flatMap((pieces,owner)=>
+      pieces.map((text,index)=>({text,owner,index})));
+    const results=fragments.map(parts=>Array(parts.length).fill(''));
+    let requests=0;
+    for(let i=0;i<queued.length;){
+      // Restoring original text or navigating away cancels further queued
+      // provider requests, even when a previous browser message is pending.
+      if(!active||currentId!==sessionId)return null;
+      const batch=[];let characters=0;
+      while(i<queued.length&&batch.length<6){
+        const item=queued[i];
+        if(batch.length&&characters+item.text.length>9500)break;
+        batch.push(item);characters+=item.text.length;i++;
+      }
+      const reply=await request(batch.map(x=>x.text),requestedMode,context);
+      requests++;
+      for(let k=0;k<batch.length;k++){
+        const item=batch[k];
+        results[item.owner][item.index]=reply[k];
+      }
+    }
+    return {translations:results.map(parts=>parts.join(' ')),
+      segments:queued.length,requests};
   }
   function schedule(id,delay=300) {
     if(!active || currentId!==id)return;
@@ -156,10 +214,10 @@
   function ownedMutation(mutation) {
     const element=mutation.target.nodeType===1
       ? mutation.target : mutation.target.parentElement;
-    if(element?.closest?.('.pit-translation,.pit-toast'))return true;
+    if(element?.closest?.('.pit-translation,.pit-toast,.pit-selection-card'))return true;
     if(mutation.type==='childList' && mutation.addedNodes.length){
       return [...mutation.addedNodes].every(node=>
-        node.nodeType===1 && node.matches?.('.pit-translation,.pit-toast'));
+        node.nodeType===1 && node.matches?.('.pit-translation,.pit-toast,.pit-selection-card'));
     }
     if(mutation.type==='childList' && mutation.removedNodes.length){
       return [...mutation.removedNodes].every(node=>
@@ -182,13 +240,20 @@
         const chunk=targets.slice(i,i+6);
         const before=targets[i-1]?.original?.slice(-300)||'';
         const after=targets[i+6]?.original?.slice(0,300)||'';
-        const translations=await request(chunk.map(x=>x.original),mode,[before,after].filter(Boolean).join('\n'));
-        succeededBatches++;
+        const segmentCount=chunk.reduce((n,item)=>n+splitParagraph(item.original).length,0);
+        if(mode==='ai'&&aiCount+segmentCount>AI_MAX_PER_ACTION){
+          lastError='AI 本次段落额度不足，长段需要多次分段；请手动重新选择或使用常规翻译。';
+          break;
+        }
+        const outcome=await requestBoundedParagraphs(chunk,mode,
+          [before,after].filter(Boolean).join('\n'),id);
+        if(!outcome)return;
+        succeededBatches+=outcome.requests;
         if(!active || currentId!==id)return;
         for(let j=0;j<chunk.length;j++){
-          if(attach(chunk[j].el,chunk[j].original,translations[j],mode==='ai'))count++;
+          if(attach(chunk[j].el,chunk[j].original,outcome.translations[j],mode==='ai'))count++;
         }
-        if(mode==='ai')aiCount+=chunk.length;
+        if(mode==='ai')aiCount+=outcome.segments;
         else standardSpent+=chunk.length;
       }
       if(count)toast('已翻译 '+count+' 个新段落 · '+(mode==='ai'?'AI':'标准')+'模式');
@@ -219,13 +284,26 @@
     observer?.disconnect();observer=null;observedRoots.clear();
     for(const root of roots()){
       root.querySelectorAll('.pit-translation').forEach(node=>node.remove());
+      root.querySelectorAll('.pit-source-block').forEach(node=>
+        node.classList.remove('pit-source-block','pit-original-concealed'));
     }
-    document.querySelectorAll('.pit-toast').forEach(node=>node.remove());
+    document.querySelectorAll('.pit-toast,.pit-selection-card').forEach(node=>node.remove());
     processed=new WeakMap();aiCount=0;standardSpent=0;standardBudget=STANDARD_STEP;
     failedBatches=0;succeededBatches=0;lastError='';
   }
-  function start(requestedMode) {
+  function setDisplay(next,style=theme){
+    if(!['bilingual','translation-only'].includes(next))return;
+    display=next;theme=['subtle','underline','highlight'].includes(style)?style:'subtle';
+    for(const root of roots()){
+      root.querySelectorAll('.pit-source-block').forEach(el=>
+        el.classList.toggle('pit-original-concealed',display==='translation-only'));
+      root.querySelectorAll('.pit-translation').forEach(el=>el.dataset.theme=theme);
+    }
+  }
+  function start(requestedMode,options={}) {
     restore();mode=requestedMode;active=true;
+    scope=options.scope==='full'?'full':'smart';
+    setDisplay(options.display||display,options.theme||theme);
     const id=++currentId;
     if(requestedMode==='standard'){
       observer=new MutationObserver(mutations=>{
@@ -236,26 +314,196 @@
     }
     void translateContent(id);
   }
+  function speechLocale(code,text){
+    const locales={zh:'zh-CN',en:'en-US',fr:'fr-FR',ja:'ja-JP',
+      ko:'ko-KR',de:'de-DE',es:'es-ES'};
+    if(locales[code])return locales[code];
+    if(/[\u3040-\u30ff]/.test(text))return 'ja-JP';
+    if(/[\uac00-\ud7af]/.test(text))return 'ko-KR';
+    if(/[\u3400-\u9fff]/.test(text))return 'zh-CN';
+    return document.documentElement.lang||'en-US';
+  }
+  function showSelectionCard(original,translated,rect){
+    document.querySelector('.pit-selection-card')?.remove();
+    const card=document.createElement('aside');
+    card.className='pit-selection-card';
+    card.setAttribute('role','dialog');
+    card.setAttribute('aria-label','PIT 划词翻译');
+    const title=document.createElement('strong');
+    title.textContent='PIT · 划词翻译';
+    const close=document.createElement('button');
+    close.type='button';close.textContent='关闭';
+    close.setAttribute('aria-label','关闭划词翻译');
+    close.addEventListener('click',()=>card.remove());
+    const heading=document.createElement('div');
+    heading.className='pit-selection-header';
+    heading.append(title,close);
+    const source=document.createElement('p');source.className='pit-selection-source';
+    source.textContent=original;
+    const output=document.createElement('p');output.className='pit-selection-result';
+    output.textContent=translated;
+    const actions=document.createElement('div');actions.className='pit-selection-actions';
+    const button=(label,run)=>{
+      const el=document.createElement('button');
+      el.type='button';el.textContent=label;el.addEventListener('click',run);
+      actions.append(el);
+    };
+    button('复制译文',()=>{
+      void navigator.clipboard?.writeText(translated)
+        .then(()=>toast('译文已复制'))
+        .catch(()=>toast('复制失败，请手动选择译文'));
+    });
+    button('朗读原文',()=>{
+      if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
+        toast('此浏览器未提供语音朗读功能');return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(original);
+      utterance.lang=speechLocale(voiceSource,original);
+      window.speechSynthesis.speak(utterance);
+    });
+    button('朗读译文',()=>{
+      if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
+        toast('此浏览器未提供语音朗读功能');return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(translated);
+      utterance.lang=speechLocale(voiceTarget,translated);
+      window.speechSynthesis.speak(utterance);
+    });
+    card.append(heading,source,output,actions);
+    document.documentElement.append(card);
+    const box=rect&&Number.isFinite(rect.left)?rect:null;
+    const left=box?box.left:window.innerWidth/2-160;
+    const top=box?box.bottom+9:70;
+    card.style.left=Math.max(8,Math.min(left,window.innerWidth-340))+'px';
+    card.style.top=Math.max(8,Math.min(top,window.innerHeight-180))+'px';
+  }
   async function translateSelection(requestedMode) {
     const selection=window.getSelection();
     const text=selection?.toString().trim()||'';
     if(!text || text.length>5000){toast('请选中 1–5000 字符的正文');return;}
     const anchor=selection.anchorNode?.parentElement;
     if(anchor && isUnsafe(anchor)){toast('无法翻译编辑框或受保护区域');return;}
-    try{const result=await request([text],requestedMode,'');toast(result[0]);}
+    let rectangle=null;
+    try{
+      if(selection.rangeCount)rectangle=selection.getRangeAt(0).getBoundingClientRect();
+    }catch{}
+    try{
+      const result=await request([text],requestedMode,'');
+      showSelectionCard(text,result[0],rectangle);
+    }
     catch(error){toast('翻译失败：'+String(error.message||error));}
   }
+  function mountFloatingControl(){
+    if(document.getElementById('pit-floating-translate'))return;
+    const button=document.createElement('button');
+    button.id='pit-floating-translate';
+    button.type='button';
+    button.textContent='译';
+    button.title='PIT：翻译此网页 / 恢复原文';
+    button.setAttribute('aria-label','PIT：翻译当前网页或恢复原文');
+    document.documentElement.append(button);
+    button.addEventListener('click',()=>{
+      if(active)restore();
+      else start('standard',{scope,display,theme});
+    });
+  }
+  // Opt-in paragraph hover, only after an explicit Shift+pointer gesture.
+  // Passwords, forms, buttons, code and hidden page sections stay excluded.
+  async function translateHovered(el){
+    if(!hoverEnabled || !el?.isConnected || isUnsafe(el) || !el.getClientRects().length)return;
+    const original=sourceText(el);
+    if(!translatable(el,original)||processed.has(el))return;
+    const marker=el.dataset.pitHoverPending;
+    if(marker==='1')return;
+    el.dataset.pitHoverPending='1';
+    try{
+      const result=await request([original],'standard','');
+      if(!el.isConnected)return;
+      attach(el,original,result[0],false);
+    }catch(error){
+      toast('悬停翻译失败：'+String(error?.message||error).slice(0,120));
+    }finally{delete el.dataset.pitHoverPending;}
+  }
+  function hoverElement(target){
+    if(!(target instanceof Element))return null;
+    const el=target.closest(CONTENT_TARGETS);
+    return el && !isUnsafe(el)?el:null;
+  }
+  document.addEventListener('pointerover',event=>{
+    hovered=hoverElement(event.target);
+    if(hoverEnabled&&event.shiftKey&&hovered)void translateHovered(hovered);
+  },true);
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Shift'&&hoverEnabled&&hovered&&!event.repeat)
+      void translateHovered(hovered);
+  },true);
+  document.addEventListener('keydown',event=>{
+    if(!inputEnabled||event.isComposing||event.key!==' '||
+       event.ctrlKey||event.altKey||event.metaKey||event.repeat)return;
+    const el=event.target;
+    if(!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)||
+       (el instanceof HTMLInputElement && !['text','search'].includes(el.type))||
+       el.readOnly||el.disabled)return;
+    const now=Date.now();
+    if(lastInput!==el||now-inputTapAt>900)inputTaps=0;
+    lastInput=el;inputTapAt=now;inputTaps++;
+    if(inputTaps<3)return;
+    inputTaps=0;event.preventDefault();
+    const source=el.value.trim();
+    if(source.length<1||source.length>3000)return;
+    el.dataset.pitInputPending='1';
+    void chrome.runtime.sendMessage({type:'TRANSLATE_BATCH',
+      texts:[source],mode:'standard',inputEnhancement:true}).then(answer=>{
+      if(!answer?.ok)throw Error(answer?.error||'输入框翻译失败');
+      if(!el.isConnected || !el.dataset.pitInputPending)return;
+      if(el.value.trim()!==source)return; // Never overwrite typed changes.
+      el.value=answer.translations[0];
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+    }).catch(error=>toast('输入框翻译失败：'+String(error?.message||error).slice(0,120)))
+      .finally(()=>{delete el.dataset.pitInputPending;});
+  },true);
+  // The background only returns a strictly limited preference subset, never
+  // vendor keys. Without settings access the extension remains idle.
+  void chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES'}).then(answer=>{
+    if(!answer?.ok||!answer.preferences)return;
+    const p=answer.preferences;
+    if(p.floatingControl===true)mountFloatingControl();
+    voiceSource=p.sourceLanguage||'auto';voiceTarget=p.targetLanguage||'zh';
+    hoverEnabled=p.hoverTranslate===true;
+    inputEnabled=p.inputTranslate===true;
+    scope=p.webScope==='full'?'full':'smart';
+    setDisplay(p.webDisplay,p.translationTheme);
+    const host=location.hostname.toLowerCase();
+    const matches=(rules)=>String(rules||'').split(/[\s,;]+/).filter(Boolean)
+      .some(raw=>{
+        const rule=raw.trim().toLowerCase().replace(/^\*\./,'');
+        return host===rule||host.endsWith('.'+rule);
+      });
+    if(matches(p.autoTranslateHosts)&&!matches(p.blockedHosts)){
+      // A first install must never silently fake translations or send API
+      // calls to an unconfigured self-hosted Worker.
+      if(p.standardReady===true)start('standard',{scope,display,theme});
+      else toast('该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
+    }
+  }).catch(()=>{});
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
     if(message?.type==='PIT_GET_PROGRESS'){
       reply({ok:true,progress:coverage()});
     }else if(message?.type==='PIT_START' && ['standard','ai'].includes(message.mode)){
-      start(message.mode);reply({ok:true});
+      start(message.mode,{scope:message.scope||scope,display:message.display||display,
+        theme:message.theme||theme});reply({ok:true});
     }else if(message?.type==='PIT_CONTINUE' && active && mode==='standard'){
       standardBudget+=STANDARD_STEP;
       schedule(currentId,0);
       reply({ok:true});
     }else if(message?.type==='PIT_CONTINUE'){
       reply({ok:false,reason:'请先开启标准网页翻译，才能继续翻译后续段落。'});
+    }else if(message?.type==='PIT_SET_DISPLAY'){
+      setDisplay(message.display,message.theme);
+      reply({ok:true,display,theme});
     }else if(message?.type==='PIT_RESTORE'){
       restore();reply({ok:true});
     }else if(message?.type==='PIT_SELECTION' && ['standard','ai'].includes(message.mode)){

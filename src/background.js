@@ -1,5 +1,5 @@
 import {translateBatch, TranslationError} from './lib/providers.js';
-import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS} from './lib/settings.js';
+import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS, isStandardServiceConfigured} from './lib/settings.js';
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -193,6 +193,22 @@ async function handle(message, sender) {
     await chrome.tabs.sendMessage(message.tabId,payload).catch(()=>{});
     return {forwarded:true};
   }
+  if(message.type==='PIT_PUBLIC_PREFERENCES'){
+    if(!sender.tab)throw new TranslationError('只允许网站的原生内容脚本读取非敏感阅读偏好');
+    const settings=await getSettings();
+    const blocked=(settings.blockedHosts||'').split(/[\s,;]+/).filter(Boolean);
+    return {preferences:{
+      webDisplay:settings.webDisplay,webScope:settings.webScope,
+      sourceLanguage:settings.source,targetLanguage:settings.target,
+      translationTheme:settings.translationTheme,hoverTranslate:settings.hoverTranslate,
+      floatingControl:settings.floatingControl,
+      inputTranslate:settings.inputTranslate,inputTarget:settings.inputTarget,
+      autoTranslateHosts:settings.autoTranslateHosts,
+      // No API keys or provider auth tokens are returned to content scripts.
+      blockedHosts:settings.blockedHosts,
+      standardReady:isStandardServiceConfigured(settings)
+    }};
+  }
   if (message.type === 'GET_SETTINGS') {
     if (!isTrustedExtensionPage(sender)) throw new TranslationError('网页不允许读取 API 配置');
     return {settings: await getSettings()};
@@ -228,7 +244,10 @@ async function handle(message, sender) {
   const texts = message.type === 'TEST_PROVIDER' ? ['Hello, world!'] : message.texts;
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
   const source = settings.source;
-  const target = settings.target;
+  // Input enhancement is standard-MT only, explicitly user-triggered,
+  // with target selected by the owner in extension options.
+  const target = message.inputEnhancement===true && message.type==='TRANSLATE_BATCH' && !isAI
+    ? settings.inputTarget:settings.target;
   const model = isAI ? (provider==='gemini'?settings.geminiModel:provider==='deepseek'?settings.deepseekModel:(()=>{const p=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);return [p?.id,p?.model,p?.baseUrl].join(':');})()) : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
   if(message.transient===true) {
@@ -265,6 +284,68 @@ async function handle(message, sender) {
   }
   return {translations:values,provider,cached:missing.length===0};
 }
+
+/** Toolbar shortcut parity: Alt+A toggles article translation / source;
+ * Alt+W explicitly requests full readable page scope.
+ * Uses only the bundled PIT script and the user's configured standard MT.
+ */
+async function handleKeyboardCommand(command){
+ if(!['pit-toggle-translation','pit-translate-whole-page'].includes(command))return;
+ const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+ if(!tab?.id||!/^https?:\/\//.test(tab.url||''))return;
+ const settings=await getSettings();
+ const hostname=new URL(tab.url).hostname;
+ if(hostIsBlocked(hostname,settings.blockedHosts))return;
+ if(settings.standardProvider==='cloud'&&(!settings.cloudEndpoint||!settings.cloudToken))return;
+ try{
+  await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+  const progress=await chrome.tabs.sendMessage(tab.id,{type:'PIT_GET_PROGRESS'}).catch(()=>null);
+  const restore=command==='pit-toggle-translation'&&progress?.progress?.active;
+  await chrome.tabs.sendMessage(tab.id,restore?
+   {type:'PIT_RESTORE'}:{type:'PIT_START',mode:'standard',
+      scope:command==='pit-translate-whole-page'?'full':settings.webScope,
+      display:settings.webDisplay,theme:settings.translationTheme});
+ }catch{}
+}
+
+// Chrome-owned context menus provide native discoverability without copying
+// another translator's UI and never read selection through an extension page.
+const PIT_CONTEXT_ACTIONS=[
+ ['pit-context-page','PIT · Translate page',['page']],
+ ['pit-context-selection','PIT · Translate selection',['selection']],
+ ['pit-context-restore','PIT · Restore original text',['page']]
+];
+function registerTranslationMenus(){
+ if(!chrome.contextMenus?.create)return;
+ for(const [id,title,contexts] of PIT_CONTEXT_ACTIONS){
+  chrome.contextMenus.create({id,title,contexts,documentUrlPatterns:[
+   'http://*/*','https://*/*'
+  ]},()=>{void chrome.runtime.lastError;});
+ }
+}
+chrome.runtime.onInstalled.addListener(registerTranslationMenus);
+chrome.contextMenus?.onClicked?.addListener((info,tab)=>{
+ if(!PIT_CONTEXT_ACTIONS.some(item=>item[0]===info.menuItemId))return;
+ void (async()=>{
+  if(!tab?.id||!/^https?:\/\//.test(tab.url||''))return;
+  const settings=await getSettings();
+  if(hostIsBlocked(new URL(tab.url).hostname,settings.blockedHosts))return;
+  if(info.menuItemId!=='pit-context-restore'&&
+    settings.standardProvider==='cloud'&&
+    (!settings.cloudEndpoint||!settings.cloudToken))return;
+  await chrome.scripting.insertCSS({target:{tabId:tab.id},files:['pit-native.css']});
+  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['pit-native.js']});
+  const payload=info.menuItemId==='pit-context-restore'?{type:'PIT_RESTORE'}:
+    info.menuItemId==='pit-context-selection'?{type:'PIT_SELECTION',mode:'standard'}:
+    {type:'PIT_START',mode:'standard',scope:settings.webScope,
+      display:settings.webDisplay,theme:settings.translationTheme};
+  await chrome.tabs.sendMessage(tab.id,payload);
+ })().catch(()=>{});
+});
+chrome.commands?.onCommand?.addListener(command=>{
+ void handleKeyboardCommand(command).catch(()=>{});
+});
 chrome.runtime.onMessage.addListener((message,sender,sendResponse) => {
   if(message?.target==='offscreen')return false;
   handle(message,sender).then(result=>sendResponse({ok:true,...result}))

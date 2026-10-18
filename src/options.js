@@ -1,8 +1,8 @@
-import {normalizeSettings, SETTINGS_KEY} from './lib/settings.js';
+import {normalizeSettings, SETTINGS_KEY, portablePreferences, applyPortablePreferences} from './lib/settings.js';
 import {validateAIProfile} from './lib/ai-profiles.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
-const checkboxKeys=['contextAI'];
+const checkboxKeys=['contextAI','hoverTranslate','inputTranslate','floatingControl'];
 let profiles=[], activeProfileId='';
 const pick=id=>document.getElementById(id);
 function profileMessage(message) {pick('profileStatus').textContent=message;}
@@ -89,7 +89,11 @@ function collect() {
 async function requestLibrePermission(settings) {
   if (!['libre','cloud'].includes(settings.standardProvider)) return;
   let url;
-  try { url=new URL(settings.standardProvider==='cloud'?settings.cloudEndpoint:settings.libreUrl); }
+  const endpoint=settings.standardProvider==='cloud'?settings.cloudEndpoint:settings.libreUrl;
+  // Saving reading preferences must not force an unconfigured free/self-hosted
+  // service to exist. Only request host permission once owner enters a URL.
+  if(!String(endpoint||'').trim())return;
+  try { url=new URL(endpoint); }
   catch {throw new Error('翻译服务 URL 无效');}
   if (url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw new Error('翻译服务必须使用无内嵌凭据的 HTTPS URL');
   const granted=await chrome.permissions.request({origins:[url.origin+'/*']});
@@ -98,6 +102,9 @@ async function requestLibrePermission(settings) {
 async function requestAIProfilePermission(settings){
   if(settings.aiProvider!=='custom')return;
   const profile=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);
+  // An empty custom profile slot can be saved while the owner configures
+  // non-AI features. Provider readiness is checked before actual AI calls.
+  if(!profile)return;
   const valid=validateAIProfile(profile);
   const granted=await chrome.permissions.request({origins:[new URL(valid.baseUrl).origin+'/*']});
   if(!granted)throw new Error('未授予该 AI 服务商的网络访问权限');
@@ -127,6 +134,35 @@ document.getElementById('test').addEventListener('click', async()=>{
 document.getElementById('clearCache').addEventListener('click',async()=>{
   const res=await chrome.runtime.sendMessage({type:'CLEAR_CACHE'});
   status.textContent=res.ok?'缓存已清空':'清理失败：'+res.error;
+});
+// Backup is intentionally an allowlisted preference snapshot, never a
+// copy of local browser storage. Credentials and custom AI profiles stay local.
+pick('exportPreferences').addEventListener('click',async()=>{
+ try{
+  const saved=await chrome.storage.local.get(SETTINGS_KEY);
+  const payload=portablePreferences(saved[SETTINGS_KEY]);
+  const bytes=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const link=document.createElement('a');
+  const url=URL.createObjectURL(bytes);
+  link.href=url;link.download='pit-reading-preferences.json';
+  document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  pick('preferencesStatus').textContent='已导出偏好设置，不包含 API 密钥和翻译历史。';
+ }catch(e){pick('preferencesStatus').textContent='导出失败：'+String(e.message||e);}
+});
+pick('importPreferences').addEventListener('change',async event=>{
+ const input=event.currentTarget,file=input.files?.[0];
+ if(!file)return;
+ try{
+  if(file.size>65536||file.size===0)throw Error('请选择不超过 64 KiB 的 PIT 偏好 JSON');
+  const data=JSON.parse(await file.text());
+  // Preserve credentials already present in the current form. Only the
+  // allowlisted portable preferences can override them.
+  const settings=applyPortablePreferences(collect(),data);
+  viewSettings(settings);
+  pick('preferencesStatus').textContent='已预览导入的非敏感偏好；点击页面底部「保存设置」才会写入。';
+ }catch(e){pick('preferencesStatus').textContent='导入失败：'+String(e.message||e);}
+ finally{input.value='';}
 });
 // Hold controls until asynchronous saved preferences are rendered. Without
 // this, fast users and browser automation can have edits overwritten by init.

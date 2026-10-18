@@ -13,6 +13,17 @@ const modules:{id:string;title:string;subtitle:string;status:Status}[]=[
 export function Shell({view,webControls}:{view:'popup'|'dashboard',webControls?:ReactNode}){
  const [active,setActive]=useState('web');
  const item=modules.find(x=>x.id===active)!;
+ if(webControls){
+  return <main className="shell popup pit-reader-console">
+    <header className="hero"><div className="brand-icon">译</div>
+      <div><div className="subtitle">PIT · CORE PARITY BUILD</div>
+        <h1>多模态翻译</h1><p>网页 · 视频 · 文件 · 设置</p>
+      </div>
+    </header>
+    {webControls}
+    <footer>功能对标测试版 · 未完成真实服务验收，不代表正式版</footer>
+  </main>;
+ }
  return <main className={view==='popup'?'shell popup':'shell dashboard'}>
   <header className="hero"><div className="brand-icon">译</div><div><div className="subtitle">MULTIMODAL TRANSLATE</div>
    <h1>多模态翻译</h1><p>统一控制台 · 模块化翻译能力</p></div></header>

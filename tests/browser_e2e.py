@@ -33,9 +33,14 @@ async def main():
               window.pitListeners=[];
               window.chrome={runtime:{
                 onMessage:{addListener: fn=>window.pitListeners.push(fn)},
-                sendMessage: async msg=>({
-                  ok:true,translations:msg.texts.map(t=>'译文:'+t)
-                })
+                sendMessage: async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+                  ? {ok:true,preferences:{hoverTranslate:true,inputTranslate:true,
+                    webScope:'smart',webDisplay:'bilingual',
+                    translationTheme:'subtle',autoTranslateHosts:'',blockedHosts:''}}
+                  : (msg.texts.some(t=>t.length>3500)||
+                     msg.texts.reduce((n,t)=>n+t.length,0)>9500)
+                    ? {ok:false,error:'test vendor payload overflow'}
+                    : {ok:true,translations:msg.texts.map(t=>'译文:'+t)}
               }};
               window.pitAction=(type,mode='standard')=>new Promise(resolve=>{
                 for(const fn of window.pitListeners)fn({type,mode},{},resolve);
@@ -75,6 +80,80 @@ async def main():
             await page.locator('#div-only + .pit-translation').get_by_text(
               '译文:Div-only financial summary').wait_for(timeout=9000)
             print("PASS: actual browser short CJK, short Latin and div-only article segments")
+            # A realistic article contains multiple 2,500-character
+            # paragraphs or a 4,600-character continuous passage. Previous
+            # fixed six-element batches exceeded cloud/provider hard limits.
+            await page.evaluate("""()=>{
+              const main=document.querySelector('main');
+              const container=document.createElement('section');
+              container.id='long-paragraphs';
+              const normal=('financial markets and investment decisions. ').repeat(64);
+              for(let i=0;i<6;i++){
+                const p=document.createElement('p');
+                p.id='batch-long-'+i;
+                p.textContent=normal+' Section '+i;
+                container.append(p);
+              }
+              const p=document.createElement('p');
+              p.id='oversized-paragraph';
+              p.textContent=('international financial economics and transport. ').repeat(185);
+              container.append(p);
+              main.append(container);
+            }""")
+            await page.locator('#batch-long-5 + .pit-translation').wait_for(timeout=15000)
+            await page.locator('#oversized-paragraph + .pit-translation').wait_for(timeout=15000)
+            assert await page.locator('#long-paragraphs > .pit-translation').count()==7
+            print("PASS: >12k aggregate input and >3.5k single paragraph bounded without lost text")
+
+            await page.evaluate("""()=>{
+              const container=document.createElement('section');
+              container.innerHTML='<p id="hover-target">Hover interaction for finance readers</p>'+
+                '<input id="input-target" type="text" value="Financial markets" />'+
+                '<input id="secret-target" type="password" value="dont-touch-me" />';
+              document.querySelector('main').append(container);
+              document.querySelector('#hover-target').dispatchEvent(
+                new PointerEvent('pointerover',{bubbles:true,shiftKey:true}));
+            }""")
+            await page.locator('#hover-target + .pit-translation').get_by_text(
+              '译文:Hover interaction for finance readers').wait_for(timeout=9000)
+            input_box=page.locator('#input-target')
+            await input_box.focus()
+            await input_box.press('Space')
+            await input_box.press('Space')
+            await input_box.press('Space')
+            await page.wait_for_function("""()=>{
+              return document.querySelector('#input-target').value==='译文:Financial markets';
+            }""",timeout=9000)
+            assert await page.locator('#secret-target').input_value()=='dont-touch-me'
+            await page.evaluate("()=>window.pitAction('PIT_SET_DISPLAY')")
+            # A direct display-mode command is tested below with its value.
+            await page.evaluate("""()=>new Promise(resolve=>
+              window.pitListeners.forEach(fn=>fn({
+                type:'PIT_SET_DISPLAY',display:'translation-only',theme:'highlight'
+              },{},resolve)))""")
+            assert await page.locator('#hover-target').evaluate(
+              "el=>el.classList.contains('pit-original-concealed')")
+            assert await page.locator('#hover-target + .pit-translation').get_attribute(
+              'data-theme')=='highlight'
+            print("PASS: Shift hover, triple-Space translation and translation-only mode")
+            await page.evaluate("""()=>{
+              const node=document.getElementById('latin-short').firstChild;
+              const selection=window.getSelection();
+              const range=document.createRange();
+              range.selectNodeContents(node);
+              selection.removeAllRanges();selection.addRange(range);
+            }""")
+            await page.evaluate("()=>window.pitAction('PIT_SELECTION')")
+            await page.locator('.pit-selection-card .pit-selection-result').get_by_text(
+              '译文:Good day').wait_for(timeout=10000)
+            assert await page.locator('.pit-selection-card button').count()==4
+            assert await page.locator('.pit-selection-card button').all_text_contents()==[
+              '关闭','复制译文','朗读原文','朗读译文']
+            await page.locator('.pit-selection-card button').get_by_text(
+              '关闭').click()
+            assert await page.locator('.pit-selection-card').count()==0
+            print("PASS: persistent selection card with copy, native TTS and dismiss")
+
             await page.evaluate("()=>window.pitAction('PIT_RESTORE')")
             assert await page.locator(".pit-translation").count() == 0
             assert await page.evaluate("""()=>

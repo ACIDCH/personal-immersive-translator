@@ -20,3 +20,27 @@ footer{color:#7188aa;font-size:11px;margin-top:18px;line-height:1.5}
 .native-progress,.native-status,.native-hint{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .native-progress{color:#c5dafa}.native-status{color:#b4cfed}.native-hint{color:#93a4be}
 @media(max-width:600px){.dashboard .main-grid{grid-template-columns:1fr}}
+
+/* Functional parity information architecture. Temporary PIT test styling,
+   not an attempted copy of Immersive Translate trade dress. */
+.pit-reader-console{max-width:440px}
+.pit-feature-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:0 0 14px}
+.pit-feature-tabs button{font-size:11px;padding:10px 3px;min-width:0;background:#141f31;color:#c9d7eb;border:1px solid #28374f;border-radius:9px;cursor:pointer}
+.pit-feature-tabs button[aria-current="page"]{color:#fff;background:#27548b;border-color:#71aeed;font-weight:700}
+.pit-feature-section{padding:10px 1px 6px;min-height:150px}
+.pit-feature-section > .native-hint{margin:10px 2px}
+.pit-setting-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:13px 0}
+.pit-setting-row label,.pit-field{display:block;color:#b6c5d9;font-size:12px;line-height:1.5}
+.pit-setting-row select,.pit-field input:not([type="file"]){width:100%;margin-top:6px;padding:9px 7px;background:#122035;color:#f0f7ff;border:1px solid #3c5270;border-radius:8px;font:inherit}
+.pit-field{margin:12px 0}
+.pit-field input[type="file"]{display:block;width:100%;max-width:100%;margin-top:7px;font-size:11px}
+.pit-reader-console .native-actions button{min-height:38px}
+.pit-reader-console .native-actions button:first-child{background:#2463bc}
+.pit-reader-console .native-actions button:last-child{grid-column:auto}
+.pit-reader-console .native-status{margin-top:14px;padding:9px 10px;border:1px solid #32475f;border-radius:9px;background:#142239;min-height:39px}
+.pit-reader-console .hero{margin-bottom:16px}
+.pit-reader-console footer{border-top:1px solid #243750;padding-top:12px}
+
+.pit-site-rule{margin:14px 0;padding:11px;border:1px solid #334b68;border-radius:10px;background:#14263e}
+.pit-site-rule strong{color:#dceafa;font-size:12px;word-break:break-word}
+.pit-site-rule .native-actions{margin-top:8px}

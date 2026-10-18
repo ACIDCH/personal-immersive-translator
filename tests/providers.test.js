@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {translateBatch,parseAIResponse,decodeEntities,TranslationError} from '../src/lib/providers.js';
-import {normalizeSettings,hostIsBlocked} from '../src/lib/settings.js';
+import {normalizeSettings,hostIsBlocked,portablePreferences,applyPortablePreferences,isStandardServiceConfigured} from '../src/lib/settings.js';
 
 function mockResponse(output,check) {return async (url,init) => {check?.(url,init);return {ok:true,status:200,json:async()=>output};};}
 const config = {target:'zh', source:'en'};
@@ -97,4 +97,80 @@ test('hosted PIT M2M100 adapter uses user-configured HTTPS and bearer token',asy
  await assert.rejects(translateBatch(['Hi'],{
    ...config,provider:'cloud',cloudEndpoint:'http://pit.example',
    cloudToken:'123456789abcdefghi'},fetcher),/HTTPS/);
+});
+
+test('immersive reading settings keep validated controls and never opt in to AI',()=>{
+ const settings=normalizeSettings({
+   webDisplay:'translation-only',webScope:'full',translationTheme:'highlight',
+   hoverTranslate:true,inputTranslate:true,inputTarget:'fr',
+   autoTranslateHosts:'docs.example.org',autoAI:true
+ });
+ assert.equal(settings.webDisplay,'translation-only');
+ assert.equal(settings.webScope,'full');
+ assert.equal(settings.translationTheme,'highlight');
+ assert.equal(settings.hoverTranslate,true);
+ assert.equal(settings.inputTranslate,true);
+ assert.equal(settings.inputTarget,'fr');
+ assert.equal(settings.autoTranslateHosts,'docs.example.org');
+ assert.equal(settings.autoAI,false);
+ const invalid=normalizeSettings({
+   webDisplay:'script',webScope:'everything',translationTheme:'rainbow',
+   inputTarget:'unknown'
+ });
+ assert.equal(invalid.webDisplay,'bilingual');
+ assert.equal(invalid.webScope,'smart');
+ assert.equal(invalid.translationTheme,'subtle');
+ assert.equal(invalid.inputTarget,'en');
+});
+
+test('floating translation setting is opt-in and sanitized',()=>{
+ assert.equal(normalizeSettings({}).floatingControl,false);
+ assert.equal(normalizeSettings({floatingControl:true}).floatingControl,true);
+ assert.equal(normalizeSettings({floatingControl:0}).floatingControl,false);
+});
+
+test('portable preference snapshot removes all API secrets and AI service credentials',()=>{
+ const saved=normalizeSettings({
+  target:'fr',source:'en',webDisplay:'translation-only',hoverTranslate:true,
+  blockedHosts:'bank.example',glossary:'forward rate = 远期汇率',
+  cloudToken:'secret-token-1234567',cloudPdfToken:'doc-token-1234567',
+  microsoftKey:'ms-token-456',geminiKey:'gm-token-123',
+  aiProfiles:[{id:'model-a',apiKey:'secret-A',baseUrl:'https://private.example/v1'}]
+ });
+ const exported=portablePreferences(saved);
+ assert.equal(exported.kind,'pit-preferences');
+ assert.equal(exported.version,1);
+ assert.equal(exported.settings.target,'fr');
+ assert.ok(!JSON.stringify(exported).includes('secret'));
+ assert.ok(!JSON.stringify(exported).includes('private.example'));
+ const restored=applyPortablePreferences({...saved,target:'zh'},exported);
+ assert.equal(restored.target,'fr');
+ assert.equal(restored.hoverTranslate,true);
+ assert.equal(restored.cloudToken,'secret-token-1234567');
+ assert.equal(restored.geminiKey,'gm-token-123');
+ assert.equal(restored.aiProfiles[0].apiKey,'secret-A');
+});
+test('portable preference import is allowlisted and version checked',()=>{
+ const base=normalizeSettings({cloudToken:'keep-secret',target:'en'});
+ assert.throws(()=>applyPortablePreferences(base,{kind:'other',version:1,settings:{}}),/受支持/);
+ assert.throws(()=>applyPortablePreferences(base,{kind:'pit-preferences',version:7,settings:{}}),/受支持/);
+ const restored=applyPortablePreferences(base,{
+  kind:'pit-preferences',version:1,
+  settings:{target:'ko',cloudToken:'override',aiProfiles:[{apiKey:'bad'}],
+    standardProvider:'malicious-provider'}
+ });
+ assert.equal(restored.target,'ko');
+ assert.equal(restored.cloudToken,'keep-secret');
+ assert.deepEqual(restored.aiProfiles,[]);
+ assert.equal(restored.standardProvider,'cloud');
+});
+
+test('site auto-translate only activates with a configured standard MT engine',()=>{
+ assert.equal(isStandardServiceConfigured({}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'123'}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'http://pit.example',cloudToken:'long-fake-token-12345'}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'long-fake-token-12345'}),true);
+ assert.equal(isStandardServiceConfigured({standardProvider:'google',googleKey:'abcdef'}),true);
+ assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'http://localhost:5000'}),false);
+ assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'https://mt.example'}),true);
 });
