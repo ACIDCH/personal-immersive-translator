@@ -152,8 +152,8 @@ test('portable preference snapshot removes all API secrets and AI service creden
 });
 test('portable preference import is allowlisted and version checked',()=>{
  const base=normalizeSettings({cloudToken:'keep-secret',target:'en'});
- assert.throws(()=>applyPortablePreferences(base,{kind:'other',version:1,settings:{}}),/不支持/);
- assert.throws(()=>applyPortablePreferences(base,{kind:'pit-preferences',version:7,settings:{}}),/不支持/);
+ assert.throws(()=>applyPortablePreferences(base,{kind:'other',version:1,settings:{}}),/受支持/);
+ assert.throws(()=>applyPortablePreferences(base,{kind:'pit-preferences',version:7,settings:{}}),/受支持/);
  const restored=applyPortablePreferences(base,{
   kind:'pit-preferences',version:1,
   settings:{target:'ko',cloudToken:'override',aiProfiles:[{apiKey:'bad'}],
