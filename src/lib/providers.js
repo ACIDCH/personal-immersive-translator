@@ -208,7 +208,7 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
     }
     case 'gemini': {
       const key = required(opts.geminiKey, 'Gemini API Key');
-      const model = required(opts.geminiModel || 'gemini-2.5-flash', 'Gemini Model');
+      const model = required(opts.geminiModel || 'gemini-3.5-flash-lite', 'Gemini Model');
       if (!/^[A-Za-z0-9_.-]{2,80}$/.test(model)) throw new TranslationError('Gemini 模型名称格式无效');
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
       result = await postJson(fetchFn, url,
@@ -218,7 +218,7 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
     }
     case 'deepseek': {
       const key = required(opts.deepseekKey, 'DeepSeek API Key');
-      const model = required(opts.deepseekModel || 'deepseek-chat', 'DeepSeek Model');
+      const model = required(opts.deepseekModel || 'deepseek-flash', 'DeepSeek Model');
       if (!/^[A-Za-z0-9_.-]{2,80}$/.test(model)) throw new TranslationError('DeepSeek 模型名称格式无效');
       result = await postJson(fetchFn, 'https://api.deepseek.com/chat/completions', {
         model,
