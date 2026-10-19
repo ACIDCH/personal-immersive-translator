@@ -440,6 +440,17 @@ async def main():
         assert '译文:Bonjour, world' in ass_result,ass_result
         assert 'Default' not in ass_result and '{\\i1}' not in ass_result,ass_result
         report['ass_subtitle_import']='pass'
+        # The batch lab uses the same subtitle engine, not a third parser.
+        await page.locator('.batch-file-lab input[type="file"]').set_input_files({
+          'name':'seminar.ass','mimeType':'text/plain','buffer':ass.encode('utf8')
+        })
+        async with page.expect_download(timeout=20000) as batch_ass_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await batch_ass_event.value).path()) as archive:
+          bilingual=archive.read('translated/01-seminar-translated.srt').decode('utf8')
+          assert '00:00:01,250 --> 00:00:03,500' in bilingual,bilingual
+          assert 'Bonjour, world' in bilingual and '译文:Bonjour, world' in bilingual
+        report['ass_batch_zip']='pass'
         report['subtitle_metadata_filter']='pass'
         report['offline_subtitle_translation']='pass'
         print('WXT OFFLINE VTT TO BILINGUAL SRT: PASS',flush=True)
