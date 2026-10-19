@@ -3,8 +3,9 @@
  function seconds(raw){
    const t=String(raw||'').trim().replace(',','.');
    const parts=t.split(':').map(Number);
-   if(parts.some(n=>!Number.isFinite(n))||parts.length<2||parts.length>3)return NaN;
+   if(parts.some(n=>!Number.isFinite(n)||n<0)||parts.length<2||parts.length>3)return NaN;
    const [a,b,c]=parts.length===3?parts:[0,...parts];
+   if(b>=60||c>=60||!Number.isInteger(b))return NaN;
    return a*3600+b*60+c;
  }
  function parseAss(raw){
