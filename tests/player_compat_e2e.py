@@ -76,6 +76,32 @@ async def run():
         print("PASS",provider,"visible captions, update, hidden state, stop, bounded calls")
         await page.close()
 
+      # Paid AI calls are never automatically repeated after provider
+      # refusal. Standard MT retains bounded manual/automatic recovery.
+      ai_failed=await browser.new_page()
+      await setup(ai_failed,"https://www.youtube.com/watch?v=ai-failure",
+        '<video style="width:640px;height:360px"></video>'
+        '<div class="ytp-caption-window-container">'
+        '<span class="ytp-caption-segment">AI provider is down</span></div>')
+      await ai_failed.evaluate("""()=>{
+        window.pitRequests=[];
+        chrome.runtime.sendMessage=async msg=>{
+          window.pitRequests.push(msg);
+          throw Error('AI quota exceeded');
+        };
+      }""")
+      ai_start=await ai_failed.evaluate(
+        "()=>window.pitAction('PIT_CAPTIONS_START',[],'ai')")
+      assert ai_start['ok'],ai_start
+      await ai_failed.locator('.pit-caption-translated').get_by_text(
+        '已停止自动重试',exact=False).wait_for(timeout=5000)
+      await ai_failed.wait_for_timeout(1400)
+      assert await ai_failed.evaluate('window.pitRequests.length')==1, (
+        'A failed opt-in AI caption provider must not re-bill automatically')
+      await ai_failed.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await ai_failed.locator('.pit-caption-overlay').count()==0
+      await ai_failed.close()
+
       # If PIT activates a disabled native subtitle TextTrack, the original
       # is otherwise invisible. The original and translation must both appear
       # in the overlay without introducing an additional original DOM copy
