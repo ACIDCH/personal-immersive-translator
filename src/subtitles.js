@@ -144,6 +144,12 @@
     // changing frameId or origin. Fail closed before reading any new caption.
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){stop();return;}
     if(!refreshPlaybackSource())return;
+    if(state.mode==='ai' && state.failedAt){
+      // Do not conceal a paid-provider error behind "translating" or
+      // silently spend more calls every 450 ms while a model is unavailable.
+      render('AI 字幕调用失败，已停止自动重试；请检查模型/额度后手动重新启动。');
+      return;
+    }
     // Prefer actual timed cues when available. Some sites advertise a native
     // TextTrack but never populate it, while rendering visible CC in the DOM.
     // Switch to the user's already-visible CC without reading private player
