@@ -43,6 +43,7 @@ test('DeepSeek sends JSON object mode with bearer auth',async()=>{
     assert.equal(url,'https://api.deepseek.com/chat/completions');
     assert.equal(init.headers.Authorization,'Bearer secret');
     assert.equal(JSON.parse(init.body).response_format.type,'json_object');
+    assert.equal(JSON.parse(init.body).thinking.type,'disabled');
   });
   assert.deepEqual(await translateBatch(['English'],{...config,provider:'deepseek',deepseekKey:'secret'},f),['中文']);
 });
