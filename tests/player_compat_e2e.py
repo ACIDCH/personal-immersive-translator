@@ -245,6 +245,45 @@ async def run():
       print("PASS detached media element stops subtitles without leaking old overlay")
       await recycled.close()
 
+      # Sites pre-create hidden advertisements before the visible lecture
+      # player; a bigger hidden <video> must not steal caption selection.
+      # They may also arm the actual video before assigning any media src.
+      late_media=await browser.new_page()
+      await setup(late_media,"https://www.youtube.com/watch?v=late-src-fixture",
+        '<video id="hidden-ad" style="width:1280px;height:720px;display:none"></video>'
+        '<video id="lecture" style="width:640px;height:360px"></video>')
+      await late_media.evaluate("""()=>{
+        const lecture=document.querySelector('#lecture');
+        const tr=lecture.addTextTrack('subtitles','English','en');
+        tr.mode='showing';tr.addCue(new VTTCue(0,15,'Visible lesson caption'));
+        const ad=document.querySelector('#hidden-ad');
+        const adTrack=ad.addTextTrack('subtitles','Ad','en');
+        adTrack.mode='showing';adTrack.addCue(new VTTCue(0,15,'Wrong ad caption'));
+      }""")
+      started=await late_media.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert started['ok'],started
+      await late_media.locator('.pit-caption-translated').get_by_text(
+        '译文:Visible lesson caption').wait_for(timeout=6000)
+      assert not await late_media.locator('.pit-caption-overlay').get_by_text(
+        'Wrong ad caption').count()
+      await late_media.evaluate("""()=>{
+        document.querySelector('#lecture').src=
+          'https://media.example.org/videos/lecture-1.mp4';
+      }""")
+      await late_media.wait_for_timeout(700)
+      assert await late_media.locator('.pit-caption-overlay').count()==1, (
+        'the first delayed media URL must not terminate translation')
+      await late_media.evaluate("""()=>{
+        document.querySelector('#lecture').src=
+          'https://media.example.org/videos/lecture-2.mp4';
+      }""")
+      await late_media.locator('.pit-caption-overlay').wait_for(
+        state="detached",timeout=2300)
+      assert not await late_media.evaluate("""()=>window.pitRequests.some(
+        r=>r.texts?.includes('Wrong ad caption'))""")
+      print("PASS visible player priority and late source binding stop cross-video reuse")
+      await late_media.close()
+
       # Even if an SPA keeps the original video element, a new recording URL
       # must not inherit a previous caption translation session.
       navigation=await browser.new_page()
