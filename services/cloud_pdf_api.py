@@ -115,13 +115,17 @@ async def translate(pdf:UploadFile=File(...),source:str=Form("auto"),
                 raise ValueError("password-protected or over 300 pages")
     except Exception as error:
         raise HTTPException(status_code=422,detail="PDF cannot be read or exceeds 300 pages") from error
-    chosen,confidence=infer_source(data) if source=="auto" else (source,"explicit")
+    chosen,confidence=await asyncio.to_thread(infer_source,data) if source=="auto" else (source,"explicit")
     if chosen==target:
         raise HTTPException(status_code=422,
           detail="Detected source and target are identical; explicitly choose source")
-    if lock.locked() or any(j["status"] in ("queued","running") for j in jobs.values()):
-        raise HTTPException(status_code=429,detail="Document worker is occupied")
-    async with lock:
+    # Reserve the only worker under the same gate as async submissions.
+    # Two legacy POSTs must never silently queue unbounded paid renderings.
+    async with job_gate:
+        if lock.locked() or any(j["status"] in ("queued","running") for j in jobs.values()):
+            raise HTTPException(status_code=429,detail="Document worker is occupied")
+        await lock.acquire()
+    try:
         with tempfile.TemporaryDirectory(prefix="pit-cloud-doc-") as directory:
             root=pathlib.Path(directory)
             src=root/"original.pdf"
@@ -134,6 +138,8 @@ async def translate(pdf:UploadFile=File(...),source:str=Form("auto"),
                 # stderr in HTTP responses.
                 raise HTTPException(status_code=422,
                     detail="BabelDOC/OCR translation failed; inspect private service logs") from error
+    finally:
+        lock.release()
     return Response(payload,media_type="application/pdf",headers={
         "Cache-Control":"no-store",
         "Content-Disposition":'attachment; filename="bilingual.pdf"',
