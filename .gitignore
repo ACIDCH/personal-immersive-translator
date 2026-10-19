@@ -8,3 +8,10 @@ coverage/
 
 # Generated from pinned Mozilla PDF.js dependency during CI
 src/vendor/
+apps/wxt-ui/.wxt/
+apps/wxt-ui/.output/
+apps/wxt-ui/public/
+supabase/.temp/
+.venv/
+*-observation.json
+*-report.json

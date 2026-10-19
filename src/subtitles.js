@@ -5,6 +5,29 @@
   const core = globalThis.PITCaptionCore;
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
+  let config={enabled:true,playerQuickToggle:false,preferPitTranslationOverPlatformMT:true},quick=null,settingsReady=Promise.resolve(),lastError='',manuallyStopped=false;
+  const platformId=()=>/youtube/.test(location.hostname)?'youtube':/bilibili/.test(location.hostname)?'bilibili':/netflix/.test(location.hostname)?'netflix':/panopto/.test(location.hostname)?'panopto':'generic';
+  function dialogue(text){return config.focusDialogueOnly?text.replace(/\[(?:music|applause|laughter|laughing|sighs?|gasps?|noise|silence)\]|[（(](?:音乐|笑声|掌声|叹气|背景音)[）)]/gi,'').trim():text;}
+  function prepareCues(cues){return cues.map(c=>({...c,text:dialogue(c.text)})).filter(c=>c.text);}
+  function quickToggle(){
+    const v=pickVideo();
+    if(!config.enabled||!config.playerQuickToggle||!v||!v.getClientRects().length){quick?.remove();quick=null;return;}
+    if(!quick){quick=document.createElement('button');quick.type='button';quick.className='pit-player-toggle';quick.onclick=()=>{manuallyStopped=state.active;if(state.active)stop();else{const result=start('standard');if(!result.ok){lastError=result.reason;quick.title=result.reason;}}quickToggle();};}
+    const parent=document.fullscreenElement||document.documentElement;if(quick.parentNode!==parent)parent.append(quick);
+    quick.textContent=state.active?'PIT · 停止字幕':'PIT · 双语字幕';quick.setAttribute('aria-pressed',String(state.active));
+    const rect=v.getBoundingClientRect();quick.style.top=Math.max(8,Math.min(innerHeight-45,rect.top+12))+'px';quick.style.right=Math.max(8,innerWidth-rect.right+12)+'px';
+  }
+  function autoStart(){quickToggle();if(config.enabled&&config.autoStart&&!manuallyStopped&&!state.active){const v=pickVideo();const visible=platform?.readVisibleCaptions(document,location.hostname)?.text;if(v&&([...v.textTracks].some(t=>t.cues?.length)||visible))start('standard');}}
+  async function refreshConfig(){
+    const r=await chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES'});if(!r?.preferences?.videoSettings)return;
+    const p=r.preferences,v=p.videoSettings,o=v.siteOverrides?.[platformId()]||{};
+    const blocked=String(p.blockedHosts||'').split(/[\s,;]+/).filter(Boolean).some(h=>location.hostname===h||location.hostname.endsWith('.'+h));
+    const next={...v,enabled:v.enabled&&o.enabled!==false&&!blocked,autoStart:o.autoStart??v.autoStartSupportedSites,providerId:o.providerId&&o.providerId!=='inherit'?o.providerId:v.providerId};
+    const restart=state.active&&JSON.stringify(config)!==JSON.stringify(next),previous={mode:state.mode,cues:state.importedCues,source:state.manualSource};config=next;
+    if(!config.enabled||(platformId()==='youtube'&&!config.preferPitTranslationOverPlatformMT))stop();
+    else if(restart)start(previous.mode,previous.cues||[],null,previous.source);
+    quickToggle();autoStart();
+  }
   const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],manualSource:''};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
@@ -33,6 +56,12 @@
   }
   function chooseTrack(video) {
     const tracks=[...video.textTracks].filter(t=>t.kind==='subtitles'||t.kind==='captions');
+    const desired=config.source&&config.source!=='auto'?config.source:'';
+    const matched=desired?tracks.filter(t=>t.language?.split('-')[0]===desired):tracks;
+    // HTML TextTrack has no standard human/auto flag. Only explicit metadata
+    // supplied by the publisher is trusted; labels are never guessed.
+    if(config.preferHumanCaptions){const human=matched.find(t=>[...video.querySelectorAll('track')].some(el=>el.track===t&&el.dataset.pitCaptionKind==='human'));if(human)return human;}
+    if(desired&&matched.length)return matched.find(t=>t.mode==='showing')||matched[0];
     return tracks.find(t=>t.mode==='showing') || tracks.find(t=>t.mode==='hidden') || tracks[0] || null;
   }
   function releaseTrack(track, originalMode) {
@@ -87,6 +116,9 @@
     state.overlay.replaceChildren();
     if(!text) { state.overlay.style.display='none'; return; }
     state.overlay.style.display='block';
+    state.overlay.style.fontSize=(config.subtitleFontSize||22)+'px';
+    state.overlay.style.color=config.subtitleColor||'#ffffff';state.overlay.style.backgroundColor=config.subtitleBackground||'#142130';
+    state.overlay.style.top=config.subtitlePosition==='top'?'8%':'auto';state.overlay.style.bottom=config.subtitlePosition==='top'?'auto':'9%';
     // A hidden native TextTrack and an imported SRT/VTT are invisible to the
     // viewer without PIT. Show the original alongside the translation. When
     // the source is already visibly drawn by YouTube/Bilibili/Netflix, avoid
@@ -101,8 +133,8 @@
     }
     const line=document.createElement('div');
     line.className='pit-caption-translated';
-    line.textContent=text;
-    state.overlay.append(line);
+    line.textContent=config.baseSentenceSegmentation?text.replace(/([.!?。！？])\s+/g,'$1\n'):text;
+    if(config.translationFirst)state.overlay.prepend(line);else state.overlay.append(line);
   }
   function createOverlay() {
     const overlay=document.createElement('div');
@@ -121,7 +153,7 @@
     // MV3 worker shutdown or a slow model must not stall subtitles forever.
     // Timeout stops waiting only: it cannot cancel an already accepted call.
     const reply=chrome.runtime.sendMessage({
-      type:'TRANSLATE_BATCH',texts,mode:state.mode,
+      type:'TRANSLATE_BATCH',texts,mode:state.mode,pageContext:'video',
       captionSourceLanguage:state.manualSource||state.track?.language||'',
       userInitiated:state.mode==='ai',context
     });
@@ -171,7 +203,7 @@
     if (state.domMode) {
       if (!platform) return;
       const info=platform.readVisibleCaptions(document,location.hostname);
-      const text=info.text;
+      const text=dialogue(info.text);
       if(!text){
         state.latestDomText='';
         // An authorized platform may not expose captions until CC is enabled
@@ -200,7 +232,8 @@
             state.contextHistory=[...state.contextHistory.slice(-2),text];
           if(state.latestDomText===text) render(translations[0]);
         }
-      } catch {
+      } catch(error) {
+        lastError=String(error?.message||error);
         if(generation===state.generation){
           state.failedAt=Date.now();
           render(state.mode==='ai'
@@ -217,7 +250,7 @@
     const video=state.video, track=state.track;
     let raw=[];
     try { raw=track?.cues ? [...track.cues] : []; } catch {}
-    const cues=core.normalizeCues(state.importedCues || raw,video.currentTime);
+    const cues=prepareCues(core.normalizeCues(state.importedCues || raw,video.currentTime));
     if(!cues.length) {
       // Players clear their cues on CC disable and during track reload.
       // Do not leave a translation from the preceding track visible.
@@ -246,6 +279,7 @@
         renderTimedCues(cues,video.currentTime);
       }
     } catch(error) {
+      lastError=String(error?.message||error);
       if(generation===state.generation){
         state.failedAt=Date.now();
         render(state.mode==='ai'
@@ -287,6 +321,8 @@
     return '';
   }
   function start(mode, suppliedCues=[], expectedUrl=null, requestedSource='auto') {
+    if(!config.enabled)return {ok:false,reason:'此平台字幕功能已禁用，请在视频设置启用。'};
+    if(platformId()==='youtube'&&!config.preferPitTranslationOverPlatformMT)return {ok:false,reason:'已选择保留 YouTube 平台字幕；PIT 翻译关闭。'};
     if(expectedUrl!==null && expectedUrl!==undefined){
       let matches=false;
       if(typeof expectedUrl==='string' && expectedUrl.length<=4096){
@@ -300,7 +336,7 @@
     }
     stop();
     // Manual source overrides unreliable short DOM subtitles, not page UI language.
-    state.manualSource=core.normalizeCaptionSource(requestedSource);
+    state.manualSource=core.normalizeCaptionSource(requestedSource)||core.normalizeCaptionSource(config.source);
     const video=pickVideo();
     const adapter=platform?.identify(location.hostname);
     const visible=adapter && adapter.id!=='generic'
@@ -335,12 +371,27 @@
     // Hidden activates disabled native tracks without displaying a second set of original subtitles.
     if(track?.mode==='disabled') track.mode='hidden';
     state.overlay=createOverlay();state.cache=new core.CaptionCache(350);
+    lastError='';
     state.timer=setInterval(()=>{void tick();},450);
     void tick();
     return {ok:true,reason:state.importedCues?'已加载你提供的 SRT/VTT 字幕，并按视频时间轴进行翻译。':state.domMode?'已开启可见字幕观察：将等待播放器加载/显示原文字幕，未出现字幕前不发送翻译请求。':'原生字幕翻译已启动。'};
   }
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
-    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)) respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));
-    else if(msg?.type==='PIT_CAPTIONS_STOP'){stop();respond({ok:true});}
+    if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)){void settingsReady.then(()=>{manuallyStopped=false;respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));quickToggle();});return true;}
+    else if(msg?.type==='PIT_CAPTIONS_STOP'){manuallyStopped=true;stop();quickToggle();respond({ok:true});}
+    else if(msg?.type==='PIT_PREFERENCES_CHANGED'){void refreshConfig().catch(()=>{});}
+    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',status:!config.enabled?'disabled':state.failedAt?'error':state.active?(state.seenAny?'ready':'waiting-for-CC'):'disabled',lastError});}
   });
+  settingsReady=refreshConfig().catch(()=>{});
+  // Event-driven discovery; existing 450 ms session timer remains the only poll.
+  for(const event of ['play','loadedmetadata','loadeddata'])document.addEventListener(event,()=>autoStart(),true);
+  document.addEventListener('fullscreenchange',()=>{quickToggle();if(state.active)void tick();});
+  document.addEventListener('scroll',quickToggle,{passive:true});window.addEventListener('resize',quickToggle);
+  let pendingDiscovery=false;
+  const discovery=new MutationObserver(records=>{
+    if(pendingDiscovery||!config.enabled||(!config.playerQuickToggle&&!config.autoStart))return;
+    if(records.every(r=>r.target?.closest?.('.pit-caption-overlay,.pit-player-toggle')))return;
+    pendingDiscovery=true;setTimeout(()=>{pendingDiscovery=false;autoStart();},500);
+  });
+  discovery.observe(document.documentElement,{childList:true,subtree:true});
 })();

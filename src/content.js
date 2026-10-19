@@ -10,6 +10,13 @@
   const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
   let scope='smart',display='bilingual',theme='subtle';
+  let prefs={},titleRecord=null,initialChars=0;
+  const visibleOrInitial=(item,index,list)=>{
+    if(prefs.translateToBottom!==false)return true;
+    const rect=item.el.getBoundingClientRect();
+    const before=list.slice(0,index).reduce((n,x)=>n+x.original.length,0)+initialChars;
+    return before<(prefs.initialTranslateCharacters||5000)||(rect.bottom>=0&&rect.top<innerHeight+200);
+  };
   let hoverEnabled=false,inputEnabled=false;
   let voiceSource='auto',voiceTarget='zh';
   let lastInput=null,inputTaps=0,inputTapAt=0;
@@ -42,6 +49,7 @@
     return roots().flatMap(root=>Array.from(root.querySelectorAll(selector)));
   }
   function isUnsafe(el) {
+    if(prefs.translateSidebar===false&&el.closest('aside,[role="complementary"]'))return true;
     let part=el;
     while(part) {
       if(part.closest?.(scope==='full'?SKIP.replace(',footer,header',''):SKIP) ||
@@ -88,10 +96,10 @@
     // class of legitimate short paragraphs without reporting any failure.
     if(original.includes(TRUNCATED_SOURCE_MARKER)||
        original.length>MAX_PARAGRAPH_CHARS||!/[\p{L}]/u.test(original))return false;
-    const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
+    const threshold=prefs.minSegmentCharacters||(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4);
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
-    if(el.matches('div')&&el.closest('nav,aside,[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
+    if(el.matches('div')&&el.closest('nav,'+(prefs.translateSidebar?'':'aside,')+'[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
     if(el.matches('div')&&el.children.length>0){
       // A wrapping DIV with its own rich descendants is not a leaf text unit.
       // Only permit literal text runs at leaf DIV level, so a whole article is
@@ -152,13 +160,17 @@
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
     const node=document.createElement('div');
     node.className='pit-translation'+(isAI?' pit-ai':'');
-    node.textContent=translation;
+    node.textContent=prefs.longParagraphLineBreak?translation.replace(/([.!?。！？])\s*/g,'$1\n'):translation;
+    Object.assign(node.style,prefs.readingStyle||{});
+    if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.whiteSpace='pre-line';
+    if(theme==='none')node.style.backgroundColor='transparent';
+    if(prefs.sameLanguageHighlight&&['zh','ja','ko'].includes(voiceTarget))node.style.backgroundColor=prefs.translationBgColor;
     node.dataset.pit='translation';
     node.dataset.theme=theme;
     el.classList.add('pit-source-block');
     el.classList.toggle('pit-original-concealed',display==='translation-only');
-    if(el.matches('li,td,th'))el.append(node);
-    else el.insertAdjacentElement('afterend',node);
+    if(el.matches('li,td,th')){if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);}
+    else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     processed.set(el,{source,node});
     return true;
   }
@@ -289,12 +301,13 @@
     try{
       const limit=mode==='ai' ? Math.max(0,AI_MAX_PER_ACTION-aiCount)
         : Math.min(STANDARD_BATCH,Math.max(0,standardBudget-standardSpent));
-      const targets=candidates().slice(0,limit);
+      const targets=candidates().filter(visibleOrInitial).slice(0,limit);
       if(!targets.length)return;
       let count=0;
       for(let i=0;i<targets.length;i+=6){
         if(!active || currentId!==id)return;
         const chunk=targets.slice(i,i+6);
+        chunk.forEach(x=>{x.el.dataset.pitLoading=prefs.loadingAnimation||'text';});
         const before=targets[i-1]?.original?.slice(-300)||'';
         const after=targets[i+6]?.original?.slice(0,300)||'';
         const segmentCount=chunk.reduce((n,item)=>n+splitParagraph(item.original).length,0);
@@ -309,8 +322,9 @@
             if(attach(item.el,item.original,translation,mode==='ai')){
               count++;
               if(mode==='standard')standardSpent++;
+              initialChars+=item.original.length;
             }
-          });
+          }).finally(()=>chunk.forEach(x=>delete x.el.dataset.pitLoading));
         if(!outcome)return;
         if(!active || currentId!==id)return;
       }
@@ -341,6 +355,8 @@
     }
   }
   function restore(){
+    if(titleRecord&&document.title===titleRecord.translated)document.title=titleRecord.original;
+    titleRecord=null;initialChars=0;
     active=false;currentId++;
     clearTimeout(timer);timer=null;queued=false;busySession=null;
     observer?.disconnect();observer=null;observedRoots.clear();
@@ -355,7 +371,7 @@
   }
   function setDisplay(next,style=theme){
     if(!['bilingual','translation-only'].includes(next))return;
-    display=next;theme=['subtle','underline','highlight'].includes(style)?style:'subtle';
+    display=next;theme=['subtle','underline','highlight','none'].includes(style)?style:'subtle';
     for(const root of roots()){
       root.querySelectorAll('.pit-source-block').forEach(el=>
         el.classList.toggle('pit-original-concealed',display==='translation-only'));
@@ -363,10 +379,17 @@
     }
   }
   function start(requestedMode,options={}) {
+    const host=location.hostname.toLowerCase();
+    if(String(prefs.blockedHosts||'').split(/[\s,;]+/).filter(Boolean).some(x=>host===x||host.endsWith('.'+x))){toast('本站已禁止翻译');return;}
+    const lang=(prefs.sourceLanguage!=='auto'?prefs.sourceLanguage:document.documentElement.lang)?.split('-')[0];
+    if(prefs.skipSameLanguage&&lang&&lang===prefs.targetLanguage){toast('明确源语与目标语相同，已跳过；可在高级设置关闭。');return;}
     restore();mode=requestedMode;active=true;
     scope=options.scope==='full'?'full':'smart';
     setDisplay(options.display||display,options.theme||theme);
+    if(prefs.translationOnlyLanguages?.includes(lang))setDisplay('translation-only',theme);
     const id=++currentId;
+    if(prefs.translateTitle&&document.title){const original=document.title;void request([original],requestedMode,'').then(values=>{if(active&&currentId===id&&document.title===original&&values[0]){titleRecord={original,translated:values[0]};document.title=values[0];}}).catch(e=>toast('标题翻译失败：'+e.message));}
+    if(prefs.temporaryAutoTranslateMinutes>0)void chrome.runtime.sendMessage({type:'PIT_TEMPORARY_AUTO'}).catch(()=>{});
     if(requestedMode==='standard'){
       observer=new MutationObserver(mutations=>{
         if(!active || currentId!==id || mutations.every(ownedMutation))return;
@@ -442,6 +465,7 @@
     card.style.top=Math.max(8,Math.min(top,window.innerHeight-180))+'px';
   }
   async function translateSelection(requestedMode) {
+    if(prefs.selectionTranslate===false){toast('划词翻译已关闭');return;}
     const selection=window.getSelection();
     const text=selection?.toString().trim()||'';
     if(!text || text.length>5000){toast('请选中 1–5000 字符的正文');return;}
@@ -529,10 +553,14 @@
   },true);
   // The background only returns a strictly limited preference subset, never
   // vendor keys. Without settings access the extension remains idle.
-  void chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES',
+  function loadPreferences(auto=false){return chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES',
     pageLanguage:document.documentElement.lang||''}).then(answer=>{
     if(!answer?.ok||!answer.preferences)return;
     const p=answer.preferences;
+    prefs=p;
+    const rule=[...(p.siteRules||[])].sort((a,b)=>b.host.length-a.host.length).find(x=>location.hostname===x.host||location.hostname.endsWith('.'+x.host));
+    if(rule?.theme&&rule.theme!=='inherit')p.translationTheme=rule.theme;
+    if(rule?.target&&rule.target!=='inherit')p.targetLanguage=rule.target;
     if(p.floatingControl===true)mountFloatingControl();
     voiceSource=p.sourceLanguage||'auto';voiceTarget=p.targetLanguage||'zh';
     hoverEnabled=p.hoverTranslate===true;
@@ -545,7 +573,10 @@
         const rule=raw.trim().toLowerCase().replace(/^\*\./,'');
         return host===rule||host.endsWith('.'+rule);
       });
-    if(matches(p.autoTranslateHosts)&&!matches(p.blockedHosts)){
+    if(matches(p.blockedHosts)){restore();hoverEnabled=false;inputEnabled=false;document.querySelector('.pit-floating-control')?.remove();return;}
+    for(const node of queryDeep('.pit-translation'))Object.assign(node.style,p.readingStyle||{});
+    if(!p.floatingControl)document.querySelector('.pit-floating-control')?.remove();
+    if(auto&&(matches(p.autoTranslateHosts)||p.temporaryAutoTranslateUntil?.[host]>Date.now())&&!matches(p.blockedHosts)){
       // A first install must never silently fake translations or send API
       // calls to an unconfigured self-hosted Worker.
       if(p.standardReady===true)start('standard',{scope,display,theme});
@@ -553,8 +584,11 @@
         ?'本网站已启用自动翻译，但 Chrome 内置模型未准备好或无法确定源语言；请在 PIT 设置检查/下载语言包。'
         :'该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
     }
-  }).catch(()=>{});
+  }).catch(()=>{});}
+  void loadPreferences(true);
+  document.addEventListener('scroll',()=>{if(active&&mode==='standard'&&!prefs.translateToBottom)schedule(currentId,150);},{passive:true});
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
+    if(message?.type==='PIT_PREFERENCES_CHANGED'){void loadPreferences().then(()=>reply({ok:true}));return true;}
     if(message?.type==='PIT_GET_PROGRESS'){
       reply({ok:true,progress:coverage()});
     }else if(message?.type==='PIT_START' && ['standard','ai'].includes(message.mode)){

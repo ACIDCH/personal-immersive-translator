@@ -11,7 +11,10 @@
     "storage",
     "offscreen",
     "tabCapture",
-    "webNavigation"
+    "webNavigation",
+    "identity",
+    "alarms",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://api.cognitive.microsofttranslator.com/*",
@@ -19,7 +22,9 @@
     "https://api-free.deepl.com/*",
     "https://api.deepl.com/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://api.deepseek.com/*"
+    "https://api.deepseek.com/*",
+    "https://ligamejpnracymxfbbff.supabase.co/*",
+    "https://api.mymemory.translated.net/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

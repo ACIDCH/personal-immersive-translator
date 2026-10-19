@@ -2,6 +2,31 @@ import {translateBatch, TranslationError} from './lib/providers.js';
 import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS, isStandardServiceConfigured} from './lib/settings.js';
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
 import {detectLanguagesWithContext,normalizeDetectedLanguage} from './lib/language-detection.js';
+import {probeProvider} from './lib/provider-catalog.js';
+import {PRODUCT_DEFAULTS,siteRule,effectiveVideo,expertPrompt,readingStyle} from './lib/product-settings.js';
+import * as syncRuntime from './lib/sync.js';
+
+let settingsWrite=Promise.resolve();
+function patchSettings(patch){
+ const next=settingsWrite.then(async()=>{
+  const settings=normalizeSettings({...await getSettings(),...patch});
+  await chrome.storage.local.set({[SETTINGS_KEY]:settings});
+  for(const tab of await chrome.tabs.query({}).catch(()=>[]))if(tab.id)
+   void chrome.tabs.sendMessage(tab.id,{type:'PIT_PREFERENCES_CHANGED'}).catch(()=>{});
+  return settings;
+ });settingsWrite=next.catch(()=>{});return next;
+}
+const probeTimes=new Map();
+// MV3 service workers prohibit dynamic import(); SDK initialization stays lazy.
+const syncModule=()=>Promise.resolve(syncRuntime);
+chrome.alarms?.create('pit-sync',{periodInMinutes:1});
+chrome.alarms?.onAlarm.addListener(alarm=>{if(alarm.name==='pit-sync')void chrome.storage.local.get('pit_sync_state').then(r=>{if(r.pit_sync_state?.enabled)return syncModule().then(m=>m.backgroundSync());}).catch(()=>{});});
+chrome.storage.onChanged?.addListener((changes,area)=>{
+ if(area!=='local'||!changes[SETTINGS_KEY])return;
+ void chrome.storage.local.get('pit_sync_state').then(r=>{if(r.pit_sync_state?.enabled)return syncModule().then(m=>m.backgroundSync());}).catch(()=>{});
+ if(changes[SETTINGS_KEY].newValue?.contextMenuEnabled!==changes[SETTINGS_KEY].oldValue?.contextMenuEnabled)void refreshMenus();
+ void chrome.tabs.query({}).then(tabs=>{for(const tab of tabs)if(tab.id)void chrome.tabs.sendMessage(tab.id,{type:'PIT_PREFERENCES_CHANGED'}).catch(()=>{});}).catch(()=>{});
+});
 
 chrome.runtime.onInstalled.addListener(async () => {
   try {
@@ -139,8 +164,9 @@ function ensureSource(sender, type) {
 // therefore NOT a security boundary: only sender.url identifies the exact
 // extension-owned page, unlike messages from a regular page content script.
 function isTrustedOptionsPage(sender) {
-  return sender.url === chrome.runtime.getURL('src/options.html') ||
-         sender.url === chrome.runtime.getURL('pit-options.html');
+  const url=String(sender.url||'').split(/[?#]/)[0];
+  return url === chrome.runtime.getURL('src/options.html') ||
+         url === chrome.runtime.getURL('pit-options.html');
 }
 function isTrustedDocumentPage(sender) {
   return sender.url === chrome.runtime.getURL('file-lab.html');
@@ -358,6 +384,8 @@ async function handle(message, sender) {
       }catch{standardReady=false;browserModelStatus='diagnostic_failed';}
     }
     return {preferences:{
+      readingStyle:readingStyle(settings),
+      ...Object.fromEntries(Object.keys(PRODUCT_DEFAULTS).filter(k=>!['customExperts','installedExperts','activeExpertId'].includes(k)).map(k=>[k,settings[k]])),
       webDisplay:settings.webDisplay,webScope:settings.webScope,
       sourceLanguage:settings.source,targetLanguage:settings.target,
       translationTheme:settings.translationTheme,hoverTranslate:settings.hoverTranslate,
@@ -414,6 +442,35 @@ async function handle(message, sender) {
     if (!isTrustedExtensionPage(sender)) throw new TranslationError('网页不允许读取 API 配置');
     return {settings: await getSettings()};
   }
+  if(message.type==='PIT_SYNC'){
+    if(!isTrustedOptionsPage(sender)&&!(message.action==='status'&&isTrustedExtensionPage(sender)))throw new TranslationError('同步仅允许扩展设置页操作');
+    try{return await (await syncModule()).syncAction(message);}catch(e){throw new TranslationError(e.message);}
+  }
+  if(message.type==='PATCH_SETTINGS'){
+    if(!isTrustedExtensionPage(sender))throw new TranslationError('仅扩展界面可以保存配置');
+    if(!message.patch||typeof message.patch!=='object'||Array.isArray(message.patch))throw new TranslationError('配置格式无效');
+    return {settings:await patchSettings(message.patch)};
+  }
+  if(message.type==='PIT_TEMPORARY_AUTO'){
+    if(!sender.tab||!/^https?:/.test(sender.url||''))throw new TranslationError('仅允许网页记录临时偏好');
+    const s=await getSettings(),host=new URL(sender.url).hostname;
+    if(s.temporaryAutoTranslateMinutes>0&&!hostIsBlocked(host,s.blockedHosts))await patchSettings({temporaryAutoTranslateUntil:{...s.temporaryAutoTranslateUntil,[host]:Date.now()+s.temporaryAutoTranslateMinutes*60000}});
+    return {};
+  }
+  if(message.type==='TEST_PROVIDER'){
+    if(!isTrustedOptionsPage(sender))throw new TranslationError('仅设置界面可测试 API');
+    const settings=await getSettings();
+    const id=message.providerId||(message.mode==='ai'?settings.aiProvider:settings.standardProvider);
+    if(id==='mymemory'){
+      const last=probeTimes.get(id)||0;
+      if(Date.now()-last<60000)return {ok:false,status:'rate-limited',confirmedLive:false,error:'请等待一分钟再测试 MyMemory。'};
+      probeTimes.set(id,Date.now());
+    }
+    const result=await probeProvider(settings,message,runStandardProvider);
+    // Only the fixed public probe and sanitized diagnostic are persisted.
+    await chrome.storage.local.set({['pit_probe_'+(message.profileId||id)]:result}).catch(()=>{});
+    return result;
+  }
   if (message.type === 'CLEAR_CACHE') {
     if (!isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可以清除缓存');
     await clearTranslations(chrome.storage.local); return {ok:true};
@@ -422,7 +479,16 @@ async function handle(message, sender) {
   if (message.type === 'TEST_PROVIDER' && !isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可测试 API');
   if (message.type === 'TRANSLATE_DOCUMENT' && !isTrustedDocumentPage(sender))
     throw new TranslationError('仅插件文件处理页允许翻译本地文件');
-  const settings = await getSettings();
+  let settings = await getSettings();
+  const host=(()=>{try{return new URL(sender.url||sender.tab?.url).hostname;}catch{return '';}})();
+  const rule=siteRule(settings,host);
+  const video=effectiveVideo(settings,host);
+  if(message.pageContext==='video'&&!video.enabled)throw new TranslationError('当前平台字幕已禁用');
+  const scene=message.pageContext==='video'?video.providerId:message.type==='TRANSLATE_DOCUMENT'?settings.fileProviderId:'inherit';
+  const override=rule?.providerId!=='inherit'&&rule?.providerId?rule.providerId:scene;
+  settings={...settings,standardProvider:override&&override!=='inherit'?override:settings.standardProvider,
+    source:message.pageContext==='video'&&video.source!=='auto'?video.source:settings.source,
+    target:rule?.target&&rule.target!=='inherit'?rule.target:message.pageContext==='video'&&video.target!=='inherit'?video.target:settings.target};
   if (sender.tab) {
     // In a cross-origin video iframe, sender.tab.url is the LMS parent, while
     // sender.url is the real embedded player. Respect the denylist for BOTH.
@@ -438,13 +504,14 @@ async function handle(message, sender) {
   const isAI = message.mode === 'ai';
   if (message.mode !== 'standard' && message.mode !== 'ai') throw new TranslationError('翻译模式无效');
   const provider = isAI ? settings.aiProvider : settings.standardProvider;
+  if(settings.providerPreferences[isAI&&provider==='custom'?settings.activeAIProfileId:provider]?.enabled===false)throw new TranslationError('此翻译服务已停用，请在服务中心启用或选择其他服务');
   if (!(isAI ? AI_PROVIDERS : STANDARD_PROVIDERS).includes(provider)) throw new TranslationError('翻译服务配置无效');
   if (isAI && message.type !== 'TEST_PROVIDER' && message.userInitiated !== true) {
     throw new TranslationError('必须由用户明确启用 AI 翻译');
   }
   const texts = message.type === 'TEST_PROVIDER' ? ['Hello, world!'] : message.texts;
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
-  const captionLang=message.type==='TRANSLATE_BATCH'&&settings.source==='auto'
+  const captionLang=message.type==='TRANSLATE_BATCH'&&(settings.source==='auto'||message.pageContext==='video')
     ? normalizeDetectedLanguage(message.captionSourceLanguage):null;
   const source=message.type==='TEST_PROVIDER'?'en':(captionLang||settings.source);
   // A tab's page language describes article prose; it does not necessarily
@@ -479,7 +546,7 @@ async function handle(message, sender) {
   // a fallback; the cache must encode that same hint or silently replay the
   // wrong translation in another tab.
   const cacheSource=source==='auto'&&pageSource?'auto:'+pageSource:source;
-  const payloads = texts.map(text => ({text, provider, source:cacheSource,target,model,glossary: isAI ? settings.glossary : '',context}));
+  const payloads = texts.map(text => ({text, provider, source:cacheSource,target,model,glossary: isAI ? settings.glossary+'\n'+expertPrompt(settings) : '',context}));
   // Local cache is an optimization, never a prerequisite for translating.
   // Storage quota exhaustion should not discard a successful provider result.
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
@@ -536,12 +603,17 @@ function registerTranslationMenus(){
   ]},()=>{void chrome.runtime.lastError;});
  }
 }
-chrome.runtime.onInstalled.addListener(registerTranslationMenus);
+async function refreshMenus(){
+ if(chrome.contextMenus?.removeAll)await chrome.contextMenus.removeAll();
+ if((await getSettings()).contextMenuEnabled)registerTranslationMenus();
+}
+chrome.runtime.onInstalled.addListener(refreshMenus);
 chrome.contextMenus?.onClicked?.addListener((info,tab)=>{
  if(!PIT_CONTEXT_ACTIONS.some(item=>item[0]===info.menuItemId))return;
  void (async()=>{
   if(!tab?.id||!/^https?:\/\//.test(tab.url||''))return;
   const settings=await getSettings();
+  if(!settings.contextMenuEnabled)return;
   if(hostIsBlocked(new URL(tab.url).hostname,settings.blockedHosts))return;
   if(info.menuItemId!=='pit-context-restore'&&
     settings.standardProvider==='cloud'&&

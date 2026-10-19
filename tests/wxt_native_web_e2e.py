@@ -66,6 +66,7 @@ async def main():
 
                 # User-click-only public fallback: confirm a real saved engine
                 # switch, no implicit remote request or paid AI selection.
+                await options.locator('.options-nav a[href="#browserModelSettings"]').click()
                 await options.locator('#nativeFallbackMyMemory').click()
                 await options.get_by_text('已主动切换至 MyMemory', exact=False).wait_for(timeout=8000)
                 fallback=await options.evaluate("""async()=>(
@@ -74,11 +75,13 @@ async def main():
                 assert fallback["standardProvider"]=="mymemory", fallback
                 assert fallback["autoAI"] is False, fallback
                 # Restore default on-device preference for subsequent tests.
+                await options.locator('.options-nav a[href="#baseSettings"]').click()
                 await options.locator('[name="standardProvider"]').select_option("browser")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
                 # Initial settings have no self-hosted Worker endpoint.
                 # The owner must still be able to save reading preferences.
+                await options.locator('.options-nav a[href="#readingSettings"]').click()
                 await options.locator('[name="webDisplay"]').select_option("translation-only")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
@@ -88,15 +91,19 @@ async def main():
                 assert saved["webDisplay"]=="translation-only"
                 assert saved["standardProvider"]=="browser"
                 assert saved["cloudEndpoint"]==""
+                await options.locator('.options-nav a[href="#readingSettings"]').click()
                 await options.locator('[name="webDisplay"]').select_option("bilingual")
                 print("PASS: first-run reading settings save without an undeployed cloud provider")
+                await options.locator('.options-nav a[href="#standardKeys"]').click()
                 await options.locator('[name="microsoftKey"]').fill("fixture-only-never-sent")
+                await options.locator('.options-nav a[href="#baseSettings"]').click()
                 await options.locator('[name="standardProvider"]').select_option("microsoft")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
                 # Exercise the real options UI, not just the pure helper:
                 # exported JSON cannot contain credentials or translation data.
                 async with options.expect_download(timeout=12000) as exported:
+                    await options.locator('.options-nav a[href="#backupSettings"]').click()
                     await options.get_by_role("button",name="导出非敏感偏好 JSON").click()
                 downloaded=await exported.value
                 exported_text=Path(await downloaded.path()).read_text(encoding="utf-8")
@@ -106,6 +113,7 @@ async def main():
                 assert "microsoftKey" not in exported_text
                 snapshot["settings"]["webDisplay"]="translation-only"
                 snapshot["settings"]["target"]="fr"
+                await options.locator('.options-nav a[href="#backupSettings"]').click()
                 await options.locator("#importPreferences").set_input_files({
                     "name":"pit-preferences.json","mimeType":"application/json",
                     "buffer":json.dumps(snapshot).encode("utf-8")
@@ -116,7 +124,9 @@ async def main():
                 assert await options.locator('[name="microsoftKey"]').input_value()=="fixture-only-never-sent"
                 # Import only fills the form; the owner must explicitly save.
                 # Leave the previously saved English-to-Chinese fixture intact.
+                await options.locator('.options-nav a[href="#readingSettings"]').click()
                 await options.locator('[name="webDisplay"]').select_option("bilingual")
+                await options.locator('.options-nav a[href="#baseSettings"]').click()
                 await options.locator('[name="target"]').select_option("zh")
                 print("PASS: real options JSON export excludes credentials, import preview preserves keys")
 

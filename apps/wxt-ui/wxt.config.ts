@@ -17,7 +17,7 @@ export default defineConfig({
     content_security_policy:{
       extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     },
-    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture','contextMenus'],
+    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture','contextMenus','identity','alarms'],
     // A translator must work on arbitrary normal sites, not just API
     // provider domains. One install-time permission avoids per-site prompts.
     // Browser internal pages remain restricted.
@@ -31,7 +31,7 @@ export default defineConfig({
       // It only reads the safe, non-credential preference subset.
       manifest.content_scripts=[{
         matches:['https://*/*','http://*/*'],
-        js:['pit-native.js'],css:['pit-native.css'],run_at:'document_idle'
+        js:['pit-native.js','pit-caption-core.js','pit-platform-captions.js','pit-subtitles.js'],css:['pit-native.css'],run_at:'document_idle'
       }];
       manifest.commands={
         'pit-toggle-translation':{

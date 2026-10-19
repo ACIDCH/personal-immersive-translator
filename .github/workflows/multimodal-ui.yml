@@ -123,6 +123,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Test real React + PIT web translation in installed MV3
         run: python tests/wxt_native_web_e2e.py
+      - name: Verify two isolated profiles and encrypted vault using simulated Supabase transport
+        run: python tests/wxt_sync_fixture_e2e.py
       - name: Test editorial coverage, dynamic DOM, HTTP 429 and manual recovery
         run: python tests/wxt_web_coverage_matrix_e2e.py
       - name: Benchmark native PIT on the same 24-paragraph fixture as KISS
@@ -146,6 +148,7 @@ jobs:
             wxt-file-lab-report.json
             wxt-video-image-pdf-e2e-report.json
             wxt-platform-caption-matrix.json
+            wxt-sync-fixture-report.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Probe public websites in real Chromium (network-dependent, not provider quality)

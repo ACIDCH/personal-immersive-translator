@@ -16,12 +16,12 @@ export function Shell({view,webControls}:{view:'popup'|'dashboard',webControls?:
  if(webControls){
   return <main className="shell popup pit-reader-console">
     <header className="hero"><div className="brand-icon">译</div>
-      <div><div className="subtitle">PIT · CORE PARITY BUILD</div>
-        <h1>多模态翻译</h1><p>网页 · 视频 · 文件 · 设置</p>
+      <div><div className="subtitle">PERSONAL IMMERSIVE TRANSLATOR</div>
+        <h1>PIT 翻译工作台</h1><p>网页 · 视频 · 文件</p>
       </div>
     </header>
     {webControls}
-    <footer>功能对标测试版 · 未完成真实服务验收，不代表正式版</footer>
+    <footer>PIT · Draft 测试版 · 服务可用性以实际诊断为准</footer>
   </main>;
  }
  return <main className={view==='popup'?'shell popup':'shell dashboard'}>

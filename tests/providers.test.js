@@ -174,3 +174,36 @@ test('site auto-translate only activates with a configured standard MT engine',(
  assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'http://localhost:5000'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'https://mt.example'}),true);
 });
+// Product probes must use the real adapter boundary without changing defaults.
+test('V2 independent probes distinguish missing credentials, consent and unchanged output',async()=>{
+ const {probeProvider}=await import('../src/lib/provider-catalog.js');
+ const {normalizeSettings}=await import('../src/lib/settings.js');
+ const s=normalizeSettings({standardProvider:'browser',googleKey:'private-fixture'});
+ let calls=[];
+ const run=async(texts,opts)=>{calls.push(opts.provider);return ['欢迎来到课堂。'];};
+ assert.equal((await probeProvider(s,{providerId:'microsoft'},run)).status,'not-configured');
+ assert.equal((await probeProvider(s,{providerId:'google'},run)).status,'confirmation-required');
+ assert.deepEqual(calls,[]);
+ assert.equal((await probeProvider(s,{providerId:'google',costConfirmed:true},run)).confirmedLive,true);
+ assert.equal((await probeProvider(s,{providerId:'mymemory'},run)).ok,true);
+ assert.deepEqual(calls,['google','mymemory']);assert.equal(s.standardProvider,'browser');
+ const invalid=await probeProvider(s,{providerId:'browser'},async t=>t);
+ assert.equal(invalid.status,'invalid-response');assert.equal(invalid.confirmedLive,false);
+ const quota=await probeProvider(s,{providerId:'mymemory'},async()=>{throw Object.assign(Error('quota'),{status:429});});
+ assert.equal(quota.status,'rate-limited');
+});
+test('V2 migration preserves keys and caps settings; vault authenticates account and password',async()=>{
+ const {normalizeSettings,portablePreferences}=await import('../src/lib/settings.js');
+ const {deriveVault,encryptVault,decryptVault,secretPayload}=await import('../src/lib/vault.js');
+ const s=normalizeSettings({googleKey:'secret-a',cloudToken:'secret-b',aiProfiles:[{id:'test',apiKey:'secret-c'}],minSegmentCharacters:1000,videoSettings:{enabled:false,aiSentenceSegmentation:true},providerPreferences:{google:{visible:false,enabled:true,key:'should-not-copy'}}});
+ assert.equal(s.googleKey,'secret-a');assert.equal(s.minSegmentCharacters,100);assert.equal(s.videoSettings.enabled,false);assert.equal(s.videoSettings.aiSentenceSegmentation,false);
+ assert.equal(s.providerPreferences.google.enabled,true);assert.equal(s.providerPreferences.google.visible,false);
+ assert.doesNotMatch(JSON.stringify(portablePreferences(s)),/secret-[abc]|should-not-copy/);
+ const {key,salt}=await deriveVault('test-only-long-vault-password');
+ const one=await encryptVault(s,key,salt,'account-A'),two=await encryptVault(s,key,salt,'account-A');
+ assert.notEqual(one.nonce,two.nonce);assert.doesNotMatch(JSON.stringify(one),/secret-[abc]/);
+ assert.deepEqual(await decryptVault(one,key,'account-A'),secretPayload(s));
+ await assert.rejects(decryptVault(one,key,'account-B'),/密码|密文/);
+ const wrong=await deriveVault('incorrect-long-password',salt);
+ await assert.rejects(decryptVault(one,wrong.key,'account-A'),/密码|密文/);
+});

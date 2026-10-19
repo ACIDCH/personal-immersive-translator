@@ -1,5 +1,7 @@
+import {PRODUCT_DEFAULTS,normalizeProduct} from './product-settings.js';
 export const SETTINGS_KEY = 'pit_settings_v1';
 export const DEFAULT_SETTINGS = Object.freeze({
+  ...PRODUCT_DEFAULTS,
   target: 'zh',
   source: 'auto',
   standardProvider: 'browser',
@@ -62,7 +64,7 @@ export function normalizeSettings(value = {}) {
   clean.autoTranslateHosts=typeof clean.autoTranslateHosts==='string'?clean.autoTranslateHosts.slice(0,4000):'';
   clean.autoAI = false;
   clean.contextAI = Boolean(clean.contextAI);
-  return clean;
+  return normalizeProduct(clean);
 }
 export function hostIsBlocked(hostname, blockedHosts = '') {
   const host = String(hostname ?? '').toLowerCase();
@@ -77,6 +79,7 @@ export function hostIsBlocked(hostname, blockedHosts = '') {
  * Import only enumerated preferences and require a normal Save action.
  */
 export const PORTABLE_PREF_KEYS=Object.freeze([
+ ...Object.keys(PRODUCT_DEFAULTS).filter(k=>!['customExperts','installedExperts','activeExpertId'].includes(k)),
  'target','source','standardProvider','aiProvider','contextAI',
  'webDisplay','webScope','translationTheme','hoverTranslate','inputTranslate',
  'floatingControl','inputTarget','autoTranslateHosts','blockedHosts','glossary'

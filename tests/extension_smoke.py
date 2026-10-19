@@ -66,7 +66,9 @@ async def main():
                 assert await options.locator('.options-nav a[href="#privacySettings"]').count()==1
                 assert await options.locator("#saveActions").count()==1
                 await options.locator('[name="target"]').wait_for(timeout=10000)
+                await options.locator('.options-nav a[href="#baseSettings"]').click()
                 await options.locator('[name="target"]').select_option("fr")
+                await options.locator('.options-nav a[href="#baseSettings"]').click()
                 await options.locator('[name="standardProvider"]').select_option("deepl")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)
@@ -80,6 +82,7 @@ async def main():
                 print("PASS: options work and local settings persist")
                 # A filled key means "configured", not proven to be reachable.
                 # The popup must clearly differentiate those two states.
+                await options.locator('.options-nav a[href="#standardKeys"]').click()
                 await options.locator('[name="deeplKey"]').fill("fixture-key-never-used")
                 await options.get_by_role("button",name="保存设置").click()
                 await options.get_by_text("设置已保存。").wait_for(timeout=8000)

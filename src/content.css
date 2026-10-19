@@ -78,3 +78,9 @@
 }
 .pit-selection-card button:focus-visible{outline:2px solid #f4c556 !important}
 @media print {.pit-selection-card{display:none !important}}
+/* V2 waiting feedback is scoped to PIT-owned attributes. */
+[data-pit-loading]::after{content:' · 翻译中…';font:12px system-ui;color:#5183a5}
+[data-pit-loading=spinner]::after{content:' ◌';display:inline-block;animation:pit-wait 1s linear infinite}
+@keyframes pit-wait{to{transform:rotate(360deg)}}
+.pit-player-toggle{position:fixed;z-index:2147483646;border:1px solid #7bb7c4;border-radius:9px;background:#152a3eee;color:#e6f5fa;padding:7px 12px;font:13px system-ui;cursor:pointer}
+@media(prefers-reduced-motion:reduce){[data-pit-loading]::after{animation:none!important}}

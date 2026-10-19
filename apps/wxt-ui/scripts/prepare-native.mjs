@@ -2,6 +2,7 @@ import {copyFileSync,existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync
 import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import {vendorSupabase} from '../../../scripts/vendor-supabase.mjs';
 
 // Publish only the web translation runtime and trusted settings UI.
 // Keep a single implementation in the repository's src/; no forked copies.
@@ -9,6 +10,12 @@ const here=dirname(fileURLToPath(import.meta.url));
 const source=resolve(here,'../../../src');
 const output=resolve(here,'../public');
 const copies=[
+ ['options-v2.js','options-v2.js'],
+ ['product.css','product.css'],
+ ['lib/product-settings.js','lib/product-settings.js'],
+ ['lib/provider-catalog.js','lib/provider-catalog.js'],
+ ['lib/vault.js','lib/vault.js'],
+ ['lib/sync.js','lib/sync.js'],
  ['content.js','pit-native.js'],
  ['background.js','pit-background.js'],
  ['content.css','pit-native.css'],
@@ -46,6 +53,9 @@ for(const [src,dst] of copies){
 // Bundle executable OCR worker and WebAssembly cores in the extension,
 // never load JavaScript from a remote CDN in Manifest V3.
 const require=createRequire(import.meta.url);
+vendorSupabase(dirname(require.resolve('@supabase/supabase-js/package.json')),join(output,'vendor'));
+mkdirSync(join(source,'vendor'),{recursive:true});
+copyFileSync(join(output,'vendor/supabase.js'),join(source,'vendor/supabase.js'));
 const tesseractPackage=require.resolve('tesseract.js/package.json');
 const tesseractDir=dirname(tesseractPackage);
 let corePackage;

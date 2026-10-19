@@ -47,7 +47,9 @@ async def main():
                 options=await context.new_page()
                 await options.goto(f"chrome-extension://{eid}/pit-options.html")
                 await options.locator('form[data-ready="1"]').wait_for(timeout=12000)
+                await options.locator('.options-nav a[href="#standardKeys"]').click()
                 await options.locator('[name="microsoftKey"]').fill('local-fixture-placeholder')
+                await options.locator('.options-nav a[href="#baseSettings"]').click()
                 await options.locator('[name="standardProvider"]').select_option('microsoft')
                 await options.get_by_role('button',name='保存设置').click()
                 await options.get_by_text('设置已保存。').wait_for(timeout=8000)
@@ -73,6 +75,9 @@ async def main():
                 async def serve(route):
                     await route.fulfill(status=200,content_type='text/html',body=html)
                 await context.route(URL,serve)
+                # Explicit full-page scheduling; the V2 default is viewport bounded.
+                await options.locator('.options-nav a[href="#advanced"]').click()
+                await options.locator('[data-key="translateToBottom"]').check()
                 popup=await context.new_page()
                 await popup.goto(f"chrome-extension://{eid}/popup.html")
                 await popup.get_by_role("button",name="翻译当前网页").wait_for(timeout=15000)

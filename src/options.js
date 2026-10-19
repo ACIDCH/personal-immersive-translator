@@ -1,10 +1,11 @@
 import {normalizeSettings, SETTINGS_KEY, portablePreferences, applyPortablePreferences} from './lib/settings.js';
 import {validateAIProfile} from './lib/ai-profiles.js';
 import {checkNativeTranslator,ensureNativeTranslator} from './lib/browser-native.js';
+import {mountProductSettings} from './options-v2.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
 const checkboxKeys=['contextAI','hoverTranslate','inputTranslate','floatingControl'];
-let profiles=[], activeProfileId='';
+let profiles=[], activeProfileId='',currentSettings=normalizeSettings();
 const pick=id=>document.getElementById(id);
 function profileMessage(message) {pick('profileStatus').textContent=message;}
 function renderProfiles(){
@@ -66,6 +67,7 @@ pick('profileDelete').addEventListener('click',()=>{
   profileMessage('已移除配置，记得点击页面底部「保存设置」。');
 });
 function viewSettings(settings) {
+  currentSettings=settings;
   profiles=Array.isArray(settings.aiProfiles)?settings.aiProfiles.slice(0,20):[];
   activeProfileId=settings.activeAIProfileId||'';
   renderProfiles();
@@ -76,12 +78,12 @@ function viewSettings(settings) {
   }
 }
 function collect() {
-  const data={};
+  const data={...currentSettings};
   for(const [key] of Object.entries(normalizeSettings())) {
     if (key==='autoAI') continue;
     const el=form.elements.namedItem(key);
     if (!el) continue;
-    data[key]=checkboxKeys.includes(key)?el.checked:el.value;
+    data[key]=el.type==='checkbox'?el.checked:el.value;
   }
   data.aiProfiles=profiles;
   data.activeAIProfileId=activeProfileId;
@@ -114,7 +116,10 @@ async function saveSettings() {
   const settings=collect();
   await requestLibrePermission(settings);
   await requestAIProfilePermission(settings);
-  await chrome.storage.local.set({[SETTINGS_KEY]:settings});
+  const patch=Object.fromEntries(Object.entries(settings).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(currentSettings[key])));
+  const response=await chrome.runtime.sendMessage({type:'PATCH_SETTINGS',patch});
+  if(!response?.ok)throw Error(response?.error||'设置保存失败');
+  currentSettings=response.settings;
   status.textContent='设置已保存。';
   return settings;
 }
@@ -127,7 +132,7 @@ document.getElementById('test').addEventListener('click', async()=>{
   try {
     const settings=await saveSettings();
     const mode=confirm(`测试 AI (${settings.aiProvider}) 吗？\n确认 = 测试 AI（可能计费）\n取消 = 测试常规翻译 (${settings.standardProvider})`) ? 'ai':'standard';
-    const res=await chrome.runtime.sendMessage({type:'TEST_PROVIDER',mode});
+    const res=await chrome.runtime.sendMessage({type:'TEST_PROVIDER',mode,costConfirmed:mode==='ai'||confirm('所选服务可能计费，继续测试吗？')});
     if(!res.ok) throw new Error(res.error);
     status.textContent=`测试成功：${res.translations[0]}`;
   } catch(e) {status.textContent='测试失败：'+e.message;}
@@ -239,7 +244,7 @@ pick('importPreferences').addEventListener('change',async event=>{
 form.dataset.ready='0';
 for(const el of form.elements)el.disabled=true;
 chrome.storage.local.get(SETTINGS_KEY)
-  .then(r=>viewSettings(normalizeSettings(r[SETTINGS_KEY])))
+  .then(r=>{viewSettings(normalizeSettings(r[SETTINGS_KEY]));mountProductSettings({form,get:()=>currentSettings,save:saveSettings,view:viewSettings});})
   .catch(error=>{status.textContent='设置读取失败：'+String(error.message||error);})
   .finally(()=>{
     for(const el of form.elements)el.disabled=false;

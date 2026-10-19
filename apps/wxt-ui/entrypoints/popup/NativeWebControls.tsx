@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {browser} from '#imports';
+import {QuickPreferences} from './QuickPreferences';
 
 type Mode='standard'|'ai';
 type Progress={
@@ -73,7 +74,8 @@ export function NativeWebControls(){
    try{
      const data=await browser.storage.local.get('pit_settings_v1');
      const old=(data.pit_settings_v1||{}) as Record<string,unknown>;
-     await browser.storage.local.set({pit_settings_v1:{...old,[key]:value}});
+     const saved=await browser.runtime.sendMessage({type:'PATCH_SETTINGS',patch:{[key]:value}});
+     if(!saved.ok)throw Error(saved.error);
      if(key==='webDisplay')setDisplay(value==='translation-only'?'translation-only':'bilingual');
      else setScope(value==='full'?'full':'smart');
      const [tab]=await browser.tabs.query({active:true,currentWindow:true});
@@ -115,9 +117,8 @@ export function NativeWebControls(){
        if(key==='autoTranslateHosts')blocked.delete(hostname);
        else auto.delete(hostname);
      }
-     await browser.storage.local.set({pit_settings_v1:{
-       ...old,autoTranslateHosts:[...auto].join('\n'),blockedHosts:[...blocked].join('\n')
-     }});
+     const saved=await browser.runtime.sendMessage({type:'PATCH_SETTINGS',patch:{autoTranslateHosts:[...auto].join('\n'),blockedHosts:[...blocked].join('\n')}});
+     if(!saved.ok)throw Error(saved.error);
      setSiteRules({hostname,automatic:auto.has(hostname),blocked:blocked.has(hostname)});
      if(blocked.has(hostname)){
        const [tab]=await browser.tabs.query({active:true,currentWindow:true});
@@ -319,6 +320,7 @@ export function NativeWebControls(){
    finally{setCaptionBusy(false);}
  }
  return <div className="native-web">
+   <QuickPreferences mode={mode}/>
    <nav className="pit-feature-tabs" aria-label="功能模块">
      <button type="button" aria-current={feature==='web'?'page':undefined} onClick={()=>setFeature('web')}>网页翻译</button>
      <button type="button" aria-current={feature==='video'?'page':undefined} onClick={()=>setFeature('video')}>视频字幕</button>
