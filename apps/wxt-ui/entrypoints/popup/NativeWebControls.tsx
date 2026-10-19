@@ -281,7 +281,7 @@ export function NativeWebControls(){
          return parser?.parseSubtitles(source)||[];
        },args:[raw]});
        cues=parsed[0]?.result as unknown[];
-       if(!cues?.length)throw Error('SRT/VTT 文件没有可用的时间轴');
+       if(!cues?.length)throw Error('SRT/VTT/ASS 文件没有可用的时间轴');
      }
      let response=await browser.tabs.sendMessage(tabId,
        {type:'PIT_CAPTIONS_START',mode,cues,captionSourceLanguage:captionSource},{frameId:0});
@@ -376,8 +376,8 @@ export function NativeWebControls(){
        <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
        <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
      </div>
-     <label className="pit-field">导入字幕 SRT / VTT（可选）
-       <input type="file" accept=".srt,.vtt,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
+     <label className="pit-field">导入字幕 SRT / VTT / ASS（可选）
+       <input type="file" accept=".srt,.vtt,.ass,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
      </label>
      <div className="native-actions">
        <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','cloud')}>云端 Whisper 语音字幕</button>
