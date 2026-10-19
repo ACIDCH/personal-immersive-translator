@@ -424,6 +424,22 @@ async def main():
         assert '00:00:01,200 --> 00:00:03,400' in styled,styled
         assert 'Hello students\n译文:Hello students' in styled,styled
         assert 'STYLE' not in styled and 'NOTE' not in styled and 'invalid time' not in styled,styled
+        # ASS dialogue styles do not appear in the bilingual SRT; timecodes,
+        # visible text and commas must survive through the installed MV3 UI.
+        ass=('[Script Info]\nTitle: Finance seminar\n\n[Events]\n'+
+             'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'+
+             r'Dialogue: 0,0:00:01.25,0:00:03.50,Default,,0,0,0,,{\i1}Bonjour, world\Nnext line'+'\n')
+        await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
+          'name':'seminar.ass','mimeType':'text/plain','buffer':ass.encode('utf8')
+        })
+        async with page.expect_download(timeout=20000) as ass_event:
+          await page.get_by_role('button',name='翻译并导出双语 SRT').click()
+        ass_result=Path(await (await ass_event.value).path()).read_text(encoding='utf8')
+        assert '00:00:01,250 --> 00:00:03,500' in ass_result,ass_result
+        assert 'Bonjour, world\nnext line' in ass_result,ass_result
+        assert '译文:Bonjour, world' in ass_result,ass_result
+        assert 'Default' not in ass_result and '{\\i1}' not in ass_result,ass_result
+        report['ass_subtitle_import']='pass'
         report['subtitle_metadata_filter']='pass'
         report['offline_subtitle_translation']='pass'
         print('WXT OFFLINE VTT TO BILINGUAL SRT: PASS',flush=True)
