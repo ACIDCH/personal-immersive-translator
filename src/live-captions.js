@@ -50,8 +50,15 @@
             captionSourceLanguage:item.language||'',
             context:translationMode==='ai'?sourceHistory.slice(-2).join('\n').slice(0,1600):''
           });
-          if(result?.ok && translationMode==='ai')sourceHistory=[...sourceHistory.slice(-2),item.text];
           translation=result?.ok ? String(result.translations?.[0]||''):'翻译服务不可用';
+          // Translation history belongs to the CURRENT recognized utterance,
+          // not an old request that resolved after STOP/START or after newer
+          // Whisper audio arrived. Otherwise a new AI session inherits stale
+          // dialogue and silently mistranslates later subtitles.
+          if(result?.ok && translationMode==='ai' && enabled &&
+             epoch===generation && activeSession===item.sessionId &&
+             item.sequence===seq)
+            sourceHistory=[...sourceHistory.slice(-2),item.text];
         }catch{translation='翻译连接失败';}
         if(!enabled || epoch!==generation || activeSession!==item.sessionId)break;
         // Do not display a completed old translation after a newer cue arrived.
