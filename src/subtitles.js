@@ -15,9 +15,21 @@
     return output;
   }
   function pickVideo() {
-    const videos=allVideos(document);
-    return videos.filter(v=>v.isConnected && v.readyState>0)
-      .sort((a,b)=>(b.clientWidth*b.clientHeight)-(a.clientWidth*a.clientHeight))[0] || videos[0] || null;
+    const videos=allVideos(document).filter(v=>v.isConnected);
+    // Hidden advertisements/preloaded players may be much larger than the
+    // lecture currently on screen. Prefer a visible player, even if its
+    // media is still initializing (readyState=0).
+    const visible=videos.filter(v=>{
+      const style=getComputedStyle(v);
+      const bounds=v.getBoundingClientRect();
+      return style.display!=='none' && style.visibility!=='hidden' &&
+        bounds.width>0 && bounds.height>0 && v.getClientRects().length>0;
+    });
+    const choose=items=>items.sort((a,b)=>{
+      const area=v=>v.getBoundingClientRect().width*v.getBoundingClientRect().height;
+      return area(b)-area(a) || b.readyState-a.readyState;
+    })[0]||null;
+    return choose(visible)||choose(videos);
   }
   function chooseTrack(video) {
     const tracks=[...video.textTracks].filter(t=>t.kind==='subtitles'||t.kind==='captions');
@@ -35,10 +47,15 @@
       // subtitles from the removed player or silently attach to another video.
       stop();return false;
     }
-    if(state.video && state.mediaUrl &&
-       (state.video.currentSrc || state.video.src || '')!==state.mediaUrl) {
-      // A source swap within the same video element is a new recording.
-      stop();return false;
+    if(state.video){
+      const current=state.video.currentSrc || state.video.src || '';
+      if(state.mediaUrl && current && current!==state.mediaUrl){
+        // A source swap within the same video element is a new recording.
+        stop();return false;
+      }
+      // A video can be armed before src/currentSrc is assigned. Bind the
+      // first real media identity, then detect later same-element swaps.
+      if(!state.mediaUrl && current)state.mediaUrl=current;
     }
     if(!state.video || state.importedCues) return true;
     const next=chooseTrack(state.video);
