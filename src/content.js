@@ -169,7 +169,9 @@
       userInitiated:requestedMode==='ai',context
     });
     if(!answer?.ok)throw Error(answer?.error||'翻译服务未响应');
-    if(!Array.isArray(answer.translations)||answer.translations.length!==texts.length)throw Error('翻译结果与原文段落数量不符');
+    if(!Array.isArray(answer.translations)||answer.translations.length!==texts.length||
+       answer.translations.some(t=>typeof t!=='string'||!t.trim()))
+      throw Error('翻译结果与原文段落数量不符或译文为空');
     return answer.translations;
   }
   // The hosted engine enforces 4,000 chars/segment and all adapters
@@ -209,12 +211,12 @@
     }
     return combined;
   }
-  async function requestBoundedParagraphs(items,requestedMode,context,sessionId){
+  async function requestBoundedParagraphs(items,requestedMode,context,sessionId,onComplete){
     const fragments=items.map(item=>splitParagraph(item.original));
     const queued=fragments.flatMap((pieces,owner)=>
       pieces.map((text,index)=>({text,owner,index})));
     const results=fragments.map(parts=>Array(parts.length).fill(''));
-    let requests=0;
+    const completed=new Set();
     for(let i=0;i<queued.length;){
       // Restoring original text or navigating away cancels further queued
       // provider requests, even when a previous browser message is pending.
@@ -226,17 +228,24 @@
         batch.push(item);characters+=item.text.length;i++;
       }
       const reply=await request(batch.map(x=>x.text),requestedMode,context);
-      requests++;
+      if(!active||currentId!==sessionId)return null;
+      succeededBatches++;
+      if(requestedMode==='ai')aiCount+=batch.length;
       for(let k=0;k<batch.length;k++){
         const item=batch[k];
         results[item.owner][item.index]=reply[k];
       }
+      // Commit a paragraph as soon as *all* its fragments are valid. If
+      // batch 2 fails, batch 1 translations stay visible and accounted for;
+      // manual retry only sees genuinely untranslated paragraphs.
+      for(const {owner} of batch){
+        if(!completed.has(owner) && results[owner].every(t=>t.trim())){
+          completed.add(owner);
+          onComplete(owner,joinTranslatedFragments(results[owner],fragments[owner]));
+        }
+      }
     }
-    // Fragments come from contiguous source slices. Inserting spaces here
-    // corrupts CJK and punctuation, and changes previously adjacent words.
-    // Preserve exactly the whitespace returned by each translated fragment.
-    return {translations:results.map((parts,index)=>joinTranslatedFragments(parts,fragments[index])),
-      segments:queued.length,requests};
+    return {completed:completed.size,segments:queued.length};
   }
   function schedule(id,delay=300) {
     if(!active || currentId!==id)return;
@@ -294,15 +303,16 @@
           break;
         }
         const outcome=await requestBoundedParagraphs(chunk,mode,
-          [before,after].filter(Boolean).join('\n'),id);
+          [before,after].filter(Boolean).join('\n'),id,(owner,translation)=>{
+            if(!active||currentId!==id)return;
+            const item=chunk[owner];
+            if(attach(item.el,item.original,translation,mode==='ai')){
+              count++;
+              if(mode==='standard')standardSpent++;
+            }
+          });
         if(!outcome)return;
-        succeededBatches+=outcome.requests;
         if(!active || currentId!==id)return;
-        for(let j=0;j<chunk.length;j++){
-          if(attach(chunk[j].el,chunk[j].original,outcome.translations[j],mode==='ai'))count++;
-        }
-        if(mode==='ai')aiCount+=outcome.segments;
-        else standardSpent+=chunk.length;
       }
       if(count)toast('已翻译 '+count+' 个新段落 · '+(mode==='ai'?'AI':'标准')+'模式');
       // A long article can exceed the first 70/250 nodes. Process further
