@@ -38,7 +38,7 @@ export function SubtitleFileLab(){
        const response=await runtime.sendMessage!({type:'TRANSLATE_DOCUMENT',texts,mode,userInitiated:true});
        if(!response?.ok||!response.translations)throw Error(response?.error||'字幕翻译服务响应失败');
        return response.translations;
-     },{onRetry:info=>setProgress('字幕服务暂时繁忙，重试 '+info.attempt+' 次')});
+     },{maxRetries:mode==='ai'?0:2,onRetry:info=>setProgress('字幕服务暂时繁忙，重试 '+info.attempt+' 次')});
      const outputs:string[]=[];
      for(let i=0;i<cues.length;){
        const chunk:TimedCue[]=[];let size=0;
