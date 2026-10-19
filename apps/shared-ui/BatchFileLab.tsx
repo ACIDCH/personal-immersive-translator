@@ -69,7 +69,7 @@ export function BatchFileLab(){
           response.translations.some(s=>typeof s!=='string'||!s.trim()))
          throw Error(response?.error||'翻译服务返回了无效的分段数据');
        return response.translations;
-     },{signal:controller.signal,onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
+     },{signal:controller.signal,maxRetries:mode==='ai'?0:2,onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
      for(const [i,file] of items.entries()){
        if(controller.signal.aborted)throw Error('用户已取消翻译');
        const type=file.name.split('.').at(-1)!.toLowerCase();
