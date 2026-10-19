@@ -16,7 +16,7 @@ export function SubtitleFileLab(){
   location.pathname==='/file-lab.html'&&runtime.sendMessage);
  const [file,setFile]=useState<File|null>(null);
  const [mode,setMode]=useState<Mode>('standard');
- const [status,setStatus]=useState('输入 SRT/VTT，输出带原文和译文的双语 SRT。');
+ const [status,setStatus]=useState('输入 SRT/VTT/ASS，输出带原文和译文的双语 SRT（ASS 样式不会保留）。');
  const [progress,setProgress]=useState('');
  const [busy,setBusy]=useState(false);
  if(!enabled)return null;
@@ -25,8 +25,8 @@ export function SubtitleFileLab(){
  }
  async function translate(){
    if(busy||!file||!runtime?.sendMessage)return;
-   if(file.size>2_000_000||!/\.(srt|vtt)$/i.test(file.name)){
-     setStatus('请上传不超过 2 MB 的 SRT/VTT 文件');return;
+   if(file.size>2_000_000||!/\.(srt|vtt|ass)$/i.test(file.name)){
+     setStatus('请上传不超过 2 MB 的 SRT/VTT/ASS 文件');return;
    }
    if(mode==='ai'&&!window.confirm('自选 AI 将连续翻译全部字幕，可能产生额外 API 费用，继续吗？'))return;
    setBusy(true);
@@ -53,7 +53,7 @@ export function SubtitleFileLab(){
      const serialized=formatBilingualSrt(cues,outputs);
      const url=URL.createObjectURL(new Blob([serialized],{type:'application/x-subrip;charset=utf-8'}));
      const a=document.createElement('a');
-     a.href=url;a.download=file.name.replace(/\.(srt|vtt)$/i,'')+'-bilingual.srt';
+     a.href=url;a.download=file.name.replace(/\.(srt|vtt|ass)$/i,'')+'-bilingual.srt';
      document.body.append(a);a.click();a.remove();
      setTimeout(()=>URL.revokeObjectURL(url),60000);
      setStatus('双语 SRT 已生成，时间轴保留，原文在前、译文在后。');
@@ -62,9 +62,9 @@ export function SubtitleFileLab(){
  }
  return <section className="document-lab subtitle-file-lab" id="subtitle-file-lab">
    <h2>离线字幕文件翻译</h2>
-   <p>不需要视频播放。导入自己拥有的 SRT/VTT 字幕，按原时间轴导出双语 SRT。不会上传视频或音频。</p>
+   <p>不需要视频播放。导入自己拥有的 SRT/VTT/ASS 字幕，按原时间轴导出双语 SRT。不会上传视频或音频。</p>
    <label className="document-field">字幕文件（最多 2 MB）
-     <input type="file" accept=".srt,.vtt,text/vtt" onChange={selected}/>
+     <input type="file" accept=".srt,.vtt,.ass,text/vtt" onChange={selected}/>
    </label>
    <div className="native-modes" role="group" aria-label="字幕文件翻译服务">
      <button type="button" aria-pressed={mode==='standard'} onClick={()=>setMode('standard')}>常规翻译</button>
