@@ -18,9 +18,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   libreUrl: '',
   libreKey: '',
   geminiKey: '',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: 'gemini-3.5-flash-lite',
   deepseekKey: '',
-  deepseekModel: 'deepseek-chat',
+  deepseekModel: 'deepseek-flash',
+  openrouterKey: '',
+  openrouterModel: 'openrouter/free',
   aiProfiles: [],
   activeAIProfileId: '',
   glossary: '',
@@ -35,7 +37,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   translationTheme: 'subtle'
 });
 export const STANDARD_PROVIDERS = ['browser', 'mymemory', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
-export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
+export const AI_PROVIDERS = ['gemini', 'deepseek', 'openrouter', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
 export function normalizeSettings(value = {}) {

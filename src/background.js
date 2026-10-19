@@ -455,7 +455,7 @@ async function handle(message, sender) {
   // with target selected by the owner in extension options.
   const target = message.inputEnhancement===true && message.type==='TRANSLATE_BATCH' && !isAI
     ? settings.inputTarget:settings.target;
-  const model = isAI ? (provider==='gemini'?settings.geminiModel:provider==='deepseek'?settings.deepseekModel:(()=>{const p=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);return [p?.id,p?.model,p?.baseUrl].join(':');})()) : '';
+  const model = isAI ? (provider==='gemini'?settings.geminiModel:provider==='deepseek'?settings.deepseekModel:provider==='openrouter'?settings.openrouterModel:(()=>{const p=settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId);return [p?.id,p?.model,p?.baseUrl].join(':');})()) : '';
   const context = isAI && settings.contextAI ? String(message.context || '').slice(0,1600) : '';
   if(message.transient===true) {
     if(!sender.tab)throw new TranslationError('临时字幕必须来自有效网页');
