@@ -174,3 +174,18 @@ test('site auto-translate only activates with a configured standard MT engine',(
  assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'http://localhost:5000'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'https://mt.example'}),true);
 });
+
+test('Current Gemini/DeepSeek defaults are distinct, and AI remains opt-in',()=>{
+  const settings=normalizeSettings();
+  assert.equal(settings.geminiModel,'gemini-3.5-flash-lite');
+  assert.equal(settings.deepseekModel,'deepseek-flash');
+  assert.equal(settings.aiProvider,'gemini');
+  assert.equal(settings.autoAI,false);
+});
+test('DeepSeek Flash model is passed to the official endpoint without using Hermes as an API model',async()=>{
+  const f=mockResponse({choices:[{message:{content:'{"translations":["您好"]}'}}]},(url,init)=>{
+    assert.equal(url,'https://api.deepseek.com/chat/completions');
+    assert.equal(JSON.parse(init.body).model,'deepseek-flash');
+  });
+  assert.deepEqual(await translateBatch(['Hello'],{...config,provider:'deepseek',deepseekKey:'secret',deepseekModel:'deepseek-flash'},f),['您好']);
+});
