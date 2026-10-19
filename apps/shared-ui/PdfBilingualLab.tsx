@@ -249,7 +249,7 @@ export function PdfBilingualLab(){
        if(!response.ok||!Array.isArray(response.translations))
          throw Error(response.error||'PDF 翻译服务未返回译文');
        return response.translations;
-     },{signal:controller.signal,onRetry:info=>setProgress('PDF 翻译暂时限流/超时，重试 '+info.attempt+' 次')});
+     },{signal:controller.signal,maxRetries:mode==='ai'?0:2,onRetry:info=>setProgress('PDF 翻译暂时限流/超时，重试 '+info.attempt+' 次')});
      const result=await translateBilingualPdf(file,translate,ocrLang,(done,total,stage)=>setProgress(`${done}/${total} 页 · ${stage}`),controller.signal);
      if(controller.signal.aborted)throw Error('用户已取消 PDF 翻译');
      const payload=result.archive||result.pdf;
