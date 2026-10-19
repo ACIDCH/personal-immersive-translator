@@ -15,7 +15,7 @@
 <label>目标语言<select name="target"><option value="zh">简体中文</option><option value="en">English</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
 <label>原文语言<select name="source"><option value="auto">自动识别</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ko">한국어</option></select></label>
 <label>默认机器翻译服务<select name="standardProvider"><option value="browser">Chrome 内置免费翻译（默认；需主动下载语言包）</option><option value="mymemory">MyMemory 免 Key 在线备用翻译（需主动选择；限额）</option><option value="cloud">PIT 云端机器翻译（自托管 Workers AI）</option><option value="microsoft">Microsoft Translator</option><option value="google">Google Cloud Translation</option><option value="deepl">DeepL</option><option value="libre">LibreTranslate (自有服务)</option></select></label>
-<label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="custom">自定义 AI 配置（多服务商）</option></select></label>
+<label>AI 服务<select name="aiProvider"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="openrouter">OpenRouter（多模型聚合）</option><option value="custom">自定义 AI 配置（多服务商）</option></select></label>
 <label class="inline"><input type="checkbox" name="contextAI">AI 翻译时包含相邻段落作为上下文</label></section>
 <section id="readingSettings" class="panel"><h2>网页阅读模式与交互</h2>
 <p class="muted">参照成熟沉浸式阅读交互重新组织设置。只有启用后功能才会生效；未配置翻译服务时不执行伪翻译。</p>
@@ -54,6 +54,9 @@
 <label>Gemini 模型名称<input name="geminiModel" type="text" spellcheck="false"></label>
 <label>DeepSeek API Key<input name="deepseekKey" type="password" autocomplete="off"></label>
 <label>DeepSeek 模型名称<input name="deepseekModel" type="text" spellcheck="false"></label>
+<label>OpenRouter API Key<input name="openrouterKey" type="password" autocomplete="off" placeholder="请填入重新生成的 API Key，勿使用截图中暴露的密钥"></label>
+<label>OpenRouter 模型 ID<input name="openrouterModel" type="text" spellcheck="false" placeholder="openrouter/free 或供应商/模型"></label>
+<p class="muted">OpenRouter 免费路由 openrouter/free 可调用可用的免费模型，但模型会随服务变化，额度及结构化 JSON 能力可能受限；翻译失败不会自动切换到收费模型。</p>
 <div class="panel" id="profileManager">
 <h3>自定义 AI 服务商与模型</h3>
 <p class="muted">支持 OpenAI 兼容 Chat Completions 服务（OpenAI、OpenRouter、DeepSeek、Qwen、GLM、Groq 等）和 Anthropic Messages 协议。可以增加多个配置、选择当前模型；调用成本以对应平台为准。</p>
