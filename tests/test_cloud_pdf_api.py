@@ -108,6 +108,14 @@ class CloudDocumentTests(unittest.TestCase):
                 with fitz.open(stream=output.content,filetype="pdf") as doc:
                     self.assertEqual(len(doc),13)
                 self.assertEqual(output.headers["x-pit-detected-source"],"en")
+                with open(os.path.join(directory,job+".pdf"),"r+b") as result:
+                    result.seek(6)
+                    previous=result.read(1)
+                    result.seek(6)
+                    result.write(b"Z" if previous!=b"Z" else b"X")
+                corrupted=client.get("/v1/pdf/jobs/"+job+"/result",headers=auth)
+                self.assertEqual(corrupted.status_code,410,
+                    "Corrupted persisted result cannot return HTTP 200")
                 # A previous in-progress record cannot falsely resume an
                 # interrupted BabelDOC subprocess after container restart.
                 interrupted="pt_interrupted_pdf_1234567"
