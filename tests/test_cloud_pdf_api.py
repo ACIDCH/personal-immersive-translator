@@ -163,6 +163,10 @@ class CloudDocumentTests(unittest.TestCase):
                 self.assertEqual(current.json()["status"],"running")
                 busy=client.post("/v1/pdf/jobs",headers=self.auth,data=data,files=upload)
                 self.assertEqual(busy.status_code,429)
+                old_route=client.post("/v1/pdf/translate",headers=self.auth,
+                    data=data,files=upload)
+                self.assertEqual(old_route.status_code,429,
+                    "Legacy sync endpoint may not queue behind active async BabelDOC")
                 premature=client.get("/v1/pdf/jobs/"+job_id+"/result",headers=self.auth)
                 self.assertEqual(premature.status_code,409)
                 release.set()
