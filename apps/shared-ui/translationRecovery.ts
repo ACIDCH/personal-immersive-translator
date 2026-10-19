@@ -17,6 +17,32 @@ export function createRecoverableTranslator(
     const message=String(error instanceof Error?error.message:error);
     return /(?:^|\D)(?:429|502|503|504)(?:\D|$)|rate.limit|too.many.requests|timed?\s*out|超时|限流|服务繁忙|暂时不可用|network|连接失败|connection.reset|fetch.failed/i.test(message);
   };
+  const boundedRequest=(chunk:string[]):Promise<string[]>=>new Promise((resolve,reject)=>{
+    // Chrome MV3 worker shutdown or a stalled provider must not leave a file
+    // task displaying "busy" forever. This stops waiting only: it cannot
+    // revoke a request already accepted by an external paid provider.
+    if(options.signal?.aborted){reject(Error('用户已取消翻译'));return;}
+    let settled=false;
+    const cleanup=()=>{
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort',abort);
+    };
+    const finish=(callback:()=>void)=>{
+      if(settled)return;
+      settled=true;cleanup();callback();
+    };
+    const abort=()=>finish(()=>reject(Error('用户已取消翻译')));
+    const timer=setTimeout(
+      ()=>finish(()=>reject(Error('翻译服务超时（60 秒）；请检查服务状态后手动重试，避免重复收费'))),
+      60000);
+    options.signal?.addEventListener('abort',abort,{once:true});
+    try{
+      Promise.resolve(request(chunk)).then(
+        values=>finish(()=>resolve(values)),
+        error=>finish(()=>reject(error))
+      );
+    }catch(error){finish(()=>reject(error));}
+  });
   const sleep=async (ms:number)=>{
     await new Promise<void>((resolve,reject)=>{
       if(options.signal?.aborted){reject(Error('用户已取消翻译'));return;}
@@ -42,7 +68,6 @@ export function createRecoverableTranslator(
     if(missing.length){
       // Background providers have a 12k-character request ceiling. The
       // front-end stays below 10.5k even for OCR paragraphs that can be long.
-      const results:string[]=[];
       for(let i=0;i<missing.length;){
         const chunk:string[]=[];let chars=0;
         for(let j=i;j<missing.length&&chunk.length<8;j++){
@@ -53,7 +78,7 @@ export function createRecoverableTranslator(
         for(let attempt=0;attempt<=maxRetries;attempt++){
           cancelled();
           try{
-            const output=await request(chunk);
+            const output=await boundedRequest(chunk);
             if(!Array.isArray(output)||output.length!==chunk.length||
               output.some(s=>typeof s!=='string'||!s.trim()))
               throw Error('翻译服务返回的段落数量不正确');
@@ -67,11 +92,13 @@ export function createRecoverableTranslator(
           }
         }
         if(!translated)throw Error('翻译任务未得到有效响应');
-        results.push(...translated);
+        cancelled();
+        // Commit independently after each validated provider request.
+        // If the next chunk fails, retrying the same logical batch should
+        // reuse successful fragments, not pay for them a second time.
+        chunk.forEach((key,index)=>cache.set(key,translated[index]));
         i+=chunk.length;
       }
-      // Commit once the entire logical batch was translated and validated.
-      missing.forEach((key,i)=>cache.set(key,results[i]));
     }
     cancelled();
     return keys.map(key=>cache.get(key)!);
