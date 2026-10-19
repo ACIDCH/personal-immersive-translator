@@ -149,14 +149,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Probe public websites in real Chromium (network-dependent, not provider quality)
+        # Only on explicit manual verification. Repeated external requests on
+        # each development push add noise and may hit rate limits.
+        if: github.event_name == 'workflow_dispatch'
         id: real_site_probe
         continue-on-error: true
         run: python tests/wxt_public_site_probe.py
       - name: Probe real public YouTube and Bilibili player UI (non-gating)
+        # Known 429/412 restrictions must not be re-probed on every PR commit.
+        if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
         run: python benchmarks/public_video_real_probe.py
       - name: Archive real public-video accessibility and caption observations
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: multimodal-real-public-video-probe
@@ -164,7 +169,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Archive non-gating public-site probe observations
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: multimodal-public-site-probe
