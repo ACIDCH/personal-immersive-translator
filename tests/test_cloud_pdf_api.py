@@ -6,6 +6,8 @@ binary on a PDF fixture and verifies output. This suite tests cloud
 authentication, payload validation, language inference and response.
 """
 import os
+import json
+import tempfile
 import time
 import threading
 import unittest
@@ -72,6 +74,62 @@ class CloudDocumentTests(unittest.TestCase):
         with fitz.open(stream=res.content,filetype="pdf") as doc:
             self.assertEqual(len(doc),13)
         self.assertEqual(calls,[("en","zh",True)])
+
+    def test_mounted_volume_completed_result_survives_process_restart(self):
+        # The upstream renderer is mocked; real PDF bytes/HTTP flow, mounted
+        # storage and simulated service process restart are not mocked.
+        sample=fixture(pages=13)
+        cloud.jobs.clear()
+        with tempfile.TemporaryDirectory(prefix="pit-pdf-volume-") as directory, \
+             patch.dict(os.environ,{"PIT_PDF_JOB_DIR":directory}):
+            with patch.object(cloud,"run_pipeline",return_value=sample), \
+                 TestClient(cloud.app) as client:
+                auth=self.auth
+                data={"source":"en","target":"zh","ocr":"true"}
+                submit=client.post("/v1/pdf/jobs",headers=auth,data=data,
+                    files={"pdf":("finance.pdf",sample,"application/pdf")})
+                self.assertEqual(submit.status_code,202,submit.text)
+                self.assertEqual(submit.json()["storage"],"persistent-volume-single-worker")
+                job=submit.json()["jobId"]
+                for _ in range(100):
+                    status=client.get("/v1/pdf/jobs/"+job,headers=auth)
+                    if status.json()["status"]=="completed":
+                        break
+                    time.sleep(.03)
+                self.assertEqual(status.json()["status"],"completed")
+                self.assertTrue(os.path.isfile(os.path.join(directory,job+".pdf")))
+                # Lost in-memory state exactly like a process restart.
+                cloud.jobs.clear()
+                restored=client.get("/v1/pdf/jobs/"+job,headers=auth)
+                self.assertEqual(restored.status_code,200,restored.text)
+                self.assertEqual(restored.json()["status"],"completed")
+                output=client.get("/v1/pdf/jobs/"+job+"/result",headers=auth)
+                self.assertEqual(output.status_code,200)
+                with fitz.open(stream=output.content,filetype="pdf") as doc:
+                    self.assertEqual(len(doc),13)
+                self.assertEqual(output.headers["x-pit-detected-source"],"en")
+                # A previous in-progress record cannot falsely resume an
+                # interrupted BabelDOC subprocess after container restart.
+                interrupted="pt_interrupted_pdf_1234567"
+                (os.path.join(directory,interrupted+".json"))
+                with open(os.path.join(directory,interrupted+".json"),"w") as stream:
+                    json.dump({"id":interrupted,"status":"running",
+                               "source":"fr","confidence":"explicit",
+                               "expiresAt":time.time()+700},stream)
+                failure=client.get("/v1/pdf/jobs/"+interrupted,headers=auth)
+                self.assertEqual(failure.json()["status"],"failed")
+                self.assertEqual(client.get("/v1/pdf/jobs/"+interrupted+"/result",
+                    headers=auth).status_code,422)
+                # Expired files are never served after their retention window.
+                metadata=os.path.join(directory,job+".json")
+                with open(metadata,"r") as stream:
+                    record=json.load(stream)
+                record["expiresAt"]=time.time()-1
+                with open(metadata,"w") as stream:
+                    json.dump(record,stream)
+                self.assertEqual(client.get("/v1/pdf/jobs/"+job,headers=auth).status_code,404)
+                self.assertFalse(os.path.isfile(os.path.join(directory,job+".pdf")))
+        cloud.jobs.clear()
 
     def test_ephemeral_async_job_polling_result_and_single_worker_limit(self):
         sample=fixture(pages=13)
