@@ -119,7 +119,7 @@
     state.overlay.style.display='block';
     state.overlay.style.fontSize=(config.subtitleFontSize||22)+'px';
     state.overlay.style.color=config.subtitleColor||'#ffffff';state.overlay.style.backgroundColor=config.subtitleBackground||'#142130';
-    state.overlay.style.top=config.subtitlePosition==='top'?'8%':'auto';state.overlay.style.bottom=config.subtitlePosition==='top'?'auto':'9%';
+    state.overlay.style.setProperty('top',config.subtitlePosition==='top'?'8%':'auto','important');state.overlay.style.setProperty('bottom',config.subtitlePosition==='top'?'auto':'9%','important');
     // A hidden native TextTrack and an imported SRT/VTT are invisible to the
     // viewer without PIT. Show the original alongside the translation. When
     // the source is already visibly drawn by YouTube/Bilibili/Netflix, avoid
@@ -134,6 +134,7 @@
     }
     const line=document.createElement('div');
     line.className='pit-caption-translated';
+    line.style.setProperty('font-size',(config.subtitleFontSize||22)+'px','important');line.style.setProperty('color',config.subtitleColor||'#ffffff','important');line.style.setProperty('background-color',config.subtitleBackground||'#142130','important');
     line.textContent=config.baseSentenceSegmentation?text.replace(/([.!?。！？])\s+/g,'$1\n'):text;
     if(config.translationFirst)state.overlay.prepend(line);else state.overlay.append(line);
   }

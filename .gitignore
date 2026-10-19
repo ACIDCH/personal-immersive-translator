@@ -16,3 +16,5 @@ supabase/.temp/
 *-observation.json
 *-report.json
 pit-v2-*.png
+
+.evidence/

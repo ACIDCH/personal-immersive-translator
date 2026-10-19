@@ -181,6 +181,19 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.deepEqual(pageCalls.map(x=>x.source),['fr','de'],
    'same short text must not return cached French translation on German tab');
 
+ // A task retains its language/provider, but an explicit disable wins immediately.
+ const sessionValues={};chrome.storage.session={get:async k=>k===null?{...sessionValues}:{[k]:sessionValues[k]},set:async v=>Object.assign(sessionValues,v),remove:async keys=>{for(const k of Array.isArray(keys)?keys:[keys])delete sessionValues[k];}};
+ values.set('pit_settings_v1',{standardProvider:'browser',source:'en',target:'zh'});
+ const task=(id,text)=>call({type:'TRANSLATE_BATCH',mode:'standard',taskId:id,texts:[text]});
+ assert.equal((await task('fixed-task','First translation task paragraph')).ok,true);
+ values.set('pit_settings_v1',{standardProvider:'browser',source:'en',target:'ja'});
+ assert.equal((await task('fixed-task','Second translation task paragraph')).ok,true);
+ assert.equal(requests.at(-1).target,'zh');
+ assert.equal((await task('new-task','New translation task paragraph')).ok,true);
+ assert.equal(requests.at(-1).target,'ja');
+ values.set('pit_settings_v1',{standardProvider:'browser',source:'en',target:'ja',providerPreferences:{browser:{enabled:false}}});
+ assert.equal((await task('fixed-task','Disabled provider must stop old tasks')).ok,false);
+
  // Owner opts in explicitly. Public external MT must be quota bounded across
  // multiple concurrent webpage requests, with no paid AI fallback.
  values.set('pit_settings_v1',{standardProvider:'mymemory',source:'en',target:'zh'});

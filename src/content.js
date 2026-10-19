@@ -12,12 +12,18 @@
   let scope='smart',display='bilingual',theme='subtle';
   let prefs={},titleRecord=null,initialChars=0;
   let taskId='web-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
-  const visibleOrInitial=(item,index,list)=>{
+  let candidateChars=0;
+  const visibleOrInitial=(item)=>{
     if(prefs.translateToBottom!==false)return true;
     const rect=item.el.getBoundingClientRect();
-    const before=list.slice(0,index).reduce((n,x)=>n+x.original.length,0)+initialChars;
+    const before=candidateChars+initialChars;candidateChars+=item.original.length;
     return before<(prefs.initialTranslateCharacters||5000)||(rect.bottom>=0&&rect.top<innerHeight+200);
   };
+  function applyReadingStyle(node,settings){
+    for(const [key,value] of Object.entries(settings.readingStyle||{}))node.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
+    if(settings.longParagraphLineBreak||settings.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
+    if(theme==='none')node.style.setProperty('background-color','transparent','important');
+  }
   let hoverEnabled=false,inputEnabled=false;
   let voiceSource='auto',voiceTarget='zh';
   let lastInput=null,inputTaps=0,inputTapAt=0;
@@ -162,10 +168,10 @@
     const node=document.createElement('div');
     node.className='pit-translation'+(isAI?' pit-ai':'');
     node.textContent=prefs.longParagraphLineBreak?translation.replace(/([.!?。！？])\s*/g,'$1\n'):translation;
-    Object.assign(node.style,prefs.readingStyle||{});
-    if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.whiteSpace='pre-line';
-    if(theme==='none')node.style.backgroundColor='transparent';
-    if(prefs.sameLanguageHighlight&&['zh','ja','ko'].includes(voiceTarget))node.style.backgroundColor=prefs.translationBgColor;
+    applyReadingStyle(node,prefs);
+    if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
+    if(theme==='none')node.style.setProperty('background-color','transparent','important');
+    if(prefs.sameLanguageHighlight&&['zh','ja','ko'].includes(voiceTarget))node.style.setProperty('background-color',prefs.translationBgColor,'important');
     node.dataset.pit='translation';
     node.dataset.theme=theme;
     el.classList.add('pit-source-block');
@@ -302,6 +308,7 @@
     try{
       const limit=mode==='ai' ? Math.max(0,AI_MAX_PER_ACTION-aiCount)
         : Math.min(STANDARD_BATCH,Math.max(0,standardBudget-standardSpent));
+      candidateChars=0;
       const targets=candidates().filter(visibleOrInitial).slice(0,limit);
       if(!targets.length)return;
       let count=0;
@@ -390,7 +397,7 @@
     setDisplay(options.display||display,options.theme||theme);
     if(prefs.translationOnlyLanguages?.includes(lang))setDisplay('translation-only',theme);
     const id=++currentId;
-    if(prefs.translateTitle&&document.title){const original=document.title;void request([original],requestedMode,'').then(values=>{if(active&&currentId===id&&document.title===original&&values[0]){titleRecord={original,translated:values[0]};document.title=values[0];}}).catch(e=>toast('标题翻译失败：'+e.message));}
+    if(prefs.translateTitle&&document.title){const original=document.title;void request([original],requestedMode,'',true).then(values=>{if(active&&currentId===id&&document.title===original&&values[0]){titleRecord={original,translated:values[0]};document.title=values[0];}}).catch(e=>toast('标题翻译失败：'+e.message));}
     if(prefs.temporaryAutoTranslateMinutes>0)void chrome.runtime.sendMessage({type:'PIT_TEMPORARY_AUTO'}).catch(()=>{});
     if(requestedMode==='standard'){
       observer=new MutationObserver(mutations=>{
@@ -579,10 +586,10 @@
     for(const source of queryDeep('.pit-source-block')){
       const record=processed.get(source);if(!record?.node)continue;
       const node=record.node;
-      Object.assign(node.style,p.readingStyle||{});
+      applyReadingStyle(node,p);
       node.textContent=p.longParagraphLineBreak?record.translation.replace(/([.!?。！？])\s*/g,'$1\n'):record.translation;
-      if(p.longParagraphLineBreak||p.lineBreakPolicy==='always')node.style.whiteSpace='pre-line';
-      if(theme==='none')node.style.backgroundColor='transparent';
+      if(p.longParagraphLineBreak||p.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
+      if(theme==='none')node.style.setProperty('background-color','transparent','important');
       if(source.matches('li,td,th')){if(p.translationOrder==='translation-first')source.prepend(node);else source.append(node);}
       else source.insertAdjacentElement(p.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     }
