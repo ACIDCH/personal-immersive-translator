@@ -10,6 +10,7 @@ required. Production operation is single-job, bounded by 25MiB/300 pages,
 auth token and external ingress controls. No source PDF is logged.
 """
 import asyncio
+import hashlib
 import io
 import json
 import os
@@ -192,8 +193,10 @@ def save_job(item,output=None):
     meta,path=job_paths(item["id"])
     if meta is None:return
     if output is not None:
+        item["sha256"]=hashlib.sha256(output).hexdigest()
         atomic_job_write(path,output)
     record={key:item[key] for key in ("id","status","source","confidence","expiresAt")}
+    if item.get("sha256"):record["sha256"]=item["sha256"]
     atomic_job_write(meta,json.dumps(record,separators=(",",":")).encode("utf-8"))
 
 def remove_job(job_id):
@@ -373,6 +376,11 @@ async def result_pdf_job(job_id:str,authorization:str|None=Header(default=None))
         except OSError as error:
             raise HTTPException(status_code=410,
                 detail="PDF result is missing or expired; upload again") from error
+        if (not result.startswith(b"%PDF-") or
+            (item.get("sha256") and
+             not secrets.compare_digest(hashlib.sha256(result).hexdigest(),item["sha256"]))):
+            raise HTTPException(status_code=410,
+                detail="PDF result is damaged; upload again")
     return Response(result,media_type="application/pdf",headers={
         "Cache-Control":"no-store",
         "Content-Disposition":'attachment; filename="bilingual.pdf"',
