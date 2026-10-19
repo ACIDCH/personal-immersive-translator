@@ -121,6 +121,44 @@ async def main():
       await page.evaluate("()=>window.action('PIT_RESTORE')")
       assert not errors,errors
       print("PASS: restore original text and remove injected bilingual nodes")
+
+      # A long paragraph can span several provider requests; if a later
+      # request fails, earlier *fully translated* paragraphs stay visible.
+      # Manual retry must never resend the already completed paragraph.
+      await page.evaluate("""()=>{
+        document.body.innerHTML='<main><p id="complete">Short original economics paragraph.</p>'+
+          '<p id="huge"></p></main>';
+        document.querySelector('#huge').textContent=
+          ('The advanced econometric model has many interesting assumptions. ').repeat(530);
+        window.checkpointCalls=[];
+        window.failSecondCall=true;
+        chrome.runtime.sendMessage=async message=>{
+          window.checkpointCalls.push(message);
+          if(window.failSecondCall && window.checkpointCalls.length===2)
+            return {ok:false,error:'HTTP 503 simulated retryable provider failure'};
+          return {ok:true,translations:message.texts.map(t=>'译文:'+t)};
+        };
+      }""")
+      await page.evaluate("()=>window.action('PIT_START')")
+      await page.locator("#complete + .pit-translation").wait_for(timeout=7000)
+      await page.wait_for_function("""()=>window.checkpointCalls.length>=2""",
+        timeout=5000)
+      before=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
+      assert before['progress']['translated']==1,before
+      assert before['progress']['eligible']==2,before
+      assert before['progress']['coveragePercent']==50,before
+      await page.evaluate("()=>{window.failSecondCall=false}")
+      await page.evaluate("()=>window.action('PIT_CONTINUE')")
+      await page.locator("#huge + .pit-translation").wait_for(timeout=18000)
+      calls=await page.evaluate("window.checkpointCalls")
+      assert sum(any('Short original economics paragraph.'==t for t in call.get('texts',[]))
+                 for call in calls)==1,calls
+      recovered=await page.evaluate("()=>window.action('PIT_GET_PROGRESS')")
+      assert recovered['progress']['coveragePercent']==100,recovered
+      await page.evaluate("()=>window.action('PIT_RESTORE')")
+      assert await page.locator('.pit-translation').count()==0
+      assert not errors,errors
+      print("PASS: partial provider failure checkpoints complete paragraphs; manual retry skips them")
     finally:
       await browser.close()
 
