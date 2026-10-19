@@ -118,13 +118,19 @@
     // standard/free machine translation retains the same request behavior.
     const context=state.mode==='ai'
       ?String(nearbyText||'').slice(0,1600):'';
-    const response=await chrome.runtime.sendMessage({
+    // MV3 worker shutdown or a slow model must not stall subtitles forever.
+    // Timeout stops waiting only: it cannot cancel an already accepted call.
+    const reply=chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:state.mode,
-      // Caption tracks provide a language ISO tag. The browser UI or LMS
-      // language may differ from the actual spoken/subtitled language.
       captionSourceLanguage:state.manualSource||state.track?.language||'',
       userInitiated:state.mode==='ai',context
     });
+    let timeout;
+    const response=await Promise.race([
+      reply,
+      new Promise((_,reject)=>{timeout=setTimeout(
+        ()=>reject(Error('字幕翻译服务超过 25 秒未返回，请检查网络或模型')),25000);})
+    ]).finally(()=>clearTimeout(timeout));
     if(!response?.ok) throw new Error(response?.error || '字幕翻译失败');
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){
       stop();throw new Error('播放器录像地址发生变化，字幕会话已停止');
@@ -175,7 +181,8 @@
       const budget=state.mode==='ai'?80:1200;
       if(state.requestCount>=budget){render('本次翻译已达到安全请求上限，请停止后重新开始。');return;}
       render('正在翻译…');
-      if(state.domPending || Date.now()-state.failedAt<2500) return;
+      if(state.domPending || (state.failedAt &&
+        (state.mode==='ai'||Date.now()-state.failedAt<2500))) return;
       state.requestCount++;state.domPending=true;
       const generation=state.generation;
       try {
@@ -190,7 +197,9 @@
       } catch {
         if(generation===state.generation){
           state.failedAt=Date.now();
-          render('字幕翻译失败，可暂停重试或检查 API 配额');
+          render(state.mode==='ai'
+            ?'AI 字幕调用失败，已停止自动重试；请检查模型/额度后手动重新启动。'
+            :'字幕翻译失败，可暂停重试或检查 API 配额');
         }
       } finally {
         if(generation===state.generation)state.domPending=false;
@@ -214,7 +223,8 @@
     state.seenAny=true;
     const now=video.currentTime;
     renderTimedCues(cues,now);
-    if(state.busy || Date.now()-state.failedAt < 3000) return;
+    if(state.busy || (state.failedAt &&
+      (state.mode==='ai'||Date.now()-state.failedAt < 3000))) return;
     const upcoming=core.upcomingCues(cues,now,video.playbackRate,5);
     if(!upcoming.length || !upcoming.some(c=>!state.cache.has(c.key))) return;
     const budget=state.mode==='ai'?80:1200;
@@ -232,7 +242,9 @@
     } catch(error) {
       if(generation===state.generation){
         state.failedAt=Date.now();
-        render('字幕翻译暂时失败，请检查服务或额度');
+        render(state.mode==='ai'
+          ?'AI 字幕调用失败，已停止自动重试；请检查模型/额度后手动重新启动。'
+          :'字幕翻译暂时失败，请检查服务或额度');
       }
     } finally {
       if(generation===state.generation)state.busy=false;
