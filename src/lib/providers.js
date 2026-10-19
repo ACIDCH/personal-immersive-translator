@@ -227,6 +227,8 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
           {role:'user',content: aiPrompt(texts, opts)}
         ],
         response_format:{type:'json_object'},
+        // JSON translation batches should not exhaust output on hidden reasoning.
+        thinking:{type:'disabled'},
         stream:false,
         temperature:0.2
       }, {Authorization:'Bearer ' + key});
