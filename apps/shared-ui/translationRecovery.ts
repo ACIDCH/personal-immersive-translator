@@ -96,7 +96,8 @@ export function createRecoverableTranslator(
         // Commit independently after each validated provider request.
         // If the next chunk fails, retrying the same logical batch should
         // reuse successful fragments, not pay for them a second time.
-        chunk.forEach((key,index)=>cache.set(key,translated[index]));
+        const committed=translated;
+        chunk.forEach((key,index)=>cache.set(key,committed[index]));
         i+=chunk.length;
       }
     }
