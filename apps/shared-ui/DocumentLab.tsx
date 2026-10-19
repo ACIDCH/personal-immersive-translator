@@ -147,7 +147,7 @@ export function DocumentLab(){
         const res=await runtime.sendMessage!({type:'TRANSLATE_DOCUMENT',texts,mode:translationMode,userInitiated:true});
         if(!res?.ok||!res.translations)throw Error(res?.error||'图片翻译服务响应失败');
         return res.translations;
-      },{onRetry:info=>setProgress('图片 API 暂时不可用，重试 '+info.attempt+' 次')});
+      },{maxRetries:translationMode==='ai'?0:2,onRetry:info=>setProgress('图片 API 暂时不可用，重试 '+info.attempt+' 次')});
       const overlay=imageLayout==='overlay';
       if(overlay&&!ocrRegions.length)throw Error('缺少 OCR 坐标，无法原位覆盖；请改用双栏导出');
       const lines=overlay?ocrRegions.map(x=>x.text):splitOcrLines(text);
