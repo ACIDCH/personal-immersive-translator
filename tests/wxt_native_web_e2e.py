@@ -222,7 +222,7 @@ async def main():
                 await target.bring_to_front()
                 await popup.get_by_role('button',name='网页翻译',exact=True).click()
                 await popup.get_by_role('button',name='翻译当前网页').click()
-                await target.wait_for_function("getComputedStyle(document.querySelector('.pit-translation')).fontSize==='24px'")
+                await target.wait_for_function("() => {const node=document.querySelector('.pit-translation');return node && getComputedStyle(node).fontSize==='24px';}")
                 await options.locator('[data-key="translationOrder"]').select_option('translation-first')
                 await target.wait_for_function("document.querySelector('#source').previousElementSibling?.classList.contains('pit-translation')")
                 await popup.get_by_role('button',name='恢复原文').click()

@@ -6,6 +6,7 @@
   const platform = globalThis.PITPlatformCaptions;
   if (!core) return;
   let config={enabled:true,playerQuickToggle:false,preferPitTranslationOverPlatformMT:true},quick=null,settingsReady=Promise.resolve(),lastError='',manuallyStopped=false;
+  const taskPrefix='captions-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const platformId=()=>/youtube/.test(location.hostname)?'youtube':/bilibili/.test(location.hostname)?'bilibili':/netflix/.test(location.hostname)?'netflix':/panopto/.test(location.hostname)?'panopto':'generic';
   function dialogue(text){return config.focusDialogueOnly?text.replace(/\[(?:music|applause|laughter|laughing|sighs?|gasps?|noise|silence)\]|[（(](?:音乐|笑声|掌声|叹气|背景音)[）)]/gi,'').trim():text;}
   function prepareCues(cues){return cues.map(c=>({...c,text:dialogue(c.text)})).filter(c=>c.text);}
@@ -153,7 +154,7 @@
     // MV3 worker shutdown or a slow model must not stall subtitles forever.
     // Timeout stops waiting only: it cannot cancel an already accepted call.
     const reply=chrome.runtime.sendMessage({
-      type:'TRANSLATE_BATCH',texts,mode:state.mode,pageContext:'video',
+      type:'TRANSLATE_BATCH',texts,mode:state.mode,pageContext:'video',taskId:taskPrefix+'-'+generation,
       captionSourceLanguage:state.manualSource||state.track?.language||'',
       userInitiated:state.mode==='ai',context
     });

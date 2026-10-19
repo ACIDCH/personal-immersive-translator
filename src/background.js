@@ -474,7 +474,8 @@ async function handle(message, sender) {
     if (!isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可以清除缓存');
     await clearTranslations(chrome.storage.local); return {ok:true};
   }
-  if (!['TRANSLATE_BATCH','TEST_PROVIDER','TRANSLATE_DOCUMENT'].includes(message.type)) throw new TranslationError('不支持的请求');
+  if (!['TRANSLATE_BATCH','TEST_PROVIDER','TRANSLATE_DOCUMENT','TRANSLATE_TEXT'].includes(message.type)) throw new TranslationError('不支持的请求');
+  if(message.type==='TRANSLATE_TEXT'&&!isTrustedExtensionPage(sender))throw new TranslationError('文本工具仅供扩展界面使用');
   if (message.type === 'TEST_PROVIDER' && !isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可测试 API');
   if (message.type === 'TRANSLATE_DOCUMENT' && !isTrustedDocumentPage(sender))
     throw new TranslationError('仅插件文件处理页允许翻译本地文件');
@@ -488,6 +489,20 @@ async function handle(message, sender) {
   settings={...settings,standardProvider:override&&override!=='inherit'?override:settings.standardProvider,
     source:message.pageContext==='video'&&video.source!=='auto'?video.source:settings.source,
     target:rule?.target&&rule.target!=='inherit'?rule.target:message.pageContext==='video'&&video.target!=='inherit'?video.target:settings.target};
+  // Pin provider/languages/credentials to an explicitly started task. Changing
+  // the popup default affects the next task, not later batches of this one.
+  if(sender.tab&&typeof message.taskId==='string'&&/^[a-z0-9-]{1,100}$/i.test(message.taskId)){
+    const key='pit_task_'+sender.tab.id+'_'+(sender.frameId||0)+'_'+message.taskId;
+    const saved=(await chrome.storage.session.get(key))[key];
+    if(saved&&Date.now()-saved.at<3600000)settings={...saved.settings,blockedHosts:settings.blockedHosts,providerPreferences:settings.providerPreferences};
+    else{
+      const all=await chrome.storage.session.get(null);
+      const expired=Object.entries(all).filter(([k,v])=>k.startsWith('pit_task_')&&Date.now()-(v?.at||0)>3600000).map(([k])=>k);
+      const entries=Object.entries(all).filter(([k])=>k.startsWith('pit_task_')).sort((a,b)=>(a[1]?.at||0)-(b[1]?.at||0));
+      await chrome.storage.session.remove([...new Set([...expired,...entries.slice(0,Math.max(0,entries.length-49)).map(([k])=>k)])]);
+      await chrome.storage.session.set({[key]:{at:Date.now(),settings}});
+    }
+  }
   if (sender.tab) {
     // In a cross-origin video iframe, sender.tab.url is the LMS parent, while
     // sender.url is the real embedded player. Respect the denylist for BOTH.

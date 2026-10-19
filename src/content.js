@@ -11,6 +11,7 @@
   let processed = new WeakMap();
   let scope='smart',display='bilingual',theme='subtle';
   let prefs={},titleRecord=null,initialChars=0;
+  let taskId='web-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const visibleOrInitial=(item,index,list)=>{
     if(prefs.translateToBottom!==false)return true;
     const rect=item.el.getBoundingClientRect();
@@ -174,10 +175,10 @@
     processed.set(el,{source,node,translation});
     return true;
   }
-  async function request(texts,requestedMode,context) {
+  async function request(texts,requestedMode,context,pinTask=false) {
     const answer=await chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:requestedMode,
-      pageContext:'article',
+      pageContext:'article',taskId:pinTask?taskId:'gesture-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)),
       userInitiated:requestedMode==='ai',context
     });
     if(!answer?.ok)throw Error(answer?.error||'翻译服务未响应');
@@ -239,7 +240,7 @@
         if(batch.length&&characters+item.text.length>9500)break;
         batch.push(item);characters+=item.text.length;i++;
       }
-      const reply=await request(batch.map(x=>x.text),requestedMode,context);
+      const reply=await request(batch.map(x=>x.text),requestedMode,context,true);
       if(!active||currentId!==sessionId)return null;
       succeededBatches++;
       if(requestedMode==='ai')aiCount+=batch.length;
@@ -384,6 +385,7 @@
     const lang=(prefs.sourceLanguage!=='auto'?prefs.sourceLanguage:document.documentElement.lang)?.split('-')[0];
     if(prefs.skipSameLanguage&&lang&&lang===prefs.targetLanguage){toast('明确源语与目标语相同，已跳过；可在高级设置关闭。');return;}
     restore();mode=requestedMode;active=true;
+    taskId='web-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
     scope=options.scope==='full'?'full':'smart';
     setDisplay(options.display||display,options.theme||theme);
     if(prefs.translationOnlyLanguages?.includes(lang))setDisplay('translation-only',theme);

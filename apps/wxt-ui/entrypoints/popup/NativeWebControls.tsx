@@ -320,7 +320,7 @@ export function NativeWebControls(){
    finally{setCaptionBusy(false);}
  }
  return <div className="native-web">
-   <QuickPreferences mode={mode}/>
+   <QuickPreferences mode={mode} onSelection={()=>void run('PIT_SELECTION')}/>
    <nav className="pit-feature-tabs" aria-label="功能模块">
      <button type="button" aria-current={feature==='web'?'page':undefined} onClick={()=>setFeature('web')}>网页翻译</button>
      <button type="button" aria-current={feature==='video'?'page':undefined} onClick={()=>setFeature('video')}>视频字幕</button>
