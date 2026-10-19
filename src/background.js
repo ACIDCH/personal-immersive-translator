@@ -11,8 +11,6 @@ function patchSettings(patch){
  const next=settingsWrite.then(async()=>{
   const settings=normalizeSettings({...await getSettings(),...patch});
   await chrome.storage.local.set({[SETTINGS_KEY]:settings});
-  for(const tab of await chrome.tabs.query({}).catch(()=>[]))if(tab.id)
-   void chrome.tabs.sendMessage(tab.id,{type:'PIT_PREFERENCES_CHANGED'}).catch(()=>{});
   return settings;
  });settingsWrite=next.catch(()=>{});return next;
 }
@@ -462,7 +460,8 @@ async function handle(message, sender) {
     const settings=await getSettings();
     const id=message.providerId||(message.mode==='ai'?settings.aiProvider:settings.standardProvider);
     if(id==='mymemory'){
-      const last=probeTimes.get(id)||0;
+      const saved=(await chrome.storage.local.get('pit_probe_mymemory')).pit_probe_mymemory;
+      const last=Math.max(probeTimes.get(id)||0,Date.parse(saved?.testedAt)||0);
       if(Date.now()-last<60000)return {ok:false,status:'rate-limited',confirmedLive:false,error:'请等待一分钟再测试 MyMemory。'};
       probeTimes.set(id,Date.now());
     }

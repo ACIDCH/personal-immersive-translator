@@ -202,6 +202,37 @@ async def main():
                 print("PASS: real Settings tab adds/removes current-site allow/block rules")
                 # Keep model keys/settings only in extension contexts.
                 assert "fixture-only-never-sent" not in await target.content()
+                # Each service card calls its adapter without replacing the default.
+                # MyMemory transport here is explicitly mocked; live evidence is separate.
+                await sw.evaluate("""()=>{const old=fetch;globalThis.fetch=(url,init)=>String(url).startsWith('https://api.mymemory.translated.net/')?Promise.resolve(new Response(JSON.stringify({responseStatus:200,responseData:{translatedText:'欢迎来到课堂。'}}),{headers:{'content-type':'application/json'}})):old(url,init);} """)
+                await options.locator('.options-nav a[href="#services"]').click()
+                options.on('dialog',lambda dialog:asyncio.create_task(dialog.accept()))
+                for provider in ['browser','mymemory','cloud','microsoft','google','deepl','libre','gemini','deepseek']:
+                    card=options.locator('[data-provider="'+provider+'"]')
+                    await card.get_by_role('button',name='测试此服务',exact=False).click()
+                    await card.locator('.probe-result').filter(has_text='ms').wait_for(timeout=30000)
+                    result=await card.locator('.probe-result').inner_text()
+                    assert 'available' in result if provider in ['mymemory','microsoft'] else ('not-configured' in result or 'missing-pack' in result or 'available' in result),result
+                current=await options.evaluate("async()=>(await chrome.storage.local.get('pit_settings_v1')).pit_settings_v1")
+                assert current['standardProvider']=='microsoft'
+                # UI -> saved model -> existing content runtime -> restore.
+                await options.locator('.options-nav a[href="#readingSettings"]').click()
+                await options.locator('[data-key="translatedFontSize"]').fill('24')
+                await options.locator('[data-key="translatedFontSize"]').press('Tab')
+                await target.bring_to_front()
+                await popup.get_by_role('button',name='网页翻译',exact=True).click()
+                await popup.get_by_role('button',name='翻译当前网页').click()
+                await target.wait_for_function("getComputedStyle(document.querySelector('.pit-translation')).fontSize==='24px'")
+                await options.locator('[data-key="translationOrder"]').select_option('translation-first')
+                await target.wait_for_function("document.querySelector('#source').previousElementSibling?.classList.contains('pit-translation')")
+                await popup.get_by_role('button',name='恢复原文').click()
+                await target.locator('.pit-translation').wait_for(state='detached')
+                await options.locator('.options-nav a[href="#services"]').click()
+                await options.set_viewport_size({'width':1360,'height':950})
+                await options.screenshot(path=str(ROOT/'pit-v2-options.png'),full_page=True)
+                await popup.set_viewport_size({'width':440,'height':800})
+                await popup.screenshot(path=str(ROOT/'pit-v2-popup.png'),full_page=True)
+                print('PASS: independent service card probes, unchanged default, live style/order and restore (mock transport L1)')
                 assert not errors,errors
             finally:
                 await context.close()

@@ -56,9 +56,9 @@ async def main():
                 # A trusted options tab must be able to test the provider,
                 # even though Chrome attaches sender.tab to tab-hosted UIs.
                 tested=await options.evaluate("""async()=>chrome.runtime.sendMessage({
-                  type:'TEST_PROVIDER',mode:'standard'
+                  type:'TEST_PROVIDER',mode:'standard',providerId:'microsoft',costConfirmed:true
                 })""")
-                assert tested.get('ok') and tested.get('translations')==['译文:Hello, world!'],tested
+                assert tested.get('ok') and tested.get('translations')==['译文:Hello, welcome to our class.'],tested
 
                 paragraphs="".join(
                     f'<p id="p-{i}">Financial research paragraph number {i}: forecasting international market conditions, currency risk and operational decisions.</p>'

@@ -171,7 +171,7 @@
     el.classList.toggle('pit-original-concealed',display==='translation-only');
     if(el.matches('li,td,th')){if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);}
     else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
-    processed.set(el,{source,node});
+    processed.set(el,{source,node,translation});
     return true;
   }
   async function request(texts,requestedMode,context) {
@@ -573,9 +573,18 @@
         const rule=raw.trim().toLowerCase().replace(/^\*\./,'');
         return host===rule||host.endsWith('.'+rule);
       });
-    if(matches(p.blockedHosts)){restore();hoverEnabled=false;inputEnabled=false;document.querySelector('.pit-floating-control')?.remove();return;}
-    for(const node of queryDeep('.pit-translation'))Object.assign(node.style,p.readingStyle||{});
-    if(!p.floatingControl)document.querySelector('.pit-floating-control')?.remove();
+    if(matches(p.blockedHosts)){restore();hoverEnabled=false;inputEnabled=false;document.getElementById('pit-floating-translate')?.remove();return;}
+    for(const source of queryDeep('.pit-source-block')){
+      const record=processed.get(source);if(!record?.node)continue;
+      const node=record.node;
+      Object.assign(node.style,p.readingStyle||{});
+      node.textContent=p.longParagraphLineBreak?record.translation.replace(/([.!?。！？])\s*/g,'$1\n'):record.translation;
+      if(p.longParagraphLineBreak||p.lineBreakPolicy==='always')node.style.whiteSpace='pre-line';
+      if(theme==='none')node.style.backgroundColor='transparent';
+      if(source.matches('li,td,th')){if(p.translationOrder==='translation-first')source.prepend(node);else source.append(node);}
+      else source.insertAdjacentElement(p.translationOrder==='translation-first'?'beforebegin':'afterend',node);
+    }
+    if(!p.floatingControl)document.getElementById('pit-floating-translate')?.remove();
     if(auto&&(matches(p.autoTranslateHosts)||p.temporaryAutoTranslateUntil?.[host]>Date.now())&&!matches(p.blockedHosts)){
       // A first install must never silently fake translations or send API
       // calls to an unconfigured self-hosted Worker.

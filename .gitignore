@@ -15,3 +15,4 @@ supabase/.temp/
 .venv/
 *-observation.json
 *-report.json
+pit-v2-*.png

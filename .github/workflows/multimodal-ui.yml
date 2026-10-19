@@ -149,6 +149,8 @@ jobs:
             wxt-video-image-pdf-e2e-report.json
             wxt-platform-caption-matrix.json
             wxt-sync-fixture-report.json
+            pit-v2-options.png
+            pit-v2-popup.png
           if-no-files-found: ignore
           retention-days: 7
       - name: Probe public websites in real Chromium (network-dependent, not provider quality)

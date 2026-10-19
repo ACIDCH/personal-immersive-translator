@@ -4,7 +4,6 @@ import {checkNativeTranslator,ensureNativeTranslator} from './lib/browser-native
 import {mountProductSettings} from './options-v2.js';
 const form=document.getElementById('optionsForm');
 const status=document.getElementById('status');
-const checkboxKeys=['contextAI','hoverTranslate','inputTranslate','floatingControl'];
 let profiles=[], activeProfileId='',currentSettings=normalizeSettings();
 const pick=id=>document.getElementById(id);
 function profileMessage(message) {pick('profileStatus').textContent=message;}
@@ -242,11 +241,12 @@ pick('importPreferences').addEventListener('change',async event=>{
 // Hold controls until asynchronous saved preferences are rendered. Without
 // this, fast users and browser automation can have edits overwritten by init.
 form.dataset.ready='0';
-for(const el of form.elements)el.disabled=true;
+const initializingControls=[...form.elements].map(el=>({el,disabled:el.disabled}));
+for(const {el} of initializingControls)el.disabled=true;
 chrome.storage.local.get(SETTINGS_KEY)
   .then(r=>{viewSettings(normalizeSettings(r[SETTINGS_KEY]));mountProductSettings({form,get:()=>currentSettings,save:saveSettings,view:viewSettings});})
   .catch(error=>{status.textContent='设置读取失败：'+String(error.message||error);})
   .finally(()=>{
-    for(const el of form.elements)el.disabled=false;
+    for(const {el,disabled} of initializingControls)el.disabled=disabled;
     form.dataset.ready='1';
   });
