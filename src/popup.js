@@ -8,12 +8,12 @@ function show() {
   $('ai').classList.toggle('selected',mode==='ai');
   $('modeHint').textContent=mode==='standard'?'常规翻译优先，不消耗所配置的 AI 模型额度。':'AI 按需翻译，可能产生模型调用费用。';
   const providers={microsoft:'Microsoft Translator',google:'Google Cloud',deepl:'DeepL',
-    libre:'LibreTranslate',gemini:'Gemini',deepseek:'DeepSeek',custom:'自定义 AI'};
+    libre:'LibreTranslate',gemini:'Gemini',deepseek:'DeepSeek',openrouter:'OpenRouter',custom:'自定义 AI'};
   const name=mode==='standard'?settings.standardProvider:settings.aiProvider;
   $('providerInfo').textContent='当前翻译服务：'+(name==='custom'?(settings.aiProfiles.find(p=>p?.id===settings.activeAIProfileId)?.name||'未选择自定义模型'):(providers[name]||name));
   const key=name==='microsoft'?'microsoftKey':name==='google'?'googleKey':
     name==='deepl'?'deeplKey':name==='libre'?'libreUrl':
-    name==='gemini'?'geminiKey':name==='custom'?'activeAIProfileId':'deepseekKey';
+    name==='gemini'?'geminiKey':name==='openrouter'?'openrouterKey':name==='custom'?'activeAIProfileId':'deepseekKey';
   const ready=Boolean(String(settings[key]||'').trim());
   $('setupStatus').classList.toggle('ready',ready);
   $('setupStatus').textContent=ready
