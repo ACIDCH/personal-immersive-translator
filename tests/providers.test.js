@@ -190,3 +190,44 @@ test('DeepSeek Flash model is passed to the official endpoint without using Herm
   });
   assert.deepEqual(await translateBatch(['Hello'],{...config,provider:'deepseek',deepseekKey:'secret',deepseekModel:'deepseek-flash'},f),['您好']);
 });
+
+
+test('OpenRouter free route uses its own API credential and preserves JSON translation order',async()=>{
+  const settings=normalizeSettings();
+  assert.equal(settings.openrouterModel,'openrouter/free');
+  assert.equal(settings.openrouterKey,'');
+  assert.equal(settings.autoAI,false);
+  assert.equal(settings.standardProvider,'browser');
+  const f=mockResponse({choices:[{message:{content:'{"translations":["你好","世界"]}'}}]},(url,init)=>{
+    assert.equal(url,'https://openrouter.ai/api/v1/chat/completions');
+    assert.equal(init.headers.Authorization,'Bearer new-safe-test-key');
+    const body=JSON.parse(init.body);
+    assert.equal(body.model,'openrouter/free');
+    assert.ok(!url.includes('new-safe-test-key'));
+    assert.equal(body.stream,false);
+  });
+  assert.deepEqual(await translateBatch(['Hello','World'],{
+    ...config,provider:'openrouter',openrouterKey:'new-safe-test-key',
+    openrouterModel:'openrouter/free'
+  },f),['你好','世界']);
+});
+test('OpenRouter rejects missing API key and malformed model before network call',async()=>{
+  let requests=0;const fetcher=()=>{requests++;throw Error('should not fetch');};
+  await assert.rejects(translateBatch(['Hello'],{
+    ...config,provider:'openrouter',openrouterModel:'openrouter/free'
+  },fetcher),/OpenRouter API Key/);
+  await assert.rejects(translateBatch(['Hello'],{
+    ...config,provider:'openrouter',openrouterKey:'dummy',openrouterModel:'not valid model'
+  },fetcher),/模型名称格式无效/);
+  assert.equal(requests,0);
+});
+test('OpenRouter model override is independent of default AI provider and user preferences export',()=>{
+  const saved=normalizeSettings({
+    aiProvider:'openrouter',openrouterKey:'local-test-secret',
+    openrouterModel:'google/gemini-2.5-flash'
+  });
+  assert.equal(saved.aiProvider,'openrouter');
+  assert.equal(saved.openrouterModel,'google/gemini-2.5-flash');
+  assert.equal(saved.autoAI,false);
+  assert.ok(!JSON.stringify(portablePreferences(saved)).includes('local-test-secret'));
+});
