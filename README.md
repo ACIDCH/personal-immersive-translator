@@ -2,7 +2,7 @@
 
 Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
 
-**New platform direction:** WXT + React + TypeScript frontend foundation, Cloudflare Pages React control panel, user-managed multi-provider BYOK AI profiles. The UI shells in `apps/` are **design/build previews only** and do not replace the functional extension. See [new platform architecture](docs/MULTIMODAL_PLATFORM_VISION_zh-CN.md).
+**Current development architecture:** WXT + React controls package the existing `src/` translation runtime into the installed Chrome MV3 extension. This is **one runtime**, not a separate UI translation engine. The optional Cloudflare Pages portal remains a separate preview. See [core engineering readiness](docs/PIT_CORE_ENGINEERING_READINESS_20261019.md). The branch remains an unmerged Draft PR.
 
 The original GitHub repository slug is intentionally unchanged until GitHub Actions and pending PRs are migrated. Production-grade KISS integration, archived Immersive Translate reuse and live cloud deployments require separate licensing/quality gates.
 
@@ -35,21 +35,21 @@ Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.m
 
 | Mode | Current behavior | Requirements |
 | --- | --- | --- |
-| Web bilingual | Standard provider by default; original and translated text coexist | Your own official provider API Key and quota |
-| HTML5/video subtitles | Native timed cues, visible YouTube/Netflix/Panopto DOM fallback, imported SRT/VTT | Captions must be available and permitted |
+| Web bilingual | Keyless Chrome Translator API is the default standard MT where language models are available; optional MyMemory, official keys and Cloudflare MT remain configurable; AI is opt-in | Chrome 138+ with supported/downloaded native language packs, or alternate configured provider |
+| HTML5/video subtitles | Native timed cues, user-visible platform CC, imported SRT/VTT/ASS; ASR opt-in when CC unavailable | Authorized accessible captions or explicitly configured Whisper; simulated players do not prove live-site access |
 | Local speech captions | Explicit tab audio capture → optional localhost Whisper → ordinary translation service | Manually installed multilingual whisper.cpp, model and bridge; no DRM bypass |
-| Image/OCR | User-selected image or deliberately captured screenshot via Gemini OCR or local Tesseract | Own API Key or installed local OCR bridge |
-| PDF | Official PDF.js previews and scanned-page hints; separate OCRmyPDF → BabelDOC PDF reconstruction | Local Python service, system OCR packages, BabelDOC install, model and own API Key |
+| Image/OCR | WXT browser Tesseract.js worker, optional Gemini vision, local Tesseract/OCRmyPDF, experimental placement | OCR language packs/model download or separately configured provider; in-place overlay is not semantic inpainting |
+| PDF | Browser PDF.js fallback/scan hints; optional separate OCRmyPDF+BabelDOC Python container with async status and mounted-volume completed result recovery | Browser fallback needs no local Python; real layout-preserving BabelDOC requires independently deployed service/model credentials |
 
 **Language selection:** zh / en / ja / ko / fr / de / es. Supported selection does **not** guarantee equal quality/compatibility across providers, platforms, BabelDOC and OCR models.
 
 ## Install a CI-built package
 
-1. Open this branch's latest successful GitHub Actions and download `personal-immersive-translator-alpha` artifact. Extract the inner ZIP if the Actions artifact wraps it.
-2. Unzip the actual browser package into a folder containing `manifest.json`, `src/` and `assets/`; `src/vendor/pdf.mjs`, `pdf.worker.mjs` and the Apache license should be present.
-3. Use Chrome/Edge **125 or later**. Visit `chrome://extensions` or `edge://extensions`, enable Developer Mode and choose **Load unpacked**.
-4. Open Options and enter your **own** official translation API Key; never place credentials in GitHub or Drive.
-5. For OCR, local ASR or layout-preserved PDFs, complete [local prerequisites](docs/PDF_OCR_SETUP.md) separately. The browser ZIP alone is insufficient for those workflows.
+1. Open PR #55's latest successful **Multimodal Platform UI & BYOK validation** GitHub Actions workflow and download the **`multimodal-wxt-web-integration-test`** artifact. `personal-immersive-translator-alpha` is a different older native ZIP, not the WXT/React integrated build.
+2. Extract the WXT artifact and find its root `manifest.json`. The WXT output layout is different from the older native ZIP; do not mix files from the two builds.
+3. Open `chrome://extensions` or `edge://extensions`, enable Developer Mode and choose **Load unpacked**. Native Chrome Translator requires an eligible Chrome 138+ build and available language packs; other features have their own runtime requirements.
+4. Open Options and check built-in language pack support/readiness; if unavailable, select a configured **standard MT** alternative. AI providers remain opt-in. Do not commit API Keys to GitHub or Drive.
+5. WXT can run Tesseract.js OCR in the browser. Optional local Whisper and high-fidelity BabelDOC still require their own model/service setup. See [cloud deployment](docs/P0_CLOUD_DEPLOYMENT.md) and [engineering readiness](docs/PIT_CORE_ENGINEERING_READINESS_20261019.md).
 
 For development from source, use Node.js 22+:
 
