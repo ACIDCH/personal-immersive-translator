@@ -73,7 +73,7 @@
       missing.forEach(c=>this.inflight.add(c.key));
       try {
         const translations = await request(missing.map(c=>c.text));
-        if(!Array.isArray(translations) || translations.length!==missing.length || translations.some(t=>typeof t!=='string')) throw new Error('Caption translations did not match the source cues');
+        if(!Array.isArray(translations) || translations.length!==missing.length || translations.some(t=>typeof t!=='string'||!t.trim())) throw new Error('Caption translations did not match the source cues');
         missing.forEach((c,i)=>this.put(c.key,translations[i]));return missing.length;
       } finally {
         missing.forEach(c=>this.inflight.delete(c.key));
