@@ -212,9 +212,13 @@ def sweep_jobs():
             item=json.loads(meta.read_text("utf-8"))
             valid=item["id"]==job_id and item["status"] in ("completed","failed") and (
                 item["status"]=="failed" or (root/(job_id+".pdf")).is_file())
-            if not valid or float(item["expiresAt"])<=now:
-                # Queued/running records may belong to the current process.
-                # Never delete their metadata while they are in live memory.
+            if job_id not in jobs and item["status"] in ("queued","running") and (
+                float(item["expiresAt"])>now):
+                # Interruption on restart: retain the status as a truthful
+                # failed job until TTL, rather than deleting it immediately.
+                load_job(job_id)
+                retained.append((float(item["expiresAt"]),job_id))
+            elif not valid or float(item["expiresAt"])<=now:
                 if job_id not in jobs:remove_job(job_id)
             else:
                 retained.append((float(item["expiresAt"]),job_id))
@@ -295,6 +299,7 @@ async def execute_pdf_job(job_id,data,source,target,ocr):
         save_job(item)
     finally:
         item["doneAt"]=time.monotonic()
+        sweep_jobs()
         item["expiryTask"]=asyncio.create_task(forget_result_later(job_id))
 
 @app.post("/v1/pdf/jobs")
