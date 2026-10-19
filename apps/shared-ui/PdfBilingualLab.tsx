@@ -131,6 +131,7 @@ export function PdfBilingualLab(){
    }
    if(!window.confirm('将上传选中的 PDF 到你配置的独立云端 BabelDOC 服务，并调用该云端配置的翻译模型。云服务及 AI 可能产生费用。确认继续？'))return;
    const controller=new AbortController();currentAbort.current=controller;
+   let durable=false;
    setBusy(true);setStatus('正在验证云端 BabelDOC 引擎状态（不会上传文件）…');
    try{
      const healthUrl=new URL(url.toString());
@@ -144,6 +145,7 @@ export function PdfBilingualLab(){
      const health=await preflight.json();
      if(health?.ready!==true)
        throw Error('云端 BabelDOC 服务尚未就绪（CLI 或模型凭据未配置），文件未上传。');
+     durable=health.job_storage==='persistent-volume-single-worker';
      if(typeof health.max_file_bytes==='number' && file.size>health.max_file_bytes)
        throw Error('文件超过云端服务允许的大小，文件未上传。');
      setStatus('云端环境预检通过；正在上传 PDF…');
@@ -158,8 +160,8 @@ export function PdfBilingualLab(){
      let confidenceFromJob='';
      if(health.async_jobs===true){
        // A long academic paper cannot depend on one open HTTP request.
-       // This is only an in-memory single-container queue; server restarts
-       // invalidate IDs and users must upload again.
+       // The backend reports whether completed results persist across
+       // restarts; in-flight BabelDOC inference never resumes automatically.
        const jobsUrl=new URL(url.toString());
        jobsUrl.pathname=jobsUrl.pathname.replace(/\/$/,'')+'/v1/pdf/jobs';
        const submitted=await fetch(jobsUrl.toString(),{
@@ -199,7 +201,9 @@ export function PdfBilingualLab(){
          }
          if(state.status==='completed'){complete=true;break;}
          setStatus('云端文档任务'+(state.status==='running'?'正在排版翻译':'正在排队')+
-           '；任务号 '+jobId.slice(0,8)+'…（服务重启可能丢失任务）');
+           '；任务号 '+jobId.slice(0,8)+'…（'+(durable
+             ?'已完成结果可从挂载存储恢复，运行中任务无法跨重启继续'
+             :'服务重启可能丢失任务')+'）');
          await new Promise<void>((resolve,reject)=>{
            const onAbort=()=>{clearTimeout(timer);reject(Error('已停止等待云端 PDF'));};
            const timer=setTimeout(()=>{
@@ -225,7 +229,8 @@ export function PdfBilingualLab(){
      if(health.async_jobs===true)forgetJob();
    }catch(error){
      setStatus(controller.signal.aborted
-       ?'已停止等待云端 PDF；服务端任务可能仍在执行并产生费用。可在此窗口刷新后查询，但服务端重启会丢失任务。'
+       ?'已停止等待云端 PDF；服务端任务可能仍在执行并产生费用。可重新打开工作台检查任务。'+
+         (durable?'已完成结果可从持久卷恢复，但运行中任务不能跨重启续跑。':'服务重启会丢失任务。')
        :'云端 PDF 任务失败：'+String(error instanceof Error?error.message:error));
    }finally{currentAbort.current=null;setBusy(false);}
  }
