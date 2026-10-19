@@ -25,3 +25,14 @@ This integration updates the existing Gemini and DeepSeek providers; **it does n
 - Be mindful of per-provider token costs, network timeouts, response accuracy and private third-party source text.
 
 Official docs: [Gemini models](https://ai.google.dev/gemini-api/docs/models), [Gemini key setup](https://ai.google.dev/gemini-api/docs/api-key), [DeepSeek models](https://api-docs.deepseek.com/quick_start/pricing/), [Hermes setup](https://api-docs.deepseek.com/quick_start/agent_integrations/hermes/).
+
+
+## Third provider: OpenRouter (direct selector)
+
+PIT now also has a separate **OpenRouter** option in the AI Service dropdown, dedicated `openrouterKey` and `openrouterModel` inputs, and an official Chat Completions adapter at `https://openrouter.ai/api/v1/chat/completions`. It is only used after **explicitly selecting AI mode**, not on normal webpage translation and never as an automatic paid fallback.
+
+- If a key has appeared in an image or a copy-paste example, **revoke and regenerate it** at [OpenRouter Keys](https://openrouter.ai/settings/keys). Never commit or screenshot the replacement.
+- The default model ID is `openrouter/free`, which routes to available zero-token-price models but may change underlying models between requests. Quotas and whether a free model follows strict JSON translation formatting can differ; malformed results are reported as errors.
+- OpenRouter models may include Gemini/DeepSeek variants, but they still use **the OpenRouter account's own key and quota**. Direct provider keys remain independent.
+- A key's `$100 credit limit` is a **maximum permitted charge**, not a free account balance. Prefer a much smaller custom cap for personal prototyping.
+- Source code and mocked tests are in the review branch; genuine browser and live-API acceptance require a newly generated key entered **only into the installed extension's local settings**.
