@@ -81,7 +81,7 @@ export function SubtitleFileLab(){
      currentAbort.current?.abort();
      setStatus('已停止等待字幕翻译；已发出的远端请求可能仍在运行，请勿重复提交以免重复收费。');
    }}>取消字幕文件翻译</button>}
-   {progress&&<p role="status">{progress}</p>
+   {progress&&<p role="status">{progress}</p>}
    <p aria-live="polite">{status}</p>
  </section>;
 }
