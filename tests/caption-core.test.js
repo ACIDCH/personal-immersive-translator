@@ -57,6 +57,14 @@ test('retries failed subtitle batches instead of permanently marking them',async
  assert.equal(c.get(cues[0].key),'译文');
 });
 
+test('empty provider text never marks a subtitle as translated',async()=>{
+ const c=new CaptionCache(), cues=normalizeCues([{startTime:0,endTime:4,text:'Actual speech'}]);
+ await assert.rejects(c.prefetch(cues,async()=>['   ']),/did not match/);
+ assert.equal(c.has(cues[0].key),false);
+ assert.equal(c.inflight.size,0);
+ assert.equal(await c.prefetch(cues,async()=>['真正译文']),1);
+ assert.equal(c.get(cues[0].key),'真正译文');
+});
 test('long captions remain accessible after seeking 4000 seconds',()=>{
  const raw=Array.from({length:5000},(_,i)=>({startTime:i,endTime:i+0.75,text:'cue '+i}));
  const near=normalizeCues(raw,4050);
