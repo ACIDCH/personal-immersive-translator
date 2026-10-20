@@ -96,3 +96,14 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
   .pit-workbench-actions a,.pit-workbench-nav a{background:#234257;color:#d9f2ff;border-color:#416579}
   .pit-workbench-nav{background:#0c1220;border-color:#354b60}
   .pit-workbench-engine{background:#153a48;color:#daf1f8;border-color:#2e7184}}
+
+/* Free-MT readiness is part of the same popup service selector, not a separate
+   inaccessible settings-only diagnostic. No background fallback is implied. */
+.pit-reader-console .pit-service-actions{display:flex;gap:8px;align-items:stretch;margin:8px 0 10px}
+.pit-reader-console .pit-service-actions>button{flex:1;min-width:0;padding:9px 7px}
+.pit-reader-console .pit-service-readiness{padding:10px 12px;margin:8px 0;
+  border:1px solid #5a8da3;border-radius:10px;background:#17364b}
+.pit-reader-console .pit-service-readiness>p{margin:0 0 9px;
+  color:#cadfec;font-size:11px;line-height:1.55}
+.pit-reader-console .pit-service-readiness>button{width:100%;text-align:center}
+@media(max-width:380px){.pit-reader-console .pit-service-actions{flex-direction:column}}
