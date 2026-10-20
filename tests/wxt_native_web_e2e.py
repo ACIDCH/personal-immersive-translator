@@ -236,6 +236,30 @@ async def main():
                 await popup.bring_to_front()
                 await popup.evaluate('window.scrollTo(0,0)')
                 await popup.screenshot(path=str(ROOT/'pit-v2-popup.png'),full_page=True,animations='disabled')
+                # Layout-level reflow checks at narrow and zoom-equivalent CSS
+                # viewport widths; this does not certify actual OS DPI scaling.
+                for width in (360,800,910,1088,1360):
+                    await options.set_viewport_size({'width':width,'height':750})
+                    geometry=await options.evaluate("""()=>{
+                      const root=document.documentElement;
+                      const nav=document.querySelector('.options-nav');
+                      const panel=document.querySelector('#services');
+                      return {
+                        viewport:window.innerWidth,doc:root.scrollWidth,
+                        navigation:nav?.getBoundingClientRect().width,
+                        visible:!panel?.hidden,
+                        statusWidth:document.querySelector('#status')?.getBoundingClientRect().width
+                      };
+                    }""")
+                    assert geometry['doc']<=geometry['viewport']+2, (width,geometry)
+                    assert geometry['visible'] and geometry['navigation']>0,(width,geometry)
+                    assert geometry['statusWidth']<=geometry['viewport'],(width,geometry)
+                await options.goto(f"chrome-extension://{eid}/pit-options.html#retired-v1-section")
+                await options.locator('form[data-ready="1"]').wait_for(timeout=10000)
+                assert await options.locator('#baseSettings').is_visible(), (
+                    'Unknown deep-link must not hide all settings panels')
+                assert await options.locator('.options-nav a[aria-current="page"]').count()==1
+                print('PASS: settings reflow 360–1360px and obsolete deep-link recovery')
                 print('PASS: independent service card probes, unchanged default, live style/order and restore (mock transport L1)')
                 assert not errors,errors
             finally:
