@@ -93,6 +93,7 @@
     // Track switching must invalidate both previously cached subtitles and
     // any provider response that was started for the old language.
     restoreNativeTrack();
+    platform?.restoreVisibleCaptions?.();
     releaseTrack(state.track,state.originalMode);
     state.track=next;
     state.originalMode=next?.mode ?? null;
@@ -285,7 +286,13 @@
       state.seenAny=true;
       state.latestDomText=text;
       const key='dom:'+text;
-      if(state.cache.has(key)){render(state.cache.get(key));return;}
+      if(state.cache.has(key)){
+        const translated=state.cache.get(key);
+        const replaced=config.subtitleRenderMode==='replace-track' &&
+          platform.replaceVisibleCaption?.(document,location.hostname,text,translated);
+        render(replaced?'':translated);
+        return;
+      }
       const budget=state.mode==='ai'?80:1200;
       if(state.requestCount>=budget){render('本次翻译已达到安全请求上限，请停止后重新开始。');return;}
       render('正在翻译…');
@@ -300,7 +307,11 @@
           state.cache.put(key,translations[0]);
           if(state.mode==='ai' && state.contextHistory.at(-1)!==text)
             state.contextHistory=[...state.contextHistory.slice(-2),text];
-          if(state.latestDomText===text) render(translations[0]);
+          if(state.latestDomText===text){
+            const replaced=config.subtitleRenderMode==='replace-track' &&
+              platform.replaceVisibleCaption?.(document,location.hostname,text,translations[0]);
+            render(replaced?'':translations[0]);
+          }
         }
       } catch(error) {
         lastError=String(error?.message||error);
@@ -373,6 +384,7 @@
     state.active=false;state.generation++;
     clearInterval(state.timer);state.timer=null;
     restoreNativeTrack();
+    platform?.restoreVisibleCaptions?.();
     releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
     state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.manualSource='';
