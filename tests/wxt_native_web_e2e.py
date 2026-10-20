@@ -207,6 +207,10 @@ async def main():
                 await sw.evaluate("""()=>{const old=fetch;globalThis.fetch=(url,init)=>String(url).startsWith('https://api.mymemory.translated.net/')?Promise.resolve(new Response(JSON.stringify({responseStatus:200,responseData:{translatedText:'欢迎来到课堂。'}}),{headers:{'content-type':'application/json'}})):old(url,init);} """)
                 await options.locator('.options-nav a[href="#services"]').click()
                 options.on('dialog',lambda dialog:asyncio.create_task(dialog.accept()))
+                assert await options.locator('[data-service-group="keyless"] [data-provider="browser"]').count()==1
+                assert await options.locator('[data-service-group="keyless"] [data-provider="mymemory"]').count()==1
+                assert await options.locator('[data-service-group="ai"] [data-provider="gemini"]').count()==1
+                assert await options.locator('[data-service-group="standard"] [data-provider="deepl"]').count()==1
                 for provider in ['browser','mymemory','cloud','microsoft','google','deepl','libre','gemini','deepseek']:
                     card=options.locator('[data-provider="'+provider+'"]')
                     await card.get_by_role('button',name='测试此服务',exact=False).click()
