@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   custom-ai:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,7 +57,7 @@ jobs:
         run: python3 -m unittest discover -s tests -p test_pdf_provider_profile.py -v
 
   ui-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -101,7 +101,7 @@ jobs:
           retention-days: 7
 
   wxt-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -185,7 +185,7 @@ jobs:
   real-image-ocr:
     # Keep informational until the external language-model download is stable
     # across GitHub runner networks. Failure is recorded, never called PASS.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     continue-on-error: true
     timeout-minutes: 12
     steps:
@@ -219,7 +219,7 @@ jobs:
   multilingual-ocr:
     # Model language packs arrive over public network; this is a separate
     # observed quality gate, not disguised as production language support.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     continue-on-error: true
     timeout-minutes: 14
     steps:
