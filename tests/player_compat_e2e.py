@@ -126,6 +126,67 @@ async def run():
       await bilingual.close()
       print('PASS bilingual native text-track original and translated overlay')
 
+      # Native WebVTT replacement edits the actual browser-rendered cue,
+      # not a floating page caption, and restores it on STOP.
+      native_inline=await browser.new_page()
+      await setup(native_inline,"https://www.youtube.com/watch?v=inline-native",
+        '<video style="width:640px;height:360px"></video>')
+      await native_inline.evaluate("""()=>{
+        const video=document.querySelector('video');
+        const track=video.addTextTrack('subtitles','English','en');
+        track.mode='showing';
+        track.addCue(new VTTCue(0,12,'Editable original cue'));
+        window.inlineTrack=track;
+        const send=chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage=async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+          ?{preferences:{videoSettings:{enabled:true,
+            subtitleRenderMode:'replace-track',
+            preferPitTranslationOverPlatformMT:true}}}:send(msg);
+        window.pitAction('PIT_PREFERENCES_CHANGED');
+      }""")
+      await native_inline.wait_for_timeout(150)
+      reply=await native_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert reply['ok'],reply
+      await native_inline.wait_for_function("""()=>window.inlineTrack.cues[0].text==='译文:Editable original cue'""",
+        timeout=6000)
+      assert await native_inline.locator('.pit-caption-overlay').evaluate(
+        "e=>e.style.display")=='none'
+      await native_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await native_inline.evaluate(
+        "()=>window.inlineTrack.cues[0].text")=='Editable original cue'
+      assert await native_inline.locator('.pit-caption-overlay').count()==0
+      await native_inline.close()
+      print("PASS native TextTrack cue translated in player and reversed on stop")
+
+      # For public one-node visible CC, optional in-place replacement also
+      # avoids modifying playback transport or scraping private APIs.
+      dom_inline=await browser.new_page()
+      await setup(dom_inline,"https://www.youtube.com/watch?v=inline-dom",
+        '<video style="width:640px;height:360px"></video>'
+        '<div class="ytp-caption-window-container">'
+        '<span class="ytp-caption-segment">Editable visible CC</span></div>')
+      await dom_inline.evaluate("""()=>{
+        const send=chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage=async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+          ?{preferences:{videoSettings:{enabled:true,
+            subtitleRenderMode:'replace-track',
+            preferPitTranslationOverPlatformMT:true}}}:send(msg);
+        window.pitAction('PIT_PREFERENCES_CHANGED');
+      }""")
+      await dom_inline.wait_for_timeout(150)
+      reply=await dom_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert reply['ok'],reply
+      await dom_inline.locator('.ytp-caption-segment').get_by_text(
+        '译文:Editable visible CC').wait_for(timeout=6000)
+      await dom_inline.locator('.ytp-caption-segment').evaluate(
+        "e=>e.textContent='Another live CC'")
+      await dom_inline.locator('.ytp-caption-segment').get_by_text(
+        '译文:Another live CC').wait_for(timeout=6000)
+      await dom_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await dom_inline.locator('.ytp-caption-segment').inner_text()=='Another live CC'
+      await dom_inline.close()
+      print("PASS visible CC replaced inline without translating our own output; original restored")
+
       # AI captions must actually supply bounded cross-sentence
       # context; v0.4.4 had hardcoded context:'' even with AI enabled.
       # This mock does not call a paid model or establish translation quality.
