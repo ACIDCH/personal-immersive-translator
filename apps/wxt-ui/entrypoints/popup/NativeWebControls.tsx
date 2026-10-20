@@ -144,6 +144,20 @@ export function NativeWebControls(){
          setStatus('PIT 云端翻译目前未配置，无法运行。先在插件设置中部署/填写云端 Worker，或切换到你已有 Key 的其他机器翻译服务。');
          return;
        }
+       if(settings?.standardProvider==='browser'&&
+          settings.source!=='auto'&&settings.source!==settings.target){
+         // A selected but absent local model is NOT a working translator.
+         // Preflight explicit language pairs without downloading or sending
+         // current page text anywhere. Auto-source stays with CLD runtime.
+         const probe=await browser.runtime.sendMessage({
+           type:'PIT_BROWSER_STATUS',source:settings.source,target:settings.target
+         });
+         if(probe?.status!=='available'){
+           setStatus('Chrome 当前语言包不可用（'+settings.source+' → '+settings.target+
+             '）。请在服务面板主动下载模型或明确改用 MyMemory；本次没有发送网页原文。');
+           return;
+         }
+       }
      }catch{}
    }
    const token=++latest.current;
