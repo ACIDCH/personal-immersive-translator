@@ -70,6 +70,7 @@ export function mountProductSettings({form,get,save,view}){
  const choices=[['inherit','跟随全局'],...providerCatalog(get()).filter(x=>!x.ai).map(x=>[x.id,x.name])];
  control(video,'providerId','视频专用翻译服务','站点覆盖 > 视频专用 > 全局。',choices,'videoSettings');
  control(video,'source','字幕源语言','手动覆盖优先；自动使用字幕轨语言。',['auto',...LANGUAGES],'videoSettings');control(video,'target','字幕目标语言','独立于网页目标语。',['inherit',...LANGUAGES],'videoSettings');
+ control(video,'subtitleRenderMode','字幕嵌入方式','默认在视频画面内随播放器定位；对于允许修改的 HTML5 TextTrack，可选择直接替换原字幕，停止时恢复。直播/受保护播放器不保证支持。',[['in-player','视频画面内双语字幕（稳定）'],['replace-track','原生字幕轨直接替换（HTML5，测试）']],'videoSettings');
  control(video,'subtitleFontSize','字幕字号','12–48 px',{min:12,max:48},'videoSettings');control(video,'subtitlePosition','字幕位置','全屏仍可显示。',['bottom','top'],'videoSettings');
  control(video,'subtitleColor','字幕文字颜色','保存后更新。',null,'videoSettings');control(video,'subtitleBackground','字幕背景颜色','保存后更新。',null,'videoSettings');
  for(const id of ['youtube','bilibili','netflix','panopto','generic']){const box=el('fieldset','');box.append(el('legend',id+' · 受控测试 / 实站待验收'));video.append(box);
