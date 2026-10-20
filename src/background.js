@@ -456,7 +456,13 @@ async function handle(message, sender) {
     return {};
   }
   if(message.type==='TEST_PROVIDER'){
-    if(!isTrustedOptionsPage(sender))throw new TranslationError('仅设置界面可测试 API');
+    // A popup is part of this installed extension and may probe only the two
+    // free standard-MT paths. Paid/custom diagnostic requests stay in Options.
+    const popupFree=isTrustedExtensionPage(sender) &&
+      message.mode==='standard' && message.userInitiated===true &&
+      ['browser','mymemory'].includes(message.providerId);
+    if(!isTrustedOptionsPage(sender)&&!popupFree)
+      throw new TranslationError('付费/自定义服务的诊断仅允许从设置中心进行');
     const settings=await getSettings();
     const id=message.providerId||(message.mode==='ai'?settings.aiProvider:settings.standardProvider);
     if(id==='mymemory'){
@@ -476,7 +482,7 @@ async function handle(message, sender) {
   }
   if (!['TRANSLATE_BATCH','TEST_PROVIDER','TRANSLATE_DOCUMENT','TRANSLATE_TEXT'].includes(message.type)) throw new TranslationError('不支持的请求');
   if(message.type==='TRANSLATE_TEXT'&&!isTrustedExtensionPage(sender))throw new TranslationError('文本工具仅供扩展界面使用');
-  if (message.type === 'TEST_PROVIDER' && !isTrustedOptionsPage(sender)) throw new TranslationError('仅设置界面可测试 API');
+  // TEST_PROVIDER is handled above, before text/document routing.
   if (message.type === 'TRANSLATE_DOCUMENT' && !isTrustedDocumentPage(sender))
     throw new TranslationError('仅插件文件处理页允许翻译本地文件');
   let settings = await getSettings();
