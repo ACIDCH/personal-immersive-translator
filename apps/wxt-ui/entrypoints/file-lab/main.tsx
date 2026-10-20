@@ -1,4 +1,5 @@
 import React,{useEffect,useState} from 'react';
+import {browser} from '#imports';
 import {createRoot} from 'react-dom/client';
 import {DocumentLab} from '../../../shared-ui/DocumentLab';
 import {BatchFileLab} from '../../../shared-ui/BatchFileLab';
@@ -13,7 +14,7 @@ function FileWorkbench(){
  const [engine,setEngine]=useState('正在检查当前配置…');
  useEffect(()=>{
    let active=true;
-   void chrome.runtime.sendMessage({type:'GET_SETTINGS'}).then(reply=>{
+   void browser.runtime.sendMessage({type:'GET_SETTINGS'}).then((reply:{settings?:any})=>{
      if(!active)return;
      const s=reply?.settings;
      if(!s){setEngine('设置读取失败；文件不会自动调用任何云端服务');return;}
