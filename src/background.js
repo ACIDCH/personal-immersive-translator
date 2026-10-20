@@ -167,7 +167,11 @@ function isTrustedOptionsPage(sender) {
          url === chrome.runtime.getURL('pit-options.html');
 }
 function isTrustedDocumentPage(sender) {
-  return sender.url === chrome.runtime.getURL('file-lab.html');
+  // The integrated File Workbench uses in-page #module navigation. A fragment
+  // does not change the trusted extension document identity, and must not
+  // revoke access to TRANSLATE_DOCUMENT after the user selects a file tab.
+  const url=String(sender.url||'').split(/[?#]/)[0];
+  return url===chrome.runtime.getURL('file-lab.html');
 }
 function isTrustedExtensionPage(sender) {
   return typeof sender.url === 'string' &&
