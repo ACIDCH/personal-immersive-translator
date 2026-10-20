@@ -141,6 +141,11 @@ async def main():
         page.on("pageerror",lambda e:print("FILELAB PAGE ERROR:",str(e)[:300],flush=True))
         await page.goto(f'chrome-extension://{eid}/file-lab.html',wait_until='domcontentloaded',timeout=20000)
         await page.get_by_role('heading',name='文件与图片处理').wait_for(timeout=15000)
+        await page.get_by_role('heading',name='PIT 文件与图片翻译').wait_for(timeout=15000)
+        assert await page.locator('.pit-workbench-nav a').count()==4
+        assert await page.locator('.pit-workbench-actions a[href="/pit-options.html#services"]').count()==1
+        await page.locator('.pit-workbench-engine').get_by_text('文件翻译服务',exact=False).wait_for(timeout=15000)
+        report['unified_file_workbench']='pass'
         await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.docx',
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
