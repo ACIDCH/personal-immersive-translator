@@ -107,3 +107,31 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
   color:#cadfec;font-size:11px;line-height:1.55}
 .pit-reader-console .pit-service-readiness>button{width:100%;text-align:center}
 @media(max-width:380px){.pit-reader-console .pit-service-actions{flex-direction:column}}
+
+/* The workbench is an integrated part of PIT V2, not the old dark sample
+   surface. Scope this override to avoid modifying the portal/demo app. */
+.pit-file-workbench .document-lab{background:#fff;color:#172e42;
+  border:1px solid #d1e5eb;border-radius:16px;box-shadow:0 3px 18px #15394b0c}
+.pit-file-workbench .document-lab h2{color:#173d56}
+.pit-file-workbench .document-lab p,
+.pit-file-workbench .document-lab small{color:#546c7c}
+.pit-file-workbench .document-field{color:#284961}
+.pit-file-workbench .document-field input,
+.pit-file-workbench .document-field select,
+.pit-file-workbench .document-field textarea{background:#f8fcff;color:#14283d;border-color:#b5cfdf}
+.pit-file-workbench .document-result{background:#f4f8fc;color:#203748;border-color:#bfd5e4}
+.pit-file-workbench .document-lab button{background:#176d86;color:white;border-color:#176d86}
+.pit-file-workbench .document-lab button:hover{background:#155b73}
+.pit-file-workbench .document-lab button:disabled{opacity:.55}
+.pit-file-workbench .document-lab input:focus-visible,
+.pit-file-workbench .document-lab button:focus-visible,
+.pit-file-workbench .document-lab select:focus-visible{outline:3px solid #408fff;outline-offset:3px}
+@media(prefers-color-scheme:dark){
+ .pit-file-workbench .document-lab{background:#142039;color:#eaf3fa;border-color:#35516b}
+ .pit-file-workbench .document-lab h2{color:#f2f8ff}
+ .pit-file-workbench .document-lab p,.pit-file-workbench .document-lab small{color:#aebfd4}
+ .pit-file-workbench .document-field{color:#c5d7f3}
+ .pit-file-workbench .document-field input,.pit-file-workbench .document-field select,
+ .pit-file-workbench .document-field textarea{background:#111b2d;color:#eaf0fa;border-color:#4b6385}
+ .pit-file-workbench .document-result{background:#0e1829;color:#eaf0fa;border-color:#385577}
+}
