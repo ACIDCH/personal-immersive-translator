@@ -103,8 +103,39 @@ export function mountProductSettings({form,get,save,view}){
  const help=section('help','快捷键 / 帮助 / 关于','Alt+A 翻译与恢复；Alt+W 整页。Shift+悬停与输入框三连空格需在阅读设置启用。');button(help,'浏览器快捷键管理',()=>chrome.tabs.create({url:'chrome://extensions/shortcuts'}));help.append(el('p','PIT '+chrome.runtime.getManifest().version+' · Draft 测试版 · MIT；沿用 WXT / React / PDF.js / Tesseract，未复制参考产品资产。'));
  const nav=document.querySelector('.options-nav');nav.replaceChildren();const items=[['baseSettings','基础与语言'],['services','翻译服务中心'],['browserModelSettings','本地语言包'],['standardKeys','服务凭据'],['aiKeys','AI 模型配置'],['experts','AI 专家'],['terms','术语与上下文'],['text','文本翻译'],['interaction','输入 / 悬停 / 悬浮球'],['readingSettings','阅读 / 样式 / 交互'],['video','视频字幕'],['files','文件 / 图片 OCR'],['cloudPdfSettings','云端 PDF'],['privacySettings','站点与隐私'],['advanced','高级与性能'],['sync','账号与同步'],['backupSettings','导入 / 导出'],['help','快捷键 / 关于']];
  const find=el('input','',{type:'search',placeholder:'搜索设置 / Search'});nav.append(find);for(const [id,title] of items)nav.append(el('a',title,{href:'#'+id}));
- function navigate(){const id=location.hash.slice(1).split('/')[0]||'baseSettings';for(const [key] of items)document.getElementById(key).hidden=key!==id;for(const a of nav.querySelectorAll('a'))a.setAttribute('aria-current',a.hash==='#'+id?'page':'false');if(id==='services')renderProviders();const provider=location.hash.split('/')[1];if(id==='services'&&provider){for(const c of cards.children){c.style.outline=c.dataset.provider===provider?'2px solid var(--pit-accent)':'';if(c.dataset.provider===provider)c.scrollIntoView({block:'center'});}}}
- window.addEventListener('hashchange',navigate);navigate();find.oninput=()=>{if(!find.value)return navigate();for(const [id] of items)document.getElementById(id).hidden=!document.getElementById(id).textContent.toLowerCase().includes(find.value.toLowerCase());};
+ function navigate(){
+  // Deep links may point to an obsolete section after an extension upgrade.
+  // Never hide every settings panel when the hash is unknown.
+  const requested=location.hash.slice(1).split('/')[0];
+  const id=items.some(([key])=>key===requested)?requested:'baseSettings';
+  find.value='';
+  for(const [key] of items)document.getElementById(key).hidden=key!==id;
+  for(const a of nav.querySelectorAll('a'))
+    a.setAttribute('aria-current',a.hash==='#'+id?'page':'false');
+  if(id==='services')renderProviders();
+  const provider=location.hash.split('/')[1];
+  if(id==='services'&&provider){
+    for(const c of cards.children){
+      c.style.outline=c.dataset.provider===provider?'2px solid var(--pit-accent)':'';
+      if(c.dataset.provider===provider)c.scrollIntoView({block:'center'});
+    }
+  }
+ }
+ window.addEventListener('hashchange',navigate);navigate();
+ find.oninput=()=>{
+  const query=find.value.trim().toLowerCase();
+  if(!query){navigate();return;}
+  let matches=0;
+  for(const [id] of items){
+    const panel=document.getElementById(id);
+    const visible=panel.textContent.toLowerCase().includes(query);
+    panel.hidden=!visible;
+    if(visible)matches++;
+  }
+  find.setAttribute('aria-label',matches?'搜索设置':'没有匹配的设置，请清除搜索');
+  for(const a of nav.querySelectorAll('a'))
+    a.setAttribute('aria-current','false');
+ };
  const reset=button(document.getElementById('saveActions'),'恢复当前页默认偏好',async()=>{if(!confirm('恢复当前页偏好默认值？API 凭据和专家不受影响。'))return;const visible=[...form.querySelectorAll('section.panel')].find(x=>!x.hidden);const update={};for(const input of visible?.querySelectorAll('[data-key]')||[]){const k=input.dataset.key;if(visible.id==='video')update.videoSettings={...VIDEO_DEFAULTS};else if(Object.hasOwn(DEFAULT_SETTINGS,k))update[k]=DEFAULT_SETTINGS[k];}await patch(update);location.reload();});reset.title='仅恢复当前分类新增偏好';
  form.addEventListener('change',e=>{if(e.target.name)save().then(preview).catch(report);});
  for(const id of ['profileAdd','profileUpdate','profileDelete'])document.getElementById(id).addEventListener('click',()=>{void save().then(renderProviders).catch(report);});
