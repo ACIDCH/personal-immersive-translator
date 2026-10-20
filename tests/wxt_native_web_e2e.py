@@ -164,7 +164,7 @@ async def main():
                 # rejection. No paid model or personal webpage is sent.
                 await popup.get_by_role("button",name="测试当前翻译服务").click()
                 await popup.wait_for_function("""()=>
-                  ['服务未就绪','服务实际试译成功'].some(text=>
+                  ['Chrome 本地模型未就绪','Chrome 本地语言包可用'].some(text=>
                     document.body.textContent.includes(text))
                 """,timeout=30000)
                 assert '仅设置界面' not in await popup.locator('.pit-quick-preferences').inner_text()
