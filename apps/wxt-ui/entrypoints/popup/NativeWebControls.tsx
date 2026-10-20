@@ -303,8 +303,27 @@ export function NativeWebControls(){
            (/(^|\.)(youtube\.com|youtube-nocookie\.com|panopto\.com|panopto\.eu)$/i.test(u.hostname))?
            u.href:null;
        }catch{return null;}};
+       // YouTube may append autoplay/cc_load_policy/player tracking params
+       // after its iframe is created; exact href equality misses the very
+       // same user-visible player. Match only the verified recording identity,
+       // never arbitrary cross-origin frames or another video ID.
+       const recordingIdentity=(raw:string)=>{
+         const safe=allowed(raw);if(!safe)return null;
+         const u=new URL(safe),host=u.hostname.replace(/^www\./,'');
+         if(host.includes('youtube')){
+           const id=u.pathname.startsWith('/embed/')
+             ?u.pathname.split('/')[2]:u.pathname==='/watch'?u.searchParams.get('v'):'';
+           return id?host.replace('youtube-nocookie.com','youtube.com')+'/video/'+id:null;
+         }
+         if(host.includes('panopto')){
+           const id=u.searchParams.get('id')||u.searchParams.get('deliveryId');
+           return id?host+u.pathname.toLowerCase()+'?id='+id:null;
+         }
+         return null;
+       };
        const matches=(frames||[]).filter(f=>f.frameId>0 &&
-         known.some(url=>allowed(url)!==null&&allowed(url)===allowed(f.url)));
+         known.some(url=>recordingIdentity(url)!==null &&
+           recordingIdentity(url)===recordingIdentity(f.url)));
        if(matches.length!==1)throw Error(response?.reason||'找不到唯一且可见的受支持视频播放器；请在原视频网站打开播放页');
        const frame=matches[0];
        const embedded={tabId,frameIds:[frame.frameId]};
