@@ -29,7 +29,7 @@
     else if(restart)start(previous.mode,previous.cues||[],null,previous.source);
     quickToggle();autoStart();
   }
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],manualSource:''};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],manualSource:'',nativePatches:new Map()};
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -92,6 +92,7 @@
     if(next===state.track) return true;
     // Track switching must invalidate both previously cached subtitles and
     // any provider response that was started for the old language.
+    restoreNativeTrack();
     releaseTrack(state.track,state.originalMode);
     state.track=next;
     state.originalMode=next?.mode ?? null;
@@ -108,18 +109,85 @@
     try {const url=new URL(location.href);url.hash='';return url.href;}
     catch {return '';}
   }
+  function restoreNativeTrack(){
+    for(const [cue,record] of state.nativePatches){
+      try{
+        // Restore only PIT-owned changes, never overwrite newly loaded CC.
+        if(cue.text===record.translated)cue.text=record.original;
+      }catch{}
+    }
+    state.nativePatches.clear();
+  }
+  function originalNativeCue(cue){
+    const record=state.nativePatches.get(cue);
+    if(record && cue.text===record.translated)
+      return {startTime:cue.startTime,endTime:cue.endTime,text:record.original};
+    if(record)state.nativePatches.delete(cue);
+    return cue;
+  }
+  function inlineNativeTranslation(cues,time){
+    if(config.subtitleRenderMode!=='replace-track'||state.domMode||
+       state.importedCues||state.track?.mode!=='showing')return false;
+    let raw=[];
+    try{raw=state.track.cues?[...state.track.cues]:[];}catch{return false;}
+    const patches=[];
+    for(const item of raw){
+      if(item.startTime>time+.15||item.endTime<time-.10)continue;
+      const source=originalNativeCue(item);
+      const normalized=core.normalizeCues([source],time);
+      if(!normalized.length||!cues.some(c=>c.key===normalized[0].key))continue;
+      const translation=state.cache.get(normalized[0].key);
+      if(typeof translation!=='string'||!translation.trim())return false;
+      // Never insert provider HTML/VTT markup into a native caption track.
+      const plain=core.cleanText(translation);
+      if(!plain)return false;
+      patches.push({item,original:source.text,translated:plain});
+    }
+    if(!patches.length)return false;
+    try{
+      for(const entry of patches){
+        if(entry.item.text!==entry.translated){
+          entry.item.text=entry.translated;
+          state.nativePatches.set(entry.item,entry);
+        }
+      }
+      return true;
+    }catch{restoreNativeTrack();return false;}
+  }
+  function updateOverlayGeometry(){
+    const overlay=state.overlay,video=state.video;
+    if(!overlay)return;
+    const box=video?.isConnected?video.getBoundingClientRect():null;
+    // Keep translation WITHIN the actual player, not at global viewport bottom.
+    if(box && box.width>=120 && box.height>=75){
+      const width=Math.min(box.width*.92,1100),left=box.left+(box.width-width)/2;
+      const top=box.top+(config.subtitlePosition==='top'?box.height*.075:box.height*.74);
+      overlay.style.setProperty('left',Math.max(0,left)+'px','important');
+      overlay.style.setProperty('top',Math.max(0,top)+'px','important');
+      overlay.style.setProperty('width',Math.min(width,innerWidth)+'px','important');
+      overlay.style.setProperty('transform','none','important');
+      overlay.style.setProperty('bottom','auto','important');
+    }else{
+      overlay.style.setProperty('left','50%','important');
+      overlay.style.setProperty('top',config.subtitlePosition==='top'?'8%':'auto','important');
+      overlay.style.setProperty('bottom',config.subtitlePosition==='top'?'auto':'12%','important');
+      overlay.style.setProperty('width','min(85vw,1100px)','important');
+      overlay.style.setProperty('transform','translateX(-50%)','important');
+    }
+  }
   function render(text, cueText='') {
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){stop();return;}
     if(!state.overlay) return;
     if(state.overlay.parentNode!== (document.fullscreenElement || document.documentElement)) {
       (document.fullscreenElement || document.documentElement).append(state.overlay);
     }
+    updateOverlayGeometry();
     state.overlay.replaceChildren();
     if(!text) { state.overlay.style.display='none'; return; }
     state.overlay.style.display='block';
     state.overlay.style.fontSize=(config.subtitleFontSize||22)+'px';
     state.overlay.style.color=config.subtitleColor||'#ffffff';state.overlay.style.backgroundColor=config.subtitleBackground||'#142130';
-    state.overlay.style.setProperty('top',config.subtitlePosition==='top'?'8%':'auto','important');state.overlay.style.setProperty('bottom',config.subtitlePosition==='top'?'auto':'9%','important');
+    // Placement is resolved against the actual video bounds above.
     // A hidden native TextTrack and an imported SRT/VTT are invisible to the
     // viewer without PIT. Show the original alongside the translation. When
     // the source is already visibly drawn by YouTube/Bilibili/Netflix, avoid
@@ -191,7 +259,7 @@
     if(state.track && !state.importedCues && platform){
       let raw=[];
       try { raw=state.track.cues ? [...state.track.cues] : []; } catch {}
-      const timed=core.normalizeCues(raw,state.video?.currentTime);
+      const timed=core.normalizeCues(raw.map(originalNativeCue),state.video?.currentTime);
       const time=state.video?.currentTime ?? 0;
       const canUseTimed=Boolean(core.currentCue(timed,time) ||
         core.upcomingCues(timed,time,state.video?.playbackRate,5).length);
@@ -252,7 +320,7 @@
     const video=state.video, track=state.track;
     let raw=[];
     try { raw=track?.cues ? [...track.cues] : []; } catch {}
-    const cues=prepareCues(core.normalizeCues(state.importedCues || raw,video.currentTime));
+    const cues=prepareCues(core.normalizeCues(state.importedCues || raw.map(originalNativeCue),video.currentTime));
     if(!cues.length) {
       // Players clear their cues on CC disable and during track reload.
       // Do not leave a translation from the preceding track visible.
@@ -295,6 +363,7 @@
   function renderTimedCues(cues,time){
     const activeCues=core.activeCues(cues,time);
     if(!activeCues.length){render('');return;}
+    if(inlineNativeTranslation(activeCues,time)){render('');return;}
     // Concurrent cues represent different speakers. Display every
     // simultaneously active translated line, never just the latest one.
     render(activeCues.map(c=>state.cache.get(c.key)||'正在翻译…').join('\n'),
@@ -303,6 +372,7 @@
   function stop() {
     state.active=false;state.generation++;
     clearInterval(state.timer);state.timer=null;
+    restoreNativeTrack();
     releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
     state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.manualSource='';
