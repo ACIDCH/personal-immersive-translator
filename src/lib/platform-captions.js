@@ -37,7 +37,18 @@
     }
     return true;
   }
+  // Only explicitly editable, single-node public caption text is mutated.
+  // WeakMap prevents re-translating PIT's own replacement as a new source.
+  const inline=new Map();
+  function originalIfUnchanged(node){
+    const state=inline.get(node);
+    if(!state)return null;
+    if(node.textContent===state.translated)return state.original;
+    inline.delete(node);return null;
+  }
   function displayedText(node,visible){
+    const held=originalIfUnchanged(node);
+    if(held!==null)return compact(held);
     const doc=node.ownerDocument;
     if(!doc?.createTreeWalker) return compact(node.textContent);
     const walker=doc.createTreeWalker(node,4); // NodeFilter.SHOW_TEXT
@@ -72,9 +83,45 @@
     }
     return {provider:rule.id,text:'',reason:'no-visible-captions'};
   }
+  function replaceVisibleCaption(doc,hostname,original,translation){
+    const rule=identify(hostname);
+    if(rule.id==='generic'||!original||!translation)return false;
+    const text=compact(original),translated=compact(translation);
+    if(!text||!translated)return false;
+    // Replacing a parent's innerHTML or multiple caption spans may erase
+    // timestamps, speaker metadata or other active content; fail closed.
+    for(const selector of rule.selectors){
+      let nodes;
+      try{nodes=[...doc.querySelectorAll(selector)].filter(isVisible);}catch{continue;}
+      const leaves=nodes.filter(node=>node.childElementCount===0 &&
+        !node.closest?.('.pit-caption-overlay'));
+      if(leaves.length!==1)continue;
+      const node=leaves[0];
+      if(displayedText(node,isVisible)!==text)continue;
+      const prior=inline.get(node);
+      if(prior && node.textContent===prior.translated &&
+         prior.original===text && prior.translated===translated)return true;
+      if(node.textContent!==text && !prior)continue;
+      if(inline.size>=12)for(const [other] of inline){
+        if(!other.isConnected)inline.delete(other);
+      }
+      if(inline.size>=12)return false;
+      inline.set(node,{original:prior?.original||node.textContent,translated});
+      node.textContent=translated;
+      return true;
+    }
+    return false;
+  }
+  function restoreVisibleCaptions(){
+    for(const [node,item] of inline){
+      if(node.isConnected && node.textContent===item.translated)
+        node.textContent=item.original;
+    }
+    inline.clear();
+  }
   function captionChanged(previous,current){
     const text=typeof current==='string'?current:current?.text;
     return Boolean(text && text!==previous);
   }
-  root.PITPlatformCaptions=Object.freeze({identify,compact,isVisible,readVisibleCaptions,captionChanged});
+  root.PITPlatformCaptions=Object.freeze({identify,compact,isVisible,readVisibleCaptions,replaceVisibleCaption,restoreVisibleCaptions,captionChanged});
 })(globalThis);
