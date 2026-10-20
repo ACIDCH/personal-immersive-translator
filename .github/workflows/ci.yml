@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -50,7 +50,7 @@ jobs:
           path: personal-immersive-translator-full-source.zip
           retention-days: 14
   browser-dom:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -73,7 +73,7 @@ jobs:
       - name: Run real Chrome ASR subtitle backpressure and latency UI test
         run: python tests/live_caption_e2e.py
   pdf-bridge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -91,7 +91,7 @@ jobs:
           PIT_REQUIRE_CJK_OCR: '1'
         run: python -m unittest discover -s tests -p 'test_*.py' -v
   extension-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
