@@ -159,6 +159,15 @@ async def main():
                 popup.on("pageerror",lambda e: errors.append("popup:"+str(e)))
                 await popup.goto(f"chrome-extension://{eid}/popup.html")
                 await popup.get_by_role("button",name="翻译当前网页").wait_for(timeout=15000)
+                # Trusted WXT popup must be able to run the real keyless
+                # provider diagnostic instead of the former Options-only
+                # rejection. No paid model or personal webpage is sent.
+                await popup.get_by_role("button",name="测试当前翻译服务").click()
+                await popup.wait_for_function("""()=>
+                  ['服务未就绪','服务实际试译成功'].some(text=>
+                    document.body.textContent.includes(text))
+                """,timeout=30000)
+                assert '仅设置界面' not in await popup.locator('.pit-quick-preferences').inner_text()
                 target=await context.new_page()
                 target.on("pageerror",lambda e:errors.append("target:"+str(e)))
                 await target.goto(FIXTURE_URL)
