@@ -57,3 +57,42 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
 .pit-reader-console .native-status,.pit-reader-console .pit-site-rule{background:var(--pit-surface);color:var(--pit-text);border-color:#879bb55c}
 .pit-reader-console .pit-site-rule strong{color:var(--pit-text)}
 .pit-reader-console .native-web button:disabled{cursor:not-allowed}
+
+/* Unified PIT file translation workbench. Existing document/OCR engines stay
+   mounted in the same extension tab and use the same background Provider. */
+.pit-file-workbench{--pit-file-ink:#162c3e;--pit-file-muted:#566d80;
+  width:min(1120px,calc(100% - 40px));margin:0 auto;padding:26px 0 56px;
+  color:var(--pit-file-ink);font:14px/1.6 Inter,"Segoe UI",system-ui,sans-serif}
+.pit-file-workbench a{color:#16667f}
+.pit-workbench-header{display:flex;align-items:center;justify-content:space-between;
+  gap:22px;padding:20px 23px;background:#f7fbfd;border:1px solid #d1e5eb;
+  border-radius:18px}
+.pit-workbench-brand{display:flex;align-items:center;gap:16px;min-width:0}
+.pit-workbench-brand>span{width:48px;height:48px;flex-shrink:0;display:grid;place-items:center;
+  color:white;background:linear-gradient(145deg,#1a7589,#1760a5);border-radius:14px;font-size:23px}
+.pit-workbench-brand small{font-size:10px;letter-spacing:.12em;color:#4e7084}
+.pit-workbench-brand h1{margin:3px 0;font-size:23px;line-height:1.25;color:#172e42}
+.pit-workbench-brand p{margin:0;font-size:12px;color:#587487}
+.pit-workbench-actions{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.pit-workbench-actions a,.pit-workbench-nav a{display:inline-block;padding:8px 12px;
+  text-decoration:none;border-radius:9px;border:1px solid #cee3e9;background:white;
+  color:#1a667e;font-size:12px;font-weight:650}
+.pit-workbench-actions a:hover,.pit-workbench-nav a:hover{background:#edf7fb}
+.pit-workbench-nav{display:flex;position:sticky;top:0;z-index:4;gap:10px;
+  flex-wrap:wrap;padding:12px 2px;background:#f5f8fc;border-bottom:1px solid #d2e4e9}
+.pit-workbench-engine{margin:14px 0;padding:12px 16px;background:#eaf4f8;
+  color:#275c70;border:1px solid #cde4eb;border-radius:12px;overflow-wrap:anywhere}
+.pit-workbench-module{scroll-margin-top:80px;min-width:0;margin:16px 0 22px}
+.pit-file-workbench footer{color:#6b8090;padding-top:12px;border-top:1px solid #d6e4ec}
+@media(max-width:750px){.pit-file-workbench{width:calc(100% - 20px);padding-top:10px}
+  .pit-workbench-header{flex-direction:column;align-items:flex-start;padding:16px}
+  .pit-workbench-brand h1{font-size:20px}
+  .pit-workbench-actions{justify-content:flex-start}
+  .pit-workbench-nav{gap:6px}
+  .pit-workbench-nav a{font-size:11px;padding:8px}}
+@media(prefers-color-scheme:dark){.pit-file-workbench{color:#e5f3fa}
+  .pit-workbench-header{background:#172d3e;border-color:#35556a}
+  .pit-workbench-brand h1{color:#eaf4fa}.pit-workbench-brand p{color:#b0c6d1}
+  .pit-workbench-actions a,.pit-workbench-nav a{background:#234257;color:#d9f2ff;border-color:#416579}
+  .pit-workbench-nav{background:#0c1220;border-color:#354b60}
+  .pit-workbench-engine{background:#153a48;color:#daf1f8;border-color:#2e7184}}
