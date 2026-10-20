@@ -229,9 +229,13 @@ async def main():
                 await target.locator('.pit-translation').wait_for(state='detached')
                 await options.locator('.options-nav a[href="#services"]').click()
                 await options.set_viewport_size({'width':1360,'height':950})
-                await options.screenshot(path=str(ROOT/'pit-v2-options.png'),full_page=True)
+                await options.bring_to_front()
+                await options.evaluate('window.scrollTo(0,0)')
+                await options.screenshot(path=str(ROOT/'pit-v2-options.png'),full_page=True,animations='disabled')
                 await popup.set_viewport_size({'width':440,'height':800})
-                await popup.screenshot(path=str(ROOT/'pit-v2-popup.png'),full_page=True)
+                await popup.bring_to_front()
+                await popup.evaluate('window.scrollTo(0,0)')
+                await popup.screenshot(path=str(ROOT/'pit-v2-popup.png'),full_page=True,animations='disabled')
                 print('PASS: independent service card probes, unchanged default, live style/order and restore (mock transport L1)')
                 assert not errors,errors
             finally:

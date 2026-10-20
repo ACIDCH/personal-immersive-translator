@@ -18,3 +18,4 @@ supabase/.temp/
 pit-v2-*.png
 
 .evidence/
+apps/portal/dist/
