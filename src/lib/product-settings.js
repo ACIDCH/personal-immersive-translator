@@ -2,7 +2,7 @@
 export const VIDEO_DEFAULTS=Object.freeze({enabled:true,autoStartSupportedSites:false,playerQuickToggle:true,
  providerId:'inherit',source:'auto',target:'inherit',preferHumanCaptions:true,focusDialogueOnly:false,
  baseSentenceSegmentation:true,aiSentenceSegmentation:false,preferPitTranslationOverPlatformMT:true,
- subtitleFontSize:22,subtitlePosition:'bottom',subtitleColor:'#ffffff',subtitleBackground:'#142130',
+ subtitleFontSize:22,subtitlePosition:'bottom',subtitleRenderMode:'in-player',subtitleColor:'#ffffff',subtitleBackground:'#142130',
  translationFirst:false,siteOverrides:{},meetingMode:'off'});
 export const PRODUCT_DEFAULTS=Object.freeze({schemaVersion:2,uiLanguage:'zh',providerPreferences:{},
  videoSettings:VIDEO_DEFAULTS,installedExperts:['faithful'],customExperts:[],activeExpertId:'faithful',
@@ -39,6 +39,7 @@ export function normalizeProduct(s){
  v.providerId=providers.includes(v.providerId)?v.providerId:'inherit';
  v.source=languages.includes(v.source)?v.source:'auto';v.target=languages.includes(v.target)?v.target:'inherit';
  v.subtitleFontSize=bounded(v.subtitleFontSize,22,12,48);v.subtitlePosition=v.subtitlePosition==='top'?'top':'bottom';
+ v.subtitleRenderMode=v.subtitleRenderMode==='replace-track'?'replace-track':'in-player';
  v.subtitleColor=color(v.subtitleColor,'#ffffff');v.subtitleBackground=color(v.subtitleBackground,'#142130');
  v.siteOverrides=Object.fromEntries(Object.entries(record(v.siteOverrides)).filter(([k])=>['youtube','bilibili','netflix','panopto','generic'].includes(k)).map(([k,x])=>[k,{enabled:x?.enabled!==false,autoStart:x?.autoStart===true,providerId:providers.includes(x?.providerId)?x.providerId:'inherit'}]));
  s.videoSettings=v;
