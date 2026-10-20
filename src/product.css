@@ -9,7 +9,23 @@ body.options{background:var(--pit-bg);color:var(--pit-text);font:15px/1.6 system
 .options .setting-row>span{display:flex;flex-direction:column;flex:1}.options small,.options .muted{color:var(--pit-muted)}.options small{font-size:12px;font-weight:400;margin-top:5px}
 .options input,.options select,.options textarea,.options button{font:inherit;box-sizing:border-box;border:1px solid #879bb55c;border-radius:8px;padding:9px 12px;background:var(--pit-surface);color:var(--pit-text);max-width:100%}.options input:not([type=checkbox]),.options select,.options textarea{width: min(330px,50%)}.options input[type=checkbox]{width:20px;height:20px;accent-color:var(--pit-accent);flex-shrink:0}
 .options button{cursor:pointer;transition:background .15s,transform .15s}.options button:hover{background:#2586a419}.options button:active{transform:translateY(1px)}.options button:disabled{opacity:.5;cursor:not-allowed}.options :focus-visible{outline:3px solid var(--pit-focus);outline-offset:3px}
-.options .buttons{display:flex;flex-wrap:wrap;gap:10px}.options .primary{background:var(--pit-accent);color:white}.provider-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px}.provider-card{border:1px solid #879bb540;border-radius:12px;padding:20px;min-width:0}.provider-card p{font-size:13px;overflow-wrap:anywhere}.provider-card button{margin:5px}.badge{font-size:11px;border:1px solid #879bb540;border-radius:30px;padding:3px 9px}.probe-result{white-space:pre-wrap;color:var(--pit-danger)}.probe-result[data-ok=true]{color:var(--pit-accent)}.live-preview{padding:20px;border:1px dashed #879bb55c;border-radius:12px}.options pre{white-space:pre-wrap;overflow-wrap:anywhere}.options fieldset{border:1px solid #879bb540;border-radius:10px;margin:16px 0}.options #status{position:fixed;bottom:0;background:var(--pit-surface);padding:12px 24px;left:252px;right:0;margin:0;border-top:1px solid #879bb540;z-index:5}.options #saveActions{margin-top:24px}
+.options .buttons{display:flex;flex-wrap:wrap;gap:10px}.options .primary{background:var(--pit-accent);color:white}.provider-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px}.provider-card{border:1px solid #879bb540;border-radius:12px;padding:20px;min-width:0}.provider-card p{font-size:13px;overflow-wrap:anywhere}.provider-card button{margin:5px}.badge{font-size:11px;border:1px solid #879bb540;border-radius:30px;padding:3px 9px}.probe-result{white-space:pre-wrap;color:var(--pit-danger)}.probe-result[data-ok=true]{color:var(--pit-accent)}.live-preview{padding:20px;border:1px dashed #879bb55c;border-radius:12px}.options pre{white-space:pre-wrap;overflow-wrap:anywhere}.options fieldset{border:1px solid #879bb540;border-radius:10px;margin:16px 0}.options #status{position:fixed;bottom:16px;right:20px;left:auto;max-width:min(420px,calc(100vw - 40px));padding:10px 16px;margin:0;background:var(--pit-surface);color:var(--pit-text);border:1px solid #879bb568;border-radius:12px;box-shadow:0 8px 26px #14283d20;overflow-wrap:anywhere;z-index:5}.options #status:empty{display:none}.options #saveActions{margin-top:24px}
 @media(prefers-color-scheme:dark){:root{--pit-bg:#0d1724;--pit-surface:#142233;--pit-text:#e0eaf5;--pit-muted:#9eafc2;--pit-accent:#6acbd6;--pit-danger:#ff93a7}.options .primary{color:#142233}}
-@media(max-width:800px){.options main{padding:20px 16px 80px}.options-nav{position:static;width:auto;max-height:220px;border-radius:12px}.options label{align-items:flex-start;flex-direction:column;gap:8px}.options input:not([type=checkbox]),.options select,.options textarea{width:100%}.options #status{left:0}.options .panel{padding:18px}}
+@media(max-width:800px){.options main{padding:20px 16px 88px}.options-nav{position:static;left:auto;width:100%;max-height:220px;border-radius:12px;overscroll-behavior:contain}.options label{align-items:flex-start;flex-direction:column;gap:8px}.options input:not([type=checkbox]),.options select,.options textarea{width:100%}.options .panel{padding:18px}.options #status{right:12px;bottom:12px;max-width:calc(100vw - 24px)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* PIT V2 zoom/accessibility: avoid horizontal scroll when font scaling and
+   multi-line provider/service names exceed their intrinsic width. */
+.options,.options main,.options section,.options-nav,.provider-grid,.provider-card{min-width:0}
+.options .panel,.provider-card,.options fieldset{overflow-wrap:anywhere}
+.options .setting-row>span,.options .setting-row>input,.options .setting-row>select{min-width:0}
+.options-nav a{overflow-wrap:anywhere}
+.options-nav a[aria-current=page]{outline:1px solid var(--pit-focus)}
+.options section[id]{scroll-margin-top:20px}
+@media(max-width:1000px) and (min-width:801px){
+ .options main{padding:24px 22px 96px 256px}
+ .options-nav{width:204px;padding:18px 12px}
+ .options .panel{padding:18px}
+ .options label{gap:12px}
+ .provider-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr))}
+}
