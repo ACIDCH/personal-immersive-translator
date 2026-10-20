@@ -25,10 +25,47 @@ export function mountProductSettings({form,get,save,view}){
  const search=el('input','',{type:'search',placeholder:'搜索服务 / Search services'});services.append(search);
  const compare=el('div','',{className:'buttons'});services.append(compare);const selected=new Set();
  button(compare,'比较勾选的免 Key 服务',async()=>{for(const card of services.querySelectorAll('[data-provider]'))if(selected.has(card.dataset.provider))await card.runProbe();});
- const cards=el('div','',{className:'provider-grid'});services.append(cards);
- function renderProviders(){cards.replaceChildren();for(const p of providerCatalog(get())){
+ const cards=el('div','',{className:'pit-services-groups'});services.append(cards);
+ const serviceGroups=[
+  ['keyless','01 · 免费与本机服务','不要求付费 Key。Chrome 需要本机语言包；MyMemory 必须主动选择使用。'],
+  ['standard','02 · 常规 API 与私有服务','配置完成不等于服务器已上线，每项测试独立运行。'],
+  ['ai','03 · AI 高精度服务','Gemini、DeepSeek、自定义 AI 仅在用户主动启用后调用。']
+ ];
+ const groupOf=p=>p.ai?'ai':['browser','mymemory'].includes(p.id)?'keyless':'standard';
+ function readiness(p,s){
+  if(p.id==='browser')return '需下载语言包并在当前设备验证';
+  if(p.id==='mymemory')return '在线免 Key · 每日字符额度有限';
+  if(p.id==='microsoft')return s.microsoftKey?'已填 Key · 未验证':'未配置 Microsoft Key';
+  if(p.id==='google')return s.googleKey?'已填 Key · 未验证':'未配置 Google Key';
+  if(p.id==='deepl')return s.deeplKey?'已填 Key · 未验证':'未配置 DeepL Key';
+  if(p.id==='cloud')return s.cloudEndpoint&&s.cloudToken?'已配置地址 · 未验证':'未部署/未配置 Worker';
+  if(p.id==='libre')return s.libreUrl?'已配置实例 · 未验证':'未配置 LibreTranslate';
+  if(p.profileId)return 'AI 自定义 Profile · 需独立验证';
+  if(p.id==='gemini')return s.geminiKey?'已填 AI Key · 未验证':'未配置 Gemini API';
+  if(p.id==='deepseek')return s.deepseekKey?'已填 AI Key · 未验证':'未配置 DeepSeek API';
+  return '未检查';
+ }
+ function applyServiceSearch(){
+  const query=search.value.trim().toLowerCase();
+  for(const card of cards.querySelectorAll('[data-provider]'))
+    card.hidden=Boolean(query)&&!card.textContent.toLowerCase().includes(query);
+  for(const group of cards.querySelectorAll('[data-service-group]'))
+    group.hidden=![...group.querySelectorAll('[data-provider]')].some(c=>!c.hidden);
+ }
+ function renderProviders(){
+  cards.replaceChildren();
+  const groups=Object.fromEntries(serviceGroups.map(([id,title,description])=>{
+   const group=el('section','',{className:'pit-service-group'});
+   group.dataset.serviceGroup=id;
+   group.append(el('h3',title),el('p',description,{className:'muted'}));
+   const grid=el('div','',{className:'provider-grid'});group.append(grid);
+   cards.append(group);return [id,grid];
+  }));
+  for(const p of providerCatalog(get())){
   const id=p.profileId||p.id;const card=el('article','',{className:'provider-card'});card.dataset.provider=id;
-  card.append(el('span',p.category,{className:'badge'}),el('h3',p.name),el('p',p.notice));
+  card.append(el('span',p.category,{className:'badge'}),el('h3',p.name),
+    el('p',readiness(p,get()),{className:'pit-provider-readiness'}),
+    el('p',p.notice,{className:'pit-provider-description'}));
   const pref=get().providerPreferences[id]||{visible:true,enabled:true};
   for(const [key,title] of [['visible','显示在快捷选择器'],['enabled','启用服务']]){
    const c=el('input','',{type:'checkbox',checked:pref[key]!==false});row(card,title,key==='visible'?'隐藏不影响已选服务。':'停用后新请求将被阻止。',c);
@@ -42,9 +79,11 @@ export function mountProductSettings({form,get,save,view}){
   card.runProbe=async()=>{if(p.cost&&!confirm('测试 '+p.name+' 可能产生 API 费用。确认单次调用？'))return;test.disabled=true;output.textContent='正在请求 '+p.name+'…';try{const s=await save();const endpoint=p.profileId?s.aiProfiles.find(x=>x.id===id)?.baseUrl:p.id==='cloud'?s.cloudEndpoint:p.id==='libre'?s.libreUrl:'';if(endpoint&&!await chrome.permissions.request({origins:[new URL(endpoint).origin+'/*']}))throw Error('未授予服务网络权限');const r=await chrome.runtime.sendMessage({type:'TEST_PROVIDER',providerId:p.id,profileId:p.profileId,mode:p.ai?'ai':'standard',target:s.target==='en'?'zh':s.target,userInitiated:true,costConfirmed:p.cost});show(r);}catch(e){output.textContent=e.message;}finally{test.disabled=false;}};
   const test=button(card,'测试此服务',()=>card.runProbe());test.setAttribute('aria-label','测试此服务 '+p.name);
   if(!p.cost){const c=el('input','',{type:'checkbox',checked:selected.has(id)});row(card,'加入免费对比','仅此处勾选才批量请求。',c);c.onchange=()=>c.checked?selected.add(id):selected.delete(id);}
-  cards.append(card);
- }}
- search.oninput=()=>{for(const c of cards.children)c.hidden=!c.textContent.toLowerCase().includes(search.value.toLowerCase());};renderProviders();
+  groups[groupOf(p)].append(card);
+  }
+  applyServiceSearch();
+ }
+ search.oninput=applyServiceSearch;renderProviders();
  const expert=section('experts','AI 专家','原创提示词策略，独立于模型与 Key。仅显式启动 AI 时使用；常规 MT 不适用。');
  const expertCards=el('div','',{className:'provider-grid'});expert.append(expertCards);
  function renderExperts(){expertCards.replaceChildren();for(const x of [...EXPERTS,...get().customExperts]){const c=el('article','',{className:'provider-card'});c.append(el('h3',x.name+' · v'+x.version),el('p',x.prompt));const installed=get().installedExperts.includes(x.id);
@@ -116,7 +155,7 @@ export function mountProductSettings({form,get,save,view}){
   if(id==='services')renderProviders();
   const provider=location.hash.split('/')[1];
   if(id==='services'&&provider){
-    for(const c of cards.children){
+    for(const c of cards.querySelectorAll('[data-provider]')){
       c.style.outline=c.dataset.provider===provider?'2px solid var(--pit-accent)':'';
       if(c.dataset.provider===provider)c.scrollIntoView({block:'center'});
     }
