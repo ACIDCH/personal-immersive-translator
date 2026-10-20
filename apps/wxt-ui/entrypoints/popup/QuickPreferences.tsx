@@ -44,6 +44,25 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
    ))return;
    setProbeBusy(true);setProbeResult('正在检查 '+provider+'…');
    try{
+     if(provider==='browser'){
+       // canTranslate() / actual inference are distinct. Never start a
+       // model download or wait indefinitely from a narrow popup control.
+       const sampleSource=settings.source==='auto'?'en':settings.source;
+       const sampleTarget=settings.target===sampleSource
+         ?(sampleSource==='en'?'zh':'en'):settings.target;
+       let timeout:ReturnType<typeof setTimeout>|undefined;
+       const answer=await Promise.race([
+         browser.runtime.sendMessage({
+           type:'PIT_BROWSER_STATUS',source:sampleSource,target:sampleTarget
+         }),
+         new Promise<never>((_,reject)=>{timeout=setTimeout(
+           ()=>reject(Error('Chrome 语言包状态检查超时')),12000);})
+       ]).finally(()=>clearTimeout(timeout));
+       setProbeResult(answer?.status==='available'
+         ?'Chrome 本地语言包可用（'+sampleSource+'→'+sampleTarget+'）；真正翻译仍需单独试译确认。'
+         :'Chrome 本地模型未就绪：'+String(answer?.reason||answer?.code||answer?.status||'请在设置中心下载语言包').slice(0,160));
+       return;
+     }
      const result=await browser.runtime.sendMessage({
        type:'TEST_PROVIDER',mode:'standard',providerId:provider,
        userInitiated:true,costConfirmed:false
