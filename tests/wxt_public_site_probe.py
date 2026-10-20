@@ -116,6 +116,8 @@ async def main():
                 # default to the KEYLESS browser model, which is unavailable
                 # without a downloaded language pack on ephemeral CI runners.
                 await options.locator('[name="standardProvider"]').select_option('microsoft')
+                await options.locator('.options-nav a[href="#standardKeys"]').click()
+
                 await options.locator('[name="microsoftKey"]').fill('public-probe-placeholder')
                 await options.get_by_role('button',name='保存设置').click()
                 await options.get_by_text('设置已保存。').wait_for(timeout=8000)

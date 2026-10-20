@@ -51,6 +51,8 @@ async def main():
         await options.goto(f"chrome-extension://{eid}/pit-options.html")
         await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
         await options.locator('[name="standardProvider"]').select_option('microsoft')
+        await options.locator('.options-nav a[href="#standardKeys"]').click()
+
         await options.locator('[name="microsoftKey"]').fill('benchmark-placeholder-key')
         await options.get_by_role("button",name="保存设置").click()
         await options.get_by_text("设置已保存。").wait_for(timeout=8000)
