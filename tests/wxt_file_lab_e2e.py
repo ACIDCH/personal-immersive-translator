@@ -146,6 +146,9 @@ async def main():
         assert await page.locator('.pit-workbench-actions a[href="/pit-options.html#services"]').count()==1
         await page.locator('.pit-workbench-engine').get_by_text('文件翻译服务',exact=False).wait_for(timeout=15000)
         report['unified_file_workbench']='pass'
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
+        assert page.url.endswith('/file-lab.html#document-lab'),page.url
+        # Hash navigation must retain trusted TRANSLATE_DOCUMENT calls later.
         await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.docx',
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
