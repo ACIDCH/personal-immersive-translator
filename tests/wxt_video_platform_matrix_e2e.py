@@ -88,6 +88,56 @@ async def main():
           await page.close()
           print('PLATFORM VISIBLE-CC FIXTURE:',json.dumps(result,ensure_ascii=False),flush=True)
 
+        # A single no-key Google provider must work through the same real
+        # installed background pipeline for VIDEO, not only settings probes.
+        # Intercept the actual public HTTP boundary; this fixture does not
+        # prove that a third-party live video/Google endpoint is always up.
+        await sw.evaluate("""()=>{
+          const previous=globalThis.fetch.bind(globalThis);
+          globalThis.fetch=async(input,opts)=>{
+            const uri=String(input?.url||input);
+            if(uri.startsWith('https://translate.googleapis.com/translate_a/single')){
+              const url=new URL(uri);
+              const q=url.searchParams.get('q');
+              globalThis.__pitFreeVideoCalls=(globalThis.__pitFreeVideoCalls||0)+1;
+              return new Response(JSON.stringify([[['免费译文:'+q,q]],null,'en']),{
+                status:200,headers:{'content-type':'application/json'}
+              });
+            }
+            return previous(input,opts);
+          };
+        }""")
+        await settings.locator('.options-nav a[href="#baseSettings"]').click()
+        await settings.locator('[name="standardProvider"]').select_option('google-free')
+        await settings.get_by_role('button',name='保存设置').click()
+        await settings.get_by_text('设置已保存。').wait_for(timeout=10000)
+        free_url='https://www.youtube.com/watch?v=pit-free-service'
+        async def free_page(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+          <div class="ytp-caption-window-container">
+            <span class="ytp-caption-segment">Free video translation actually uses the provider</span>
+          </div></body></html>''')
+        await ctx.route(free_url,free_page)
+        page=await ctx.new_page()
+        await page.goto(free_url);await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await page.locator('.ytp-caption-segment').get_by_text(
+          '免费译文:Free video translation actually uses the provider',
+          exact=True).wait_for(timeout=25000)
+        assert await sw.evaluate("()=>globalThis.__pitFreeVideoCalls||0")>=1,(
+          'No real video translation request reached Google-free adapter')
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await page.locator('.ytp-caption-segment').inner_text()==(
+          'Free video translation actually uses the provider')
+        results.append({'platform':'youtube-keyless-provider-adapter',
+          'fixture_visible_caption':'pass','provider':'google-free',
+          'in_player_replacement':True,'restored_on_stop':True})
+        await page.close()
+        await settings.locator('.options-nav a[href="#baseSettings"]').click()
+        await settings.locator('[name="standardProvider"]').select_option('microsoft')
+        await settings.get_by_role('button',name='保存设置').click()
+        await settings.get_by_text('设置已保存。').wait_for(timeout=10000)
+
         # Real video CC often splits one sentence across adjacent spans.
         # The first visible caption leaf receives the translation, while the
         # remaining siblings are cleared and restored together on STOP.
@@ -239,6 +289,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==9 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==10 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
