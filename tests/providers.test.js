@@ -213,3 +213,10 @@ test('V2 migration preserves keys and caps settings; vault authenticates account
  const wrong=await deriveVault('incorrect-long-password',salt);
  await assert.rejects(decryptVault(one,wrong.key,'account-A'),/密码|密文/);
 });
+
+test('blank returned vendor text is never accepted as successfully translated content',async()=>{
+ const bad=async()=>({ok:true,status:200,json:async()=>({translations:[{text:'   '}]})});
+ await assert.rejects(translateBatch(['Hello'],{
+  provider:'deepl',source:'en',target:'zh',deeplKey:'key',deeplPlan:'free'
+ },bad),/响应格式无效/);
+});
