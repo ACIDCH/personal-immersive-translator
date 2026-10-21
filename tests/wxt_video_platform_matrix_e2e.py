@@ -131,6 +131,38 @@ async def main():
         await page.close()
         print('PLATFORM SPLIT-CC AND REPLACE: PASS',flush=True)
 
+        # Distinct caption windows must not be flattened into a single
+        # mutable subtitle or masked by a floating translation. If a player
+        # prevents safe in-place writing, default strict mode reports that.
+        windows='https://www.youtube.com/watch?v=pit-separated-speakers'
+        async def window_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+          <div class="ytp-caption-window-container">
+            <div><span class="ytp-caption-segment">First speaker</span></div>
+            <div><span class="ytp-caption-segment">Second speaker</span></div>
+          </div></body></html>''')
+        await ctx.route(windows,window_html)
+        page=await ctx.new_page()
+        await page.goto(windows);await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await popup.wait_for_function("""async()=>{
+          const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+          const diag=await chrome.tabs.sendMessage(tab.id,{
+            type:'PIT_CAPTIONS_DIAGNOSTICS'
+          });
+          return diag?.renderRoute==='unsupported'&&diag.translationCount>=1;
+        }""",timeout=23000)
+        assert await page.locator('.ytp-caption-segment').all_inner_texts()==[
+          'First speaker','Second speaker'
+        ]
+        overlay=await page.locator('.pit-caption-overlay').evaluate(
+          "(node)=>getComputedStyle(node).display")
+        assert overlay=='none',('Strict in-player mode must not silently use overlay',overlay)
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        results.append({'platform':'youtube-multiwindow-strict',
+          'fixture_visible_caption':'pass','no_silent_overlay':True})
+        await page.close()
+
         # P0 regression: known video platforms often load their caption
         # layer only after PIT has started. Do not fail at first empty frame.
         delayed='https://www.youtube.com/watch?v=pit-delayed-captions'
@@ -207,6 +239,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==8 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==9 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
