@@ -30,6 +30,12 @@
     }
     // Hero headings often live inside CSS grid/flex columns. The injected
     // translation must inherit their width, not become another grid item.
+    if(node.classList.contains('pit-inline-translation')){
+      node.style.setProperty('font-size','.9em','important');
+      node.style.setProperty('padding','0','important');
+      node.style.setProperty('margin','0 0 0 .4ch','important');
+      node.style.setProperty('border','0','important');
+    }
     if(node.classList.contains('pit-flow-translation')){
       node.style.setProperty('font-size','.78em','important');
       node.style.setProperty('padding','0','important');
@@ -42,6 +48,10 @@
   let lastInput=null,inputTaps=0,inputTapAt=0;
   let hovered=null;
   const CONTENT_TARGETS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],div';
+  // Opt-in complete scope also translates visible navigation/CTA labels
+  // without moving, reparenting or replacing the actual clickable control.
+  const FULL_CONTROLS = 'nav a,header a,[role="navigation"] a,main button,main [role="button"]';
+  const targets=()=>scope==='full'?CONTENT_TARGETS+','+FULL_CONTROLS:TARGETS;
 
   let active = false, currentId = 0, mode = 'standard';
   let observer = null, observedRoots = new Set();
@@ -70,6 +80,9 @@
   }
   function isUnsafe(el) {
     if(prefs.translateSidebar===false&&el.closest('aside,[role="complementary"]'))return true;
+    if(scope==='full'&&el.matches(FULL_CONTROLS)){
+      return Boolean(el.closest('form,[contenteditable],[translate="no"],[aria-hidden="true"]'));
+    }
     let part=el;
     while(part) {
       if(part.closest?.(scope==='full'?SKIP.replace(',footer,header',''):SKIP) ||
@@ -82,10 +95,13 @@
     // textContent includes injected <div.pit-translation> for list/table nodes.
     // TreeWalker avoids accumulating the translation into subsequent requests.
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+    const control=scope==='full'&&el.matches(FULL_CONTROLS);
     const parts=[];let textNode,rawChars=0,truncated=false;
     while((textNode=walker.nextNode())) {
       const parent=textNode.parentElement;
-      if(parent?.closest?.(SKIP))continue;
+      if(parent?.closest?.(control
+        ?SKIP.replace(',button,nav,footer,header','')
+        :SKIP))continue;
       const value=textNode.nodeValue||'';
       // A 5,000-node stop silently truncated rich articles whose text is
       // split across many spans. Bound by actual characters, not DOM nodes.
@@ -122,7 +138,7 @@
     if(el.matches('div')&&el.closest('nav,'+(prefs.translateSidebar?'':'aside,')+'[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
     // Hero search/filter panels are NOT prose. A catch-all div with several
     // labels/inputs must never become a translated single paragraph.
-    if(el.matches('div')&&el.querySelector('input,textarea,select,button,form,[role="search"],[role="button"],[role="combobox"],[role="textbox"]'))return false;
+    if(el.matches('div')&&el.querySelector('input,textarea,select,button,form,a[href],[role="search"],[role="button"],[role="combobox"],[role="textbox"]'))return false;
     if(el.matches('div')&&el.children.length>0){
       // A wrapping DIV with its own rich descendants is not a leaf text unit.
       // Only permit literal text runs at leaf DIV level, so a whole article is
@@ -133,7 +149,7 @@
   }
   function candidates() {
     const result=[];
-    for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
+    for(const el of queryDeep(targets())){
       if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
@@ -152,7 +168,7 @@
   // translate-command response. No original text is returned in these stats.
   function coverage() {
     let eligible=0,translated=0,skippedOversized=0;
-    for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
+    for(const el of queryDeep(targets())){
       if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
@@ -182,8 +198,10 @@
   function attach(el,source,translation,isAI) {
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
     const heading=el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]');
-    const node=document.createElement(heading?'span':'div');
-    node.className='pit-translation'+(isAI?' pit-ai':'')+(heading?' pit-flow-translation':'');
+    const inline=scope==='full'&&el.matches(FULL_CONTROLS);
+    const node=document.createElement(heading||inline?'span':'div');
+    node.className='pit-translation'+(isAI?' pit-ai':'')+
+      (heading?' pit-flow-translation':'')+(inline?' pit-inline-translation':'');
     node.textContent=prefs.longParagraphLineBreak?translation.replace(/([.!?。！？])\s*/g,'$1\n'):translation;
     applyReadingStyle(node,prefs);
     if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
@@ -193,7 +211,7 @@
     node.dataset.theme=theme;
     el.classList.add('pit-source-block');
     el.classList.toggle('pit-original-concealed',display==='translation-only');
-    if(heading||el.matches('li,td,th')){
+    if(heading||inline||el.matches('li,td,th')){
       if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);
     }else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     processed.set(el,{source,node,translation});
@@ -609,7 +627,7 @@
       node.textContent=p.longParagraphLineBreak?record.translation.replace(/([.!?。！？])\s*/g,'$1\n'):record.translation;
       if(p.longParagraphLineBreak||p.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
       if(theme==='none')node.style.setProperty('background-color','transparent','important');
-      if(node.classList.contains('pit-flow-translation')||source.matches('li,td,th')){
+      if(node.matches('.pit-flow-translation,.pit-inline-translation')||source.matches('li,td,th')){
         if(p.translationOrder==='translation-first')source.prepend(node);else source.append(node);
       }else source.insertAdjacentElement(p.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     }
