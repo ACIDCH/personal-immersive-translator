@@ -1,13 +1,13 @@
 import {useState} from 'react';
 import type {ReactNode} from 'react';
 
-type Status='已接入'|'部分验收'|'需要本机服务';
+type Status='受控测试通过'|'仅受控验证'|'需要独立服务';
 const modules:{id:string;title:string;subtitle:string;status:Status}[]=[
-  {id:'web',title:'网页翻译',subtitle:'分段双语 · 动态页面 · 原文恢复',status:'已接入'},
-  {id:'video',title:'视频与字幕',subtitle:'原生字幕 · 可见字幕 · SRT/VTT · 本机 ASR',status:'部分验收'},
-  {id:'document',title:'文档与 PDF',subtitle:'DOCX 导出 · PDF.js · 本机 BabelDOC',status:'需要本机服务'},
-  {id:'image',title:'图片翻译',subtitle:'本机 OCR · 翻译 · 双语 PNG',status:'已接入'},
-  {id:'ai',title:'AI 服务中心',subtitle:'多配置档案 · OpenAI 兼容 / Anthropic / Gemini',status:'已接入'}
+  {id:'web',title:'网页翻译',subtitle:'分段双语 · 动态页面 · 原文恢复',status:'受控测试通过'},
+  {id:'video',title:'视频与字幕',subtitle:'原生字幕 · 可见字幕 · SRT/VTT · 可选 ASR',status:'仅受控验证'},
+  {id:'document',title:'文档与 PDF',subtitle:'Office/EPUB · PDF.js · 可选云端 BabelDOC',status:'需要独立服务'},
+  {id:'image',title:'图片翻译',subtitle:'Tesseract.js OCR · 翻译 · 双语 PNG',status:'受控测试通过'},
+  {id:'ai',title:'AI 服务中心',subtitle:'自选凭据 · 逐项测试 · 不自动启用',status:'仅受控验证'}
 ];
 
 export function Shell({view,webControls}:{view:'popup'|'dashboard',webControls?:ReactNode}){
@@ -25,9 +25,9 @@ export function Shell({view,webControls}:{view:'popup'|'dashboard',webControls?:
   </main>;
  }
  return <main className={view==='popup'?'shell popup':'shell dashboard'}>
-  <header className="hero"><div className="brand-icon">译</div><div><div className="subtitle">MULTIMODAL TRANSLATE</div>
-   <h1>多模态翻译</h1><p>统一控制台 · 模块化翻译能力</p></div></header>
-  <div className="notice">{webControls?'原生网页、视频字幕、DOCX、图片 OCR 和 PDF 预览已接入测试版；高保真 PDF 与实时 ASR 需要额外本机服务。':'这是独立的网页预览，支持本地 DOCX/OCR 实验；在线翻译与插件设置需通过 Chrome 扩展使用。'}</div>
+  <header className="hero"><div className="brand-icon">译</div><div><div className="subtitle">PERSONAL IMMERSIVE TRANSLATOR</div>
+   <h1>PIT 翻译工作台</h1><p>演示入口 · 模块能力与真实可用性分开判断</p></div></header>
+  <div className="notice">此处为独立预览页面，展示模块组织和有限的本地文件实验。真实网页及视频翻译、Provider 试译、账号与云端 PDF/ASR 均需在 Chrome 插件中核验；模块状态不是线上可用性承诺。</div>
   <section className="main-grid">
    <nav aria-label="功能分区" className="module-list">{modules.map(m=><button
      type="button" key={m.id} className={active===m.id?'module selected':'module'}
@@ -41,6 +41,6 @@ export function Shell({view,webControls}:{view:'popup'|'dashboard',webControls?:
        :<p>此网站仅展示前端与本地文档实验；浏览器标签页翻译需要安装 Chrome/Edge 插件。</p>}
    </section>
   </section>
-  <footer>多模态翻译 · WXT 浏览器扩展与 Cloudflare Pages 预览共用设计系统</footer>
+  <footer>PIT · 开发预览 · 产品模块详情请以安装版真实诊断与验收记录为准</footer>
  </main>
 }
