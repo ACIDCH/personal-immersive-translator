@@ -5,7 +5,7 @@ import {readFileSync,existsSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 test('README runtime version and standard provider match the packaged PIT runtime',()=>{
  const wxt=read('apps/wxt-ui/wxt.config.ts');
- const version=wxt.match(/version:'([^']+)'/)?.[1];
+ const version=wxt.match(/^\s+version:'([^']+)'/m)?.[1];
  assert.ok(version,'WXT manifest must contain a version');
  const readme=read('README.md');
  assert.match(readme,new RegExp('Version under development:\\*\\* '+version.replaceAll('.','\\.')));
