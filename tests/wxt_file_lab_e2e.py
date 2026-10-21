@@ -143,8 +143,12 @@ async def main():
         await page.get_by_role('heading',name='文件与图片处理').wait_for(timeout=15000)
         await page.get_by_role('heading',name='PIT 文件与图片翻译').wait_for(timeout=15000)
         assert await page.locator('.pit-workbench-nav a').count()==4
-        assert await page.locator('.pit-workbench-actions a[href="/pit-options.html#services"]').count()==1
+        service_link=page.locator('.pit-workbench-actions a[href="/pit-options.html#services"]')
+        assert await service_link.count()==1
+        assert await service_link.get_attribute('target')=='_blank',(
+          'Settings must open in another tab to preserve in-flight file jobs')
         await page.locator('.pit-workbench-engine').get_by_text('文件翻译服务',exact=False).wait_for(timeout=15000)
+        assert await page.locator('#pit-workbench-provider option').count()==7
         report['unified_file_workbench']='pass'
         await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         assert page.url.endswith('/file-lab.html#document-lab'),page.url
@@ -158,6 +162,17 @@ async def main():
         await page.locator('.document-result').get_by_text('My finance DOCX document').wait_for(timeout=15000)
         report['docx']='pass'
         print("WXT DOCUMENT LAB DOCX: PASS",flush=True)
+        # Change the ordinary MT in the same file workbench: it must persist
+        # to the sole background settings store, not just change a UI label.
+        await page.locator('#pit-workbench-provider').select_option('microsoft')
+        await page.get_by_text('已同步默认服务',exact=False).wait_for(timeout=10000)
+        linked=await page.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1""")
+        assert linked['standardProvider']=='microsoft',linked
+        assert linked['fileProviderId']=='inherit',linked
+        assert await page.locator('#pit-workbench-provider').input_value()=='microsoft'
+        report['linked_provider_switch']='pass'
         # Actual document translation MUST go through PIT's native provider,
         # not a client-side simulated translation function.
         options=await context.new_page()
