@@ -381,12 +381,16 @@ async def main():
 
         # Imported cues have no publisher track to change. Explicitly opt
         # into non-native compatibility rendering for this separate test.
-        await settings.evaluate("""async()=>{
-          const key='pit_settings_v1';
-          const saved=(await chrome.storage.local.get(key))[key];
-          saved.videoSettings={...saved.videoSettings,subtitleRenderMode:'in-player'};
-          await chrome.storage.local.set({[key]:saved});
-        }""")
+        # End-user must be able to switch this mode from the VIDEO panel,
+        # not by editing chrome.storage or finding a hidden settings page.
+        display=popup.get_by_role('combobox',name='字幕显示方式')
+        assert await display.input_value()=='replace-track'
+        await display.select_option('in-player')
+        await popup.get_by_text('已启用兼容字幕模式',exact=False).wait_for(timeout=10000)
+        chosen=await popup.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1.videoSettings.subtitleRenderMode""")
+        assert chosen=='in-player',chosen
         url='https://example.org/manual-subtitles'
         async def source_html(route):
           await route.fulfill(status=200,content_type='text/html',
