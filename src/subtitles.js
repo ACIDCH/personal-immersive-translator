@@ -29,7 +29,7 @@
     else if(restart)start(previous.mode,previous.cues||[],null,previous.source);
     quickToggle();autoStart();
   }
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],languageSamples:[],manualSource:'',nativePatches:new Map()};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],languageSamples:[],manualSource:'',nativePatches:new Map(),renderRoute:'none'};
   function rememberCaptionLanguage(text){
     const sample=String(text||'').trim().slice(0,400);
     if(!sample||state.languageSamples.at(-1)===sample)return;
@@ -163,6 +163,7 @@
       // visible only after valid translated cues exist, then restore the
       // original mode on STOP/track switch.
       if(state.track.mode==='hidden')state.track.mode='showing';
+      state.renderRoute='native-track';
       return true;
     }catch{restoreNativeTrack();return false;}
   }
@@ -197,6 +198,7 @@
     state.overlay.replaceChildren();
     if(!text) { state.overlay.style.display='none'; return; }
     state.overlay.style.display='block';
+    state.renderRoute='overlay';
     state.overlay.style.fontSize=(config.subtitleFontSize||22)+'px';
     state.overlay.style.color=config.subtitleColor||'#ffffff';state.overlay.style.backgroundColor=config.subtitleBackground||'#142130';
     // Placement is resolved against the actual video bounds above.
@@ -303,14 +305,15 @@
         const translated=state.cache.get(key);
         const replaced=config.subtitleRenderMode==='replace-track' &&
           platform.replaceVisibleCaption?.(document,location.hostname,text,translated);
+        if(replaced)state.renderRoute='platform-dom';
         render(replaced?'':translated);
         return;
       }
       const budget=state.mode==='ai'?80:1200;
       if(state.requestCount>=budget){render('本次翻译已达到安全请求上限，请停止后重新开始。');return;}
-      render('正在翻译…');
       if(state.domPending || (state.failedAt &&
         (state.mode==='ai'||Date.now()-state.failedAt<2500))) return;
+      render('正在翻译…');
       state.requestCount++;state.domPending=true;
       const generation=state.generation;
       try {
@@ -323,6 +326,7 @@
           if(state.latestDomText===text){
             const replaced=config.subtitleRenderMode==='replace-track' &&
               platform.replaceVisibleCaption?.(document,location.hostname,text,translations[0]);
+            if(replaced)state.renderRoute='platform-dom';
             render(replaced?'':translations[0]);
           }
         }
@@ -381,7 +385,7 @@
         state.failedAt=Date.now();
         render(state.mode==='ai'
           ?'AI 字幕调用失败，已停止自动重试；请检查模型/额度后手动重新启动。'
-          :'字幕翻译暂时失败，请检查服务或额度');
+          :'字幕翻译失败：'+lastError.slice(0,160));
       }
     } finally {
       if(generation===state.generation)state.busy=false;
@@ -391,6 +395,10 @@
     const activeCues=core.activeCues(cues,time);
     if(!activeCues.length){render('');return;}
     if(inlineNativeTranslation(activeCues,time)){render('');return;}
+    if(state.failedAt&&activeCues.some(c=>!state.cache.has(c.key))){
+      render('字幕翻译失败：'+(lastError||'请检查所选翻译服务').slice(0,160));
+      return;
+    }
     // Concurrent cues represent different speakers. Display every
     // simultaneously active translated line, never just the latest one.
     render(activeCues.map(c=>state.cache.get(c.key)||'正在翻译…').join('\n'),
@@ -403,7 +411,7 @@
     platform?.restoreVisibleCaptions?.();
     releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.languageSamples=[];state.manualSource='';
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.languageSamples=[];state.manualSource='';state.renderRoute='none';
   }
   function embeddedPlayerHint(){
     for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
@@ -480,7 +488,7 @@
     if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)){void settingsReady.then(()=>{manuallyStopped=false;respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));quickToggle();});return true;}
     else if(msg?.type==='PIT_CAPTIONS_STOP'){manuallyStopped=true;stop();quickToggle();respond({ok:true});}
     else if(msg?.type==='PIT_PREFERENCES_CHANGED'){void refreshConfig().catch(()=>{});}
-    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',translationCount:state.cache.map.size,
+    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',renderRoute:state.renderRoute,translationCount:state.cache.map.size,
       active:state.active,renderMode:config.subtitleRenderMode||'in-player',
       status:!config.enabled?'disabled':state.failedAt?'error':state.active?(state.seenAny?'ready':'waiting-for-CC'):'disabled',lastError});}
   });
