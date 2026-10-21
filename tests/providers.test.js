@@ -71,7 +71,7 @@ test('remote HTTP errors are sanitized to avoid leaking server data',async()=>{
   await assert.rejects(translateBatch(['x'],{...config,provider:'microsoft',microsoftKey:'secret'},async()=>({ok:false,status:429})),e=>e.status===429 && !e.message.includes('secret'));
 });
 test('sanitize settings and block nested sensitive hosts',()=>{
-  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'browser');
+  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'google-free');
   assert.equal(normalizeSettings({autoAI:true}).autoAI,false);
   assert.equal(hostIsBlocked('payments.example.com','example.com'),true);
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
@@ -82,7 +82,7 @@ test('Corrupted settings reset safely without enabling AI',()=>{
   for(const input of [null,42,'broken',[]]){
     const settings=normalizeSettings(input);
     assert.equal(settings.autoAI,false);
-    assert.equal(settings.standardProvider,'browser');
+    assert.equal(settings.standardProvider,'google-free');
     assert.equal(settings.target,'zh');
   }
 });
@@ -168,7 +168,7 @@ test('portable preference import is allowlisted and version checked',()=>{
  assert.equal(restored.target,'ko');
  assert.equal(restored.cloudToken,'keep-secret');
  assert.deepEqual(restored.aiProfiles,[]);
- assert.equal(restored.standardProvider,'browser');
+ assert.equal(restored.standardProvider,'google-free');
 });
 
 test('site auto-translate only activates with a configured standard MT engine',()=>{
