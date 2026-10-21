@@ -116,10 +116,21 @@ async def main():
           },{frameId:frame})
         """,{"tab":tab_id,"frame":frame_id,"expected":VISIBLE})
         assert result["ok"],result
-        await course.frame_locator("#visible").locator(".pit-caption-overlay").wait_for(timeout=8000)
+        await course.frame_locator("#visible").locator(".pit-caption-overlay").wait_for(
+          state="attached",timeout=8000)
+        # Strict native/DOM replacement never advertises an external subtitle
+        # overlay as successful translation. This legacy fixture has NO live
+        # provider credentials and only verifies exact frame authorization
+        # and session isolation, not translated text/real video quality.
+        assert await course.frame_locator("#visible").locator(".pit-caption-overlay").evaluate(
+          "(node)=>getComputedStyle(node).display==='none'")
+        assert await course.frame_locator("#visible").locator(".captionText").inner_text()==(
+          "Visible course caption")
         assert await course.frame_locator("#private").locator(".pit-caption-overlay").count()==0
+        assert await course.frame_locator("#private").locator(".captionText").inner_text()==(
+          "PRIVATE wrong caption")
         assert await course.locator(".pit-caption-overlay").count()==0
-        print("PASS: real MV3 injected only the authorized chosen child frame")
+        print("PASS: real MV3 injected only chosen child frame; strict mode showed no false external subtitles")
         await course.frame_locator("#visible").locator("body").evaluate(
           "() => history.replaceState({}, '', '?id=switched-recording')")
         await course.frame_locator("#visible").locator(".pit-caption-overlay").wait_for(
@@ -133,7 +144,7 @@ async def main():
         assert stopped["ok"],stopped
         await course.frame_locator("#visible").locator(".pit-caption-overlay").wait_for(state="detached")
         assert await course.frame_locator("#private").locator(".pit-caption-overlay").count()==0
-        print("PASS: stop removes only targeted embedded-caption overlay")
+        print("PASS: stop removes only targeted embedded-caption session state")
       finally:
         await context.close()
 
