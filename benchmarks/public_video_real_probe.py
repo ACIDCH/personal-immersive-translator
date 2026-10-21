@@ -12,7 +12,12 @@ from playwright.async_api import async_playwright
 EXT=Path(__file__).resolve().parents[1]/'apps/wxt-ui/.output/chrome-mv3'
 PUBLIC=[
  ('youtube','https://www.youtube.com/watch?v=qp0HIF3SfI4',
-  '.ytp-caption-window-container .ytp-caption-segment',
+  '.ytp-caption-window-container .ytp-caption-segment,.ytp-caption-window-container .caption-visual-line',
+  '.ytp-subtitles-button','.ytp-play-button'),
+ # Documented public embed option; does not bypass site CC availability,
+ # consent, country restrictions, player access, or protected content.
+ ('youtube-embedded-cc','https://www.youtube.com/embed/qp0HIF3SfI4?cc_load_policy=1&cc_lang_pref=en&autoplay=1',
+  '.ytp-caption-window-container .ytp-caption-segment,.ytp-caption-window-container .caption-visual-line',
   '.ytp-subtitles-button','.ytp-play-button'),
  ('bilibili','https://www.bilibili.com/video/BV1H44y1a7JM',
   '.bpx-player-subtitle-panel-text,.bpx-player-subtitle-item,.bilibili-player-video-subtitle',
@@ -29,6 +34,15 @@ async def diagnostics(popup):
           errorKind:diag.lastError?'SUBTITLE_OR_PROVIDER_ERROR':null} : null;
       }catch{return null;}
     }""")
+
+async def visible_caption_summary(page,selector):
+    # Keep text in memory solely for before/after verification. Do not log or
+    # export publisher captions, URLs with credentials, or translations.
+    return await page.locator(selector).evaluate_all("""nodes=>
+      nodes.filter(n=>n.getClientRects().length)
+        .map(n=>(n.innerText||n.textContent||'').trim())
+        .filter(Boolean).join(' ').replace(/\\s+/g,' ').trim().slice(0,3000)
+    """)
 
 async def observe(ctx,popup,item):
     platform,url,selector,toggle,play=item
@@ -76,6 +90,16 @@ async def observe(ctx,popup,item):
             row['caption_state']='PUBLIC_CC_NOT_RENDERED'
             return row
         row['caption_state']='VISIBLE_PUBLISHER_CC'
+        # Keep the cue stable while PIT translates. If the site changes the
+        # visible sentence naturally, this probe must not call it a PIT pass.
+        await page.evaluate("""()=>{
+          const video=document.querySelector('video');
+          if(video)video.pause();
+        }""")
+        before=await visible_caption_summary(page,selector)
+        if not before:
+            row['caption_state']='CC_DISAPPEARED_WHEN_PAUSED'
+            return row
         await page.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
         row['translation_state']='PENDING'
@@ -84,8 +108,19 @@ async def observe(ctx,popup,item):
             diag=await diagnostics(popup)
             if diag:
                 row['diagnostics']=diag
-                if diag['renderRoute'] in ('platform-dom','native-track') and diag['translationCount']>0:
-                    row['translation_state']='NATIVE_REPLACEMENT_OBSERVED'
+                if diag['renderRoute']=='platform-dom' and diag['translationCount']>0:
+                    after=await visible_caption_summary(page,selector)
+                    # This is a DOM adapter test: a cache hit or worker reply
+                    # alone is NOT proof that the website caption changed.
+                    import re
+                    changed=bool(after and after!=before and
+                                 re.search(r'[\\u3400-\\u9fff]',after))
+                    row['site_dom_translation_visible']=changed
+                    if changed:
+                        row['translation_state']='NATIVE_REPLACEMENT_OBSERVED'
+                        break
+                elif diag['renderRoute']=='native-track' and diag['translationCount']>0:
+                    row['translation_state']='NATIVE_TRACK_REQUIRES_CUE_VERIFICATION'
                     break
                 if diag['status']=='error':
                     row['translation_state']='PROVIDER_OR_CAPTURE_ERROR'
@@ -101,8 +136,9 @@ async def observe(ctx,popup,item):
         row['stop_removed_overlay']=await page.evaluate(
           "()=>!document.querySelector('.pit-caption-overlay')")
         row['stop_diagnostics']=await diagnostics(popup)
+        row['restored_visible_caption']=((await visible_caption_summary(page,selector))==before)
         if row['translation_state']=='NATIVE_REPLACEMENT_OBSERVED' and (
-            not row['stop_removed_overlay'] or
+            not row['stop_removed_overlay'] or not row['restored_visible_caption'] or
             row['stop_diagnostics'] and row['stop_diagnostics']['active']):
             row['translation_state']='STOP_FAILED'
         return row
@@ -260,11 +296,12 @@ async def main():
             finally:
                 await ctx.close()
     report['passed']=sum(x['translation_state']=='NATIVE_REPLACEMENT_OBSERVED' and
-                         x.get('restored_original_cue',True) and
+                         x.get('restored_original_cue',x.get('restored_visible_caption',False)) and
                          x.get('overlay_absent',False) for x in report['sites'])
     report['passed_platforms']=[x['platform'] for x in report['sites'] if
       x['translation_state']=='NATIVE_REPLACEMENT_OBSERVED' and
-      x.get('restored_original_cue',True) and x.get('overlay_absent',False)]
+      x.get('restored_original_cue',x.get('restored_visible_caption',False)) and
+      x.get('overlay_absent',False)]
     # A pass on a standalone native player cannot certify YouTube/Netflix.
     report['status']=('PASS_ALL_REAL_PUBLIC_CAPTIONS' if
         report['passed']==len(report['sites']) else
