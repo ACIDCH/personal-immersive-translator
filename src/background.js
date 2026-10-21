@@ -109,7 +109,7 @@ async function askOffscreen(message,timeoutMs=12000){
  let timer;
  try{
   return await Promise.race([
-   chrome.runtime.sendMessage({target:'offscreen',...message}),
+   chrome.runtime.sendMessage({...message,target:'offscreen'}),
    new Promise((_,reject)=>{timer=setTimeout(
     ()=>reject(new TranslationError('浏览器离线翻译引擎响应超时；请重新载入扩展、检查 Chrome 语言包，或手动改选在线常规服务')),
     timeoutMs);})
@@ -155,7 +155,7 @@ async function runStandardProvider(texts,opts){
    await nativeOffscreenReady();
    const result=await askOffscreen({
      type:'PIT_OFFSCREEN_BROWSER_TRANSLATE',
-     texts:part,source,target:opts.target
+     texts:part,source,targetLanguage:opts.target
    },30000);
    if(!result?.ok||!Array.isArray(result.translations)||result.translations.length!==part.length)
     throw new TranslationError(result?.error||'Chrome 内置翻译服务暂不可用，请在 PIT 设置下载语言包或切换服务商');
@@ -388,7 +388,7 @@ async function handle(message, sender) {
             await nativeOffscreenReady();
             const probe=await chrome.runtime.sendMessage({
               target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_STATUS',
-              source,target:settings.target
+              source,targetLanguage:settings.target
             });
             browserModelStatus=probe?.ok?probe.status:'unavailable';
             standardReady=browserModelStatus==='available';
@@ -424,7 +424,7 @@ async function handle(message, sender) {
         code:'web_api_absent',reason:'Chrome Translator API 在 PIT 离屏执行环境中不可用'};
     }
     let reply;
-    try{reply=await askOffscreen({type:'PIT_OFFSCREEN_BROWSER_STATUS',source,target},8000);}
+    try{reply=await askOffscreen({type:'PIT_OFFSCREEN_BROWSER_STATUS',source,targetLanguage:target},8000);}
     catch(error){return {status:'unavailable',runtime:'offscreen',
       code:'status_timeout',reason:String(error.message||error)};}
     if(!reply?.ok)return {status:'unavailable',runtime:'offscreen',
@@ -444,7 +444,7 @@ async function handle(message, sender) {
       return {status:'failed',code:'web_api_absent',
         reason:'实际离屏环境没有 Chrome Translator API'};
     const answer=await chrome.runtime.sendMessage({
-      target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_PROBE',source,target
+      target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_PROBE',source,targetLanguage:target
     });
     if(!answer?.ok||typeof answer.translation!=='string'||!answer.translation.trim())
       return {status:'failed',code:String(answer?.code||'probe_failed'),
