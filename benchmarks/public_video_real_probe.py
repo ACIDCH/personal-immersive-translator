@@ -114,7 +114,7 @@ async def observe(ctx,popup,item):
                     # alone is NOT proof that the website caption changed.
                     import re
                     changed=bool(after and after!=before and
-                                 re.search(r'[\\u3400-\\u9fff]',after))
+                                 re.search(r'[㐀-鿿]',after))
                     row['site_dom_translation_visible']=changed
                     if changed:
                         row['translation_state']='NATIVE_REPLACEMENT_OBSERVED'
