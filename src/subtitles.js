@@ -109,7 +109,7 @@
     state.cache=new core.CaptionCache(350);
     state.busy=false;state.domPending=false;state.failedAt=0;
     state.seenAny=false;state.latestDomText='';state.contextHistory=[];state.languageSamples=[];
-    state.domMode=!next;
+    state.renderRoute='none';state.domMode=!next;
     render('');
     return true;
   }
@@ -306,7 +306,11 @@
         const replaced=config.subtitleRenderMode==='replace-track' &&
           platform.replaceVisibleCaption?.(document,location.hostname,text,translated);
         if(replaced)state.renderRoute='platform-dom';
-        render(replaced?'':translated);
+        if(!replaced&&config.subtitleRenderMode==='replace-track'){
+          state.renderRoute='unsupported';
+          lastError='当前字幕节点不可安全原位替换；严格模式不会冒充原位翻译显示外置字幕。可检查字幕源或显式选择兼容显示。';
+          render('');
+        }else render(replaced?'':translated);
         return;
       }
       const budget=state.mode==='ai'?80:1200;
@@ -328,7 +332,11 @@
             const replaced=config.subtitleRenderMode==='replace-track' &&
               platform.replaceVisibleCaption?.(document,location.hostname,text,translations[0]);
             if(replaced)state.renderRoute='platform-dom';
-            render(replaced?'':translations[0]);
+            if(!replaced&&config.subtitleRenderMode==='replace-track'){
+              state.renderRoute='unsupported';
+              lastError='当前播放器字幕无法安全原位替换；严格模式已禁止外置字幕降级。';
+              render('');
+            }else render(replaced?'':translations[0]);
           }
         }
       } catch(error) {
@@ -397,6 +405,14 @@
     const activeCues=core.activeCues(cues,time);
     if(!activeCues.length){render('');return;}
     if(inlineNativeTranslation(activeCues,time)){render('');return;}
+    // External overlay is an explicit compatibility mode, not a substitute
+    // for failed native replacement under the default strict setting.
+    if(config.subtitleRenderMode==='replace-track'&&!state.importedCues &&
+       activeCues.every(c=>state.cache.has(c.key))){
+      state.renderRoute='unsupported';
+      lastError='字幕已译出，但播放器不允许直接修改原生字幕轨。严格模式未启用外置字幕。';
+      render('');return;
+    }
     if(state.failedAt&&activeCues.some(c=>!state.cache.has(c.key))){
       render('字幕翻译失败：'+(lastError||'请检查所选翻译服务').slice(0,160));
       return;
