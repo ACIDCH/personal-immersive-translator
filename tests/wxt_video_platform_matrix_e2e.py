@@ -238,6 +238,56 @@ async def main():
           'in_player_replacement':True,'restored_on_stop':True})
         await page.close()
 
+        # Real players may render a visual line rather than segment spans,
+        # sometimes within an open shadow root. Translate the existing leaf.
+        for variant in ('visual-line','open-shadow'):
+          url='https://www.youtube.com/watch?v=pit-'+variant
+          async def variant_html(route):
+            await route.fulfill(status=200,content_type='text/html',
+              body='<html><body><div id="variant-host"></div></body></html>')
+          await ctx.route(url,variant_html)
+          page=await ctx.new_page()
+          await page.goto(url)
+          await page.evaluate("""variant=>{
+            const host=document.getElementById('variant-host');
+            const root=variant==='open-shadow'
+              ?host.attachShadow({mode:'open'}):host;
+            const container=document.createElement('div');
+            container.className='ytp-caption-window-container';
+            const line=document.createElement('div');
+            line.className='caption-visual-line';
+            const leaf=document.createElement('span');
+            leaf.className='caption-leaf';
+            leaf.textContent='Public caption variant in '+variant;
+            line.append(leaf);container.append(line);root.append(container);
+          }""",variant)
+          await page.bring_to_front()
+          await popup.get_by_role('button',name='翻译视频字幕').click()
+          await page.wait_for_function("""variant=>{
+            const host=document.getElementById('variant-host');
+            const root=variant==='open-shadow'?host.shadowRoot:host;
+            return root?.querySelector('.caption-leaf')?.textContent===
+              '译文:Public caption variant in '+variant;
+          }""",arg=variant,timeout=23000)
+          diagnosis=await popup.evaluate("""async()=>{
+            const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+            return chrome.tabs.sendMessage(tab.id,{type:'PIT_CAPTIONS_DIAGNOSTICS'});
+          }""")
+          assert diagnosis['status']=='translated' and diagnosis['siteCaptionGroups']==1,diagnosis
+          assert await page.locator('.pit-caption-overlay').evaluate(
+            "(node)=>getComputedStyle(node).display==='none'")
+          await popup.get_by_role('button',name='停止字幕翻译').click()
+          restored=await page.evaluate("""variant=>{
+            const host=document.getElementById('variant-host');
+            const root=variant==='open-shadow'?host.shadowRoot:host;
+            return root?.querySelector('.caption-leaf')?.textContent;
+          }""",variant)
+          assert restored=='Public caption variant in '+variant,restored
+          results.append({'platform':'youtube-'+variant,
+            'fixture_visible_caption':'pass','in_player_replacement':True,
+            'restored_on_stop':True,'no_silent_overlay':True})
+          await page.close()
+
         # P0: a provider can succeed at HTTP level while returning only
         # one of two translated speaker windows. Never mutate one in player.
         malformed='https://www.youtube.com/watch?v=pit-malformed-provider-reply'
@@ -356,6 +406,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==12 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==14 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
