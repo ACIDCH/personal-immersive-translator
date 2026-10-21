@@ -181,9 +181,9 @@ async def main():
         await page.close()
         print('PLATFORM SPLIT-CC AND REPLACE: PASS',flush=True)
 
-        # Distinct caption windows must not be flattened into a single
-        # mutable subtitle or masked by a floating translation. If a player
-        # prevents safe in-place writing, default strict mode reports that.
+        # P0: split speakers must be independently translated and written
+        # back to THEIR OWN visible window, not flattened into one external
+        # overlay nor reported as unsupported after translation succeeds.
         windows='https://www.youtube.com/watch?v=pit-separated-speakers'
         async def window_html(route):
           await route.fulfill(status=200,content_type='text/html',body='''<html><body>
@@ -194,23 +194,42 @@ async def main():
         await ctx.route(windows,window_html)
         page=await ctx.new_page()
         await page.goto(windows);await page.bring_to_front()
+        speakers=page.locator('.ytp-caption-segment')
         await popup.get_by_role('button',name='翻译视频字幕').click()
-        await popup.wait_for_function("""async()=>{
-          const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-          const diag=await chrome.tabs.sendMessage(tab.id,{
-            type:'PIT_CAPTIONS_DIAGNOSTICS'
-          });
-          return diag?.renderRoute==='unsupported'&&diag.translationCount>=1;
-        }""",timeout=23000)
-        assert await page.locator('.ytp-caption-segment').all_inner_texts()==[
-          'First speaker','Second speaker'
-        ]
-        overlay=await page.locator('.pit-caption-overlay').evaluate(
-          "(node)=>getComputedStyle(node).display")
-        assert overlay=='none',('Strict in-player mode must not silently use overlay',overlay)
+        await speakers.nth(0).get_by_text('译文:First speaker',exact=True).wait_for(timeout=23000)
+        await speakers.nth(1).get_by_text('译文:Second speaker',exact=True).wait_for(timeout=23000)
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(node)=>getComputedStyle(node).display==='none'")
         await popup.get_by_role('button',name='停止字幕翻译').click()
-        results.append({'platform':'youtube-multiwindow-strict',
-          'fixture_visible_caption':'pass','no_silent_overlay':True})
+        assert await speakers.all_inner_texts()==['First speaker','Second speaker'],(
+          'Stopping must restore both publisher-owned independent windows')
+        results.append({'platform':'youtube-multiwindow-native',
+          'fixture_visible_caption':'pass','in_player_replacement':True,
+          'no_silent_overlay':True,'restored_on_stop':True})
+        await page.close()
+
+        # Some Netflix variants expose only the wrapper selector while the
+        # text is nested in child spans. Mutate only the leaf caption text,
+        # leaving the player container, event handlers and styles intact.
+        nested='https://www.netflix.com/watch/10009876'
+        async def nested_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+            <div class="player-timedtext">
+              <div class="player-timedtext-text-container">
+                <span class="caption-leaf">Nested Netflix caption</span>
+              </div>
+            </div></body></html>''')
+        await ctx.route(nested,nested_html)
+        page=await ctx.new_page()
+        await page.goto(nested);await page.bring_to_front()
+        leaf=page.locator('.caption-leaf')
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await leaf.get_by_text('译文:Nested Netflix caption',exact=True).wait_for(timeout=23000)
+        assert await page.locator('.player-timedtext-text-container').count()==1
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await leaf.inner_text()=='Nested Netflix caption'
+        results.append({'platform':'netflix-nested-leaf','fixture_visible_caption':'pass',
+          'in_player_replacement':True,'restored_on_stop':True})
         await page.close()
 
         # P0 regression: known video platforms often load their caption
@@ -289,6 +308,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==10 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==11 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
