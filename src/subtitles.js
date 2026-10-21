@@ -106,7 +106,7 @@
     state.originalMode=next?.mode ?? null;
     if(next?.mode==='disabled')next.mode='hidden';
     state.generation++;
-    state.cache=new core.CaptionCache(350);
+    state.cache=new core.CaptionCache(350,{deduplicateText:state.mode!=='ai'});
     state.busy=false;state.domPending=false;state.failedAt=0;
     state.seenAny=false;state.latestDomText='';state.contextHistory=[];state.languageSamples=[];
     state.renderRoute='none';state.domMode=!next;
@@ -496,7 +496,7 @@
     state.importedCues=validImport ? imported : null;
     // Hidden activates disabled native tracks without displaying a second set of original subtitles.
     if(track?.mode==='disabled') track.mode='hidden';
-    state.overlay=createOverlay();state.cache=new core.CaptionCache(350);
+    state.overlay=createOverlay();state.cache=new core.CaptionCache(350,{deduplicateText:mode!=='ai'});
     lastError='';
     state.timer=setInterval(()=>{void tick();},450);
     void tick();
