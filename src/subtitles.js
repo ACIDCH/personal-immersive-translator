@@ -237,7 +237,7 @@
     const reply=chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:state.mode,pageContext:'video',taskId:taskPrefix+'-'+generation,
       captionSourceLanguage:state.manualSource||state.track?.language||'',
-      captionLanguageSample:state.mode==='standard'?state.languageSamples.join('\\n').slice(-1600):'',
+      captionLanguageSample:state.mode==='standard'?state.languageSamples.join(' ').slice(-1600):'',
       userInitiated:state.mode==='ai',context
     });
     let timeout;
