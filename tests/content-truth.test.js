@@ -35,3 +35,17 @@ test('historical overview documents point to the current authoritative audit',()
   'docs/MODULE_STATUS_UI_zh-CN.md','docs/RELEASE_READINESS_zh-CN.md'
  ])assert.match(read(p),/CONTENT_SYSTEM_AUDIT_2026-10-21\.md/,p);
 });
+
+test('settings sidebar is grouped by task while preserving all stable deep links',()=>{
+ const js=read('src/options-v2.js');
+ assert.match(js,/const navGroups=\[/);
+ for(const id of [
+  'baseSettings','services','browserModelSettings','standardKeys','aiKeys',
+  'experts','text','readingSettings','interaction','video','files',
+  'cloudPdfSettings','terms','privacySettings','advanced','sync',
+  'backupSettings','help'
+ ])assert.ok(js.includes("['"+id+"',"),'Missing stable section '+id);
+ assert.match(js,/navGroups\.flatMap/);
+ const css=read('src/product.css');
+ assert.match(css,/\.pit-options-nav-group/);
+});
