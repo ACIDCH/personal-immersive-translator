@@ -287,69 +287,84 @@
     }
     if (state.domMode) {
       if (!platform) return;
-      const info=platform.readVisibleCaptions(document,location.hostname);
-      const text=dialogue(info.text);
+      const visible=platform.readVisibleCaptionGroups?.(document,location.hostname);
+      const groups=visible?.groups||[];
+      const text=groups.map(g=>g.text).join(' ');
       if(!text){
         state.latestDomText='';
-        // An authorized platform may not expose captions until CC is enabled
-        // or its player initializes. Stay armed rather than falsely failing.
-        // Once a caption has appeared, clear the overlay when CC disappears.
         render(state.seenAny?'':'正在等待播放器显示原文字幕；请开启 CC 字幕。');
         return;
       }
       state.seenAny=true;
-      rememberCaptionLanguage(text);
+      for(const group of groups)rememberCaptionLanguage(group.text);
       state.latestDomText=text;
-      const key='dom:'+text;
-      if(state.cache.has(key)){
-        const translated=state.cache.get(key);
+      const generation=state.generation;
+      const applyTranslations=()=>{
+        // Never apply an older network response to captions repainted while
+        // it was in flight. Also avoid partial/mismatched multi-speaker patches.
+        const current=platform.readVisibleCaptionGroups?.(document,location.hostname)?.groups||[];
+        if(!current.length||current.length!==groups.length||
+           current.some((g,i)=>g.text!==groups[i].text))return false;
+        const translations=current.map(g=>({
+          text:g.text,translation:state.cache.get('dom:'+g.text)
+        }));
+        if(translations.some(g=>!g.translation))return false;
         const replaced=config.subtitleRenderMode==='replace-track' &&
-          platform.replaceVisibleCaption?.(document,location.hostname,text,translated);
-        if(replaced){state.renderRoute='platform-dom';lastError='';}
-        if(!replaced&&config.subtitleRenderMode==='replace-track'){
+          platform.replaceVisibleCaptionGroups?.(document,location.hostname,translations);
+        if(replaced){
+          state.renderRoute='platform-dom';lastError='';render('');
+        }else if(config.subtitleRenderMode==='replace-track'){
           state.renderRoute='unsupported';
-          lastError='当前字幕节点不可安全原位替换；严格模式不会冒充原位翻译显示外置字幕。可检查字幕源或显式选择兼容显示。';
+          lastError='播放器多个字幕区域无法安全完成原位替换；严格模式不显示外置字幕。';
           render('');
-        }else render(replaced?'':translated);
-        return;
+        }else render(translations.map(g=>g.translation).join('\n'));
+        return Boolean(replaced)||config.subtitleRenderMode!=='replace-track';
+      };
+      if(groups.every(g=>state.cache.has('dom:'+g.text))){
+        applyTranslations();return;
       }
       const budget=state.mode==='ai'?80:1200;
-      if(state.requestCount>=budget){render('本次翻译已达到安全请求上限，请停止后重新开始。');return;}
+      if(state.requestCount>=budget){
+        lastError='本次字幕翻译已达到安全请求上限';
+        if(config.subtitleRenderMode!=='replace-track')render(lastError);
+        return;
+      }
       if(state.domPending || (state.failedAt &&
-        (state.mode==='ai'||Date.now()-state.failedAt<2500))) return;
-      render('正在翻译…');
+        (state.mode==='ai'||Date.now()-state.failedAt<2500)))return;
+      // Strict mode must not flash an out-of-player text overlay while
+      // waiting for the public translation service.
+      if(config.subtitleRenderMode==='replace-track')render('');
+      else render('正在翻译…');
       state.requestCount++;state.domPending=true;
-      const generation=state.generation;
-      try {
+      const missing=[...new Set(groups.map(g=>g.text).filter(t=>!state.cache.has('dom:'+t)))];
+      try{
         const prior=state.contextHistory.join('\n');
-        const translations=await fetchBatch([text],generation,prior);
-        if(state.active && generation===state.generation) {
+        const translations=await fetchBatch(missing,generation,prior);
+        if(state.active&&generation===state.generation){
           state.failedAt=0;lastError='';
-          state.cache.put(key,translations[0]);
-          if(state.mode==='ai' && state.contextHistory.at(-1)!==text)
-            state.contextHistory=[...state.contextHistory.slice(-2),text];
-          if(state.latestDomText===text){
-            const replaced=config.subtitleRenderMode==='replace-track' &&
-              platform.replaceVisibleCaption?.(document,location.hostname,text,translations[0]);
-            if(replaced)state.renderRoute='platform-dom';
-            if(!replaced&&config.subtitleRenderMode==='replace-track'){
-              state.renderRoute='unsupported';
-              lastError='当前播放器字幕无法安全原位替换；严格模式已禁止外置字幕降级。';
-              render('');
-            }else render(replaced?'':translations[0]);
+          for(let i=0;i<missing.length;i++)
+            state.cache.put('dom:'+missing[i],translations[i]);
+          if(state.mode==='ai'){
+            state.contextHistory=[...state.contextHistory,...missing].slice(-3);
           }
+          if(state.latestDomText===text)applyTranslations();
         }
-      } catch(error) {
+      }catch(error){
         lastError=String(error?.message||error);
         if(generation===state.generation){
           state.failedAt=Date.now();
-          render(state.mode==='ai'
+          // Preserve diagnostics, but don't replace the native CC display
+          // with an external overlay during a strict in-place session.
+          if(config.subtitleRenderMode==='replace-track'){
+            state.renderRoute='unsupported';
+            render('');
+          }else render(state.mode==='ai'
             ?'AI 字幕调用失败，已停止自动重试；请检查模型/额度后手动重新启动。'
             :/无法可靠识别原文语言/.test(lastError)
-              ?'无法确定字幕原文语言：请手动选定原文语言，或播放更多字幕后重试。'
+              ?'无法确定字幕原文语言：请手动指定源语言。'
               :'字幕翻译失败：'+lastError.slice(0,160));
         }
-      } finally {
+      }finally{
         if(generation===state.generation)state.domPending=false;
       }
       return;
