@@ -217,11 +217,12 @@ async def main():
                     <div class="hero-column">
                       <h1 id="hero-title"><span>What you choose to do</span>
                       with your career matters</h1>
-                      <div class="search-panel" role="search">
+                      <form class="search-panel" role="search"
+                        onsubmit="event.preventDefault();this.dataset.submitted='yes'">
                         <label>Search for job title<input aria-label="Job title" placeholder="Search for job title"></label>
                         <label>Enter location<input aria-label="Location" placeholder="Enter location"></label>
-                        <button>Search Jobs</button>
-                      </div>
+                        <button type="submit">Search Jobs</button>
+                      </form>
                     </div><div aria-hidden="true">Player photo</div>
                     </section>
                     <section><p id="body-copy">It's not just a job when you're
@@ -253,6 +254,11 @@ async def main():
                 assert hero_layout['titleInside'],hero_layout
                 assert hero_layout['translated'].startswith('译文:What you choose'),hero_layout
                 assert hero_layout['formTranslated']==1 and hero_layout['searchButtons']==1,hero_layout
+                assert await hero.locator('.search-panel input').count()==2
+                assert await hero.locator('.search-panel input').first.get_attribute('placeholder')=='Search for job title'
+                await hero.locator('.search-panel button').click()
+                assert await hero.locator('.search-panel').get_attribute('data-submitted')=='yes',(
+                  'Button translation must preserve native form submit behavior')
                 assert hero_layout['navTranslated']==1 and hero_layout['buttonTranslated']==1,hero_layout
                 assert hero_layout['translationWidth']<=hero_layout['columnWidth']+2,hero_layout
                 assert hero_layout['overflow']<=2,hero_layout
