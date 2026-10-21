@@ -144,18 +144,40 @@ export function NativeWebControls(){
          setStatus('PIT 云端翻译目前未配置，无法运行。先在插件设置中部署/填写云端 Worker，或切换到你已有 Key 的其他机器翻译服务。');
          return;
        }
-       if(settings?.standardProvider==='browser'&&
-          settings.source!=='auto'&&settings.source!==settings.target){
-         // A selected but absent local model is NOT a working translator.
-         // Preflight explicit language pairs without downloading or sending
-         // current page text anywhere. Auto-source stays with CLD runtime.
-         const probe=await browser.runtime.sendMessage({
-           type:'PIT_BROWSER_STATUS',source:settings.source,target:settings.target
-         });
+       if(settings?.standardProvider==='browser'&&settings.source!==settings.target){
+         // Missing Chrome language packs explain the no-translation first run.
+         // A popup click is already an explicit translation request, but
+         // sending page text to MyMemory still needs a SECOND explicit consent.
+         const from=settings.source==='auto'?(settings.target==='en'?'fr':'en'):settings.source;
+         let timer:ReturnType<typeof setTimeout>|undefined;
+         let probe:any;
+         try{
+           probe=await Promise.race([
+             browser.runtime.sendMessage({type:'PIT_BROWSER_STATUS',
+               source:from,target:settings.target}),
+             new Promise<never>((_,reject)=>{timer=setTimeout(
+               ()=>reject(Error('Chrome 模型检测超时')),9000);})
+           ]);
+         }catch(error){probe={status:'unavailable',reason:String(error)};}
+         finally{clearTimeout(timer);}
          if(probe?.status!=='available'){
-           setStatus('Chrome 当前语言包不可用（'+settings.source+' → '+settings.target+
-             '）。请在服务面板主动下载模型或明确改用 MyMemory；本次没有发送网页原文。');
-           return;
+           const approved=window.confirm(
+             'Chrome 当前离线翻译模型未就绪（'+from+' → '+settings.target+'）。'+
+             '是否明确改用 MyMemory 免费在线翻译并继续本次操作？'+
+             '\n注意：网页原文会发往 MyMemory 第三方服务器，每日额度有限，'+
+             '并非私密文档或敏感网页的适用服务；不会启用付费 AI。'
+           );
+           if(!approved){
+             setStatus('未切换翻译服务，本次没有发送网页原文。请下载 Chrome 模型或手动选择翻译服务。');
+             return;
+           }
+           const patched=await browser.runtime.sendMessage({type:'PATCH_SETTINGS',
+             patch:{standardProvider:'mymemory'}});
+           if(!patched?.ok){
+             setStatus('切换 MyMemory 失败：'+String(patched?.error||'设置未保存'));
+             return;
+           }
+           setStatus('已明确授权改用 MyMemory，正在继续常规翻译。');
          }
        }
      }catch{}
