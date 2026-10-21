@@ -59,8 +59,8 @@
     return LANGS.has(primary)?primary:'';
   }
   class CaptionCache {
-    constructor(limit = 350) {
-      this.limit=Math.max(1,limit);
+    constructor(limit = 350,{deduplicateText=true}={}) {
+      this.limit=Math.max(1,limit);this.deduplicateText=deduplicateText;
       this.map=new Map();this.byText=new Map();this.inflight=new Set();
     }
     get(key) { return this.map.get(key); }
@@ -85,7 +85,7 @@
         const distinct=new Map();
         let restored=0;
         for(const cue of missing){
-          const known=this.byText.get(cue.text);
+          const known=this.deduplicateText?this.byText.get(cue.text):null;
           if(known){
             this.put(cue.key,known);restored++;
             continue;
@@ -101,7 +101,7 @@
           throw new Error('Caption translations did not match the source cues');
         texts.forEach((text,index)=>{
           const translation=translations[index];
-          this.rememberText(text,translation);
+          if(this.deduplicateText)this.rememberText(text,translation);
           for(const cue of distinct.get(text))this.put(cue.key,translation);
         });
         return missing.length;
