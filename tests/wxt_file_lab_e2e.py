@@ -500,6 +500,7 @@ async def main():
         report['transient_retry_and_dedupe']='pass'
         print('WXT REAL HTTP 429 RETRY + DUPLICATE PARAGRAPH CACHE: PASS',flush=True)
 
+        await page.locator('.pit-workbench-nav a[href="#batch-file-lab"]').click()
         await page.locator('.batch-file-lab input[type=file]').set_input_files([
           {'name':'cancel.docx','mimeType':'application/octet-stream','buffer':ooxml_docx()},
           {'name':'not-run.pptx','mimeType':'application/octet-stream','buffer':pptx_fixture()}
