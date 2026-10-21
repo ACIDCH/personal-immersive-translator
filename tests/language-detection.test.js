@@ -104,7 +104,7 @@ test('caption-only source inference uses reliable bounded CLD rather than page U
  assert.equal(await detectCaptionSampleLanguage(sample,detector),'en');
  assert.equal(last,sample);
  assert.equal(await detectCaptionSampleLanguage('A'.repeat(2000),detector),'en');
- assert.equal(last.length,1600,'Only a bounded same-video sample is inspected');
+ assert.equal(last.length,1200,'Only the Chrome CLD input cap is inspected');
  const uncertain=async()=>({isReliable:false,languages:[{language:'fr',percentage:99}]});
  assert.equal(await detectCaptionSampleLanguage(sample,uncertain),null,
    'Unknown CC source must not be silently guessed or sent to a free provider');
