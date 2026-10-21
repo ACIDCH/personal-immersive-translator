@@ -92,6 +92,14 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
   font:inherit;background:#fff;color:#1c3e4f}
 .pit-workbench-service-controls button{font-weight:650;cursor:pointer}
 .pit-workbench-service-controls button:disabled{cursor:wait;opacity:.6}
+.pit-workbench-language-controls{display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;margin-top:12px}
+.pit-workbench-language-controls label{font-weight:650}
+.pit-workbench-language-controls select{min-height:38px;padding:6px 10px;
+  max-width:210px;flex:1 1 130px;font:inherit;background:#fff;color:#1c3e4f;
+  border:1px solid #9fbcca;border-radius:9px}
+.pit-workbench-language-controls select:focus-visible{outline:3px solid #408fff;outline-offset:2px}
+.pit-workbench-language-controls select:disabled{opacity:.65}
 .pit-workbench-service-controls a{font-weight:650}
 .pit-workbench-service-controls :is(select,button,a):focus-visible{
   outline:3px solid #408fff;outline-offset:2px}
@@ -110,7 +118,8 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
   .pit-workbench-nav{gap:6px}
   .pit-workbench-nav a{font-size:11px;padding:8px}}
 @media(prefers-color-scheme:dark){.pit-workbench-service{background:#182c3c;border-color:#3b5b6a}
-  .pit-workbench-service-controls select,.pit-workbench-service-controls button{background:#20394b;color:#eaf4fa;border-color:#547083}
+  .pit-workbench-service-controls select,.pit-workbench-service-controls button,
+  .pit-workbench-language-controls select{background:#20394b;color:#eaf4fa;border-color:#547083}
   .pit-workbench-diagnostic{background:#173b40;color:#e6faff;border-color:#3f8480}
   .pit-file-workbench{color:#e5f3fa}
   .pit-workbench-header{background:#172d3e;border-color:#35556a}
