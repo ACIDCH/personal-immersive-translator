@@ -42,7 +42,8 @@ const copies=[
  ['live-captions.js','src/live-captions.js'],
  ['lib/wav.js','src/lib/wav.js'],
  ['lib/live-pipeline.js','src/lib/live-pipeline.js'],
- ['lib/asr-response.js','src/lib/asr-response.js']
+ ['lib/asr-response.js','src/lib/asr-response.js'],
+ ['lib/translation-queue.js','lib/translation-queue.js']
 ];
 for(const [src,dst] of copies){
  const path=join(source,src);
