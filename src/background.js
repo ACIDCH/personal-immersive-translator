@@ -476,7 +476,7 @@ async function handle(message, sender) {
     // free standard-MT paths. Paid/custom diagnostic requests stay in Options.
     const popupFree=isTrustedExtensionPage(sender) &&
       message.mode==='standard' && message.userInitiated===true &&
-      ['browser','mymemory'].includes(message.providerId);
+      ['browser','mymemory','google-free'].includes(message.providerId);
     if(!isTrustedOptionsPage(sender)&&!popupFree)
       throw new TranslationError('付费/自定义服务的诊断仅允许从设置中心进行');
     const settings=await getSettings();
