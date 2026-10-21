@@ -15,7 +15,7 @@ export function NativeWebControls(){
  const [mode,setMode]=useState<Mode>('standard');
  const [feature,setFeature]=useState<'web'|'video'|'files'|'settings'>('web');
  const [display,setDisplay]=useState<'bilingual'|'translation-only'>('bilingual');
- const [scope,setScope]=useState<'smart'|'full'>('smart');
+ const [scope,setScope]=useState<'smart'|'full'>('full');
  const [captionFile,setCaptionFile]=useState<File|null>(null);
  const [captionSource,setCaptionSource]=useState('auto');
  const [captionBusy,setCaptionBusy]=useState(false);
