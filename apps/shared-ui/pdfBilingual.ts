@@ -1,3 +1,5 @@
+// @ts-ignore Shared pure JavaScript PDF.js line adapter has separate Node tests.
+import {pdfTextLines} from '../../src/lib/pdf-text-layout.js';
 /** Browser-only PDF bilingual fallback. Rasterizes original pages beside translations.
  * Original page pixels stay unmodified. NOT BabelDOC and NOT high-fidelity
  * editable typesetting. Used when no separate Python layout engine is available.
@@ -153,7 +155,7 @@ export async function translateBilingualPdf(
        if(!ctx)throw Error('PDF 渲染 Canvas 不可用');
        progress(index-1,pageCount,`渲染第 ${index}/${pageCount} 页`);
        await page.render({canvas,canvasContext:ctx,viewport}).promise;
-       const raw=(await page.getTextContent()).items.map(x=>x.str||'').join('\n').trim();
+       const raw=pdfTextLines(await page.getTextContent()).join('\n').trim();
        let text=raw;
        if(text.replace(/\s/g,'').length<30){
          progress(index-1,pageCount,`第 ${index} 页无文本层，执行本机 OCR`);
