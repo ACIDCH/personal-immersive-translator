@@ -226,7 +226,11 @@ async def main():
                     </div><div aria-hidden="true">Player photo</div>
                     </section>
                     <section><p id="body-copy">It's not just a job when you're
-                      doing the work of your life.</p></section></main></body></html>''')
+                      doing the work of your life.</p></section>
+                    <section class="pit-grid-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                      <p id="grid-left">Learn more about our medical technologies.</p>
+                      <p id="grid-right">Join our diverse global healthcare teams.</p>
+                    </section></main></body></html>''')
                 await context.route(landing,serve_landing)
                 hero=await context.new_page()
                 await hero.goto(landing);await hero.bring_to_front()
@@ -263,6 +267,11 @@ async def main():
                 assert hero_layout['translationWidth']<=hero_layout['columnWidth']+2,hero_layout
                 assert hero_layout['overflow']<=2,hero_layout
                 assert hero_layout['border']=='0px',hero_layout
+                await hero.locator('#grid-left > .pit-translation').wait_for(timeout=12000)
+                assert await hero.locator('.pit-grid-cards > p').count()==2
+                assert await hero.locator('.pit-grid-cards > .pit-translation').count()==0,(
+                  'Bilingual lines must stay inside existing CSS grid cards')
+                assert await hero.locator('#grid-right > .pit-translation').count()==1
                 assert hero_layout['background'] in ('rgba(0, 0, 0, 0)','transparent'),hero_layout
                 await popup.get_by_role('button',name='恢复原文').click()
                 await hero.locator('#hero-title > .pit-flow-translation').wait_for(
