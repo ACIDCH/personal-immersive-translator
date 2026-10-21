@@ -2,7 +2,7 @@
 export const VIDEO_DEFAULTS=Object.freeze({enabled:true,autoStartSupportedSites:false,playerQuickToggle:true,
  providerId:'inherit',source:'auto',target:'inherit',preferHumanCaptions:true,focusDialogueOnly:false,
  baseSentenceSegmentation:true,aiSentenceSegmentation:false,preferPitTranslationOverPlatformMT:true,
- subtitleFontSize:22,subtitlePosition:'bottom',subtitleRenderMode:'in-player',subtitleColor:'#ffffff',subtitleBackground:'#142130',
+ subtitleFontSize:22,subtitlePosition:'bottom',subtitleRenderMode:'replace-track',subtitleColor:'#ffffff',subtitleBackground:'#142130',
  translationFirst:false,siteOverrides:{},meetingMode:'off'});
 export const PRODUCT_DEFAULTS=Object.freeze({schemaVersion:2,uiLanguage:'zh',providerPreferences:{},
  videoSettings:VIDEO_DEFAULTS,installedExperts:['faithful'],customExperts:[],activeExpertId:'faithful',
