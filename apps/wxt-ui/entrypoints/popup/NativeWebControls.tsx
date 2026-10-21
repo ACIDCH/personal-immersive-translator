@@ -284,7 +284,7 @@ export function NativeWebControls(){
    setCaptionInspection('正在读取播放器字幕状态…');
    try{
      const [tab]=await browser.tabs.query({active:true,currentWindow:true});
-     if(!tab?.id||!/^https?:\\/\\//.test(tab.url||''))throw Error('当前不是可访问的视频网页');
+     if(!tab?.id||!/^https?:\/\//.test(tab.url||''))throw Error('当前不是可访问的视频网页');
      const key='pit_caption_frame_'+tab.id;
      const saved=await browser.storage.session.get(key);
      const frameId=typeof saved[key]==='number'&&saved[key]>0?saved[key]:0;
