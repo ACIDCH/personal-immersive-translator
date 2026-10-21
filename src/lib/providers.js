@@ -86,10 +86,7 @@ function splitPublicText(text,limit=450){
  const boundary=/[\s,.;:!?。，；：！？、]/u;
  const refreshBoundary=()=>{
    lastBoundary=0;
-   for(const [index,ch] of Array.from(part).entries()){
-     // lastBoundary is a UTF-16 offset, not a Unicode code-point index.
-     void index;
-   }
+   // lastBoundary is a UTF-16 offset, not a code-point index.
    for(let k=0;k<part.length;){
      const ch=String.fromCodePoint(part.codePointAt(k));
      k+=ch.length;
