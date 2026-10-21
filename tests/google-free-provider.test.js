@@ -82,3 +82,33 @@ test('a free-provider 429 rejects the entire batch without silently replacing mi
   json:async()=>[[['你好']]]
  })),e=>e.status===429);
 });
+
+test('long multilingual phrases split on natural UTF-8 boundaries without losing source characters',async()=>{
+ const source=('The financial markets and international trade influence companies. '+
+ '今天学习市场策略和国际贸易。\n').repeat(30);
+ const seen=[];
+ const out=await translateBatch([source],{
+  provider:'google-free',source:'auto',target:'fr'
+ },async url=>{
+  const q=new URL(url).searchParams.get('q');
+  seen.push(q);
+  assert.ok(new TextEncoder().encode(q).length<=1300,'Provider chunk must remain under UTF-8 limit');
+  return {ok:true,status:200,json:async()=>[[[q,null]],null,'en']};
+ });
+ assert.equal(seen.join(''),source,'Sentence chunking must preserve every original character');
+ assert.equal(out[0],source,'Identity fixture proves order and Unicode safety');
+ assert.ok(seen.length>=3);
+ assert.ok(seen.slice(0,-1).every(q=>/[\s.,;:!?。！？，；]\s*$/u.test(q)),
+  'Chunks should prefer sentence or word boundaries instead of splitting words');
+});
+test('Latin-language translation pieces retain spaces when provider trims boundary whitespace',async()=>{
+ const source=('This is a long descriptive explanation of the company career page. ').repeat(28);
+ const out=await translateBatch([source],{
+  provider:'google-free',source:'en',target:'fr'
+ },async url=>{
+  const q=new URL(url).searchParams.get('q');
+  return {ok:true,status:200,json:async()=>[[[q.trim().replace(/\s+/g,' '),null]],null,'en']};
+ });
+ assert.ok(/company career page\. This is/u.test(out[0]),
+  'Translated French/English segments must not merge words across split boundaries');
+});
