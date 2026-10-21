@@ -13,7 +13,7 @@ export default defineConfig({
     short_name:'PIT 翻译',
     description:'Personal Immersive Translator (PIT): bilingual webpages, in-player subtitles, file and image translation.',
     minimum_chrome_version:'125',
-    version:'0.4.4',
+    version:'0.4.5',
     // MV3 permits packaged WASM evaluation, not remote executable code.
     content_security_policy:{
       extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
