@@ -32,7 +32,7 @@
 | --- | --- | --- | --- |
 | 网页翻译 | `src/content.js` 文本节点筛选、动态 DOM、恢复、阅读显示；`src/background.js` Provider 调用 | Chromium/WXT 构造页面、Philips 风格标题/导航/搜索区；Google 公共短句公网请求 | 所有真实复杂站点排版保真、实际用户机器无故障、速度优于商业产品 |
 | 免费/官方 Provider | `google-free`、`browser`、`mymemory`、Microsoft、Google Cloud、DeepL、Libre、Worker | 内核契约测试；公开 Google/MyMemory 短句测试，取决于地点/时间 | 免 Key 公共接口有官方 SLA、永久免费、不限频；官方 BYOK Key 可自动获取 |
-| 视频字幕 | `src/subtitles.js`、`caption-core.js`、`platform-captions.js`、`subtitle-import.js` | HTML5 TextTrack 和 YouTube/Bilibili/Netflix/Panopto **受控 DOM** 场景、停止恢复 | 所有账号登录流媒体/DRM/动态 A/B 页面真实稳定，烙印字幕能原位无损替换 |
+| 视频字幕 | `src/subtitles.js`、`caption-core.js`、`platform-captions.js`、`subtitle-import.js` | HTML5 TextTrack 和 YouTube/Bilibili/Netflix/Panopto **受控 DOM** 场景、停止恢复；新增真实公开原生 HTML5/WebVTT + Google 免费 MT 原位替换/恢复的独立 L2 PASS（其余站点仍 INCONCLUSIVE） | 所有账号登录流媒体/DRM/动态 A/B 页面真实稳定，烙印字幕能原位无损替换 |
 | Whisper/ASR | `src/offscreen.js` + 本机/独立 faster-whisper 云 ASR 服务源文件 | 实际 Whisper tiny CPU 对合成音频识别；FastAPI 合约 | 模型已在用户本机/真实 Railway 公网持续运行、长时延和成本满足需求 |
 | 图片 OCR | WXT `Tesseract.js` 本机 WASM，置信度/几何约束，双栏和有限背景覆盖 | OCR CJK+拉丁清晰样本、导出 PNG/测试 | 复杂照片/漫画可语义擦字补绘、任意斜拍 OCR 完整正确 |
 | PDF | 浏览器 `PDF.js` 栅格双栏、文本行重组；独立 `BabelDOC`/OCRmyPDF bridge 和任务 API | 数字/扫描 PDF 回归、BabelDOC **离线布局** 引擎测试 | 浏览器栅格双栏具备完整可编辑文字层/高保真学术排版；BabelDOC 已在公共云上线 |
@@ -41,9 +41,17 @@
 
 **Provider 实际默认：** `src/lib/settings.js` `standardProvider:'google-free'`，即**在线非官方公共接口**。其原文被发送至 Google，受网络与第三方限流影响。Chrome 本地 `browser` 需要实际语言包；MyMemory 是另一个公开服务，具有额度限制；Google Cloud 官方 API **另设** `google`，需要 Key。旧版已明确选择 `browser` 的用户不会因为更新文档而被强制改动偏好。
 
-**视频渲染含义：** `replace-track` 尝试修改合法可写 `VTTCue.text` 或支持的网站 CC DOM；`in-player` 的兼容显示不能简单称为原生字幕替换。严格模式遇不可写节点应报告不支持，而不是虚报“成功嵌入”。
+**视频渲染含义：** `replace-track` 尝试修改合法可写 `VTTCue.text` 或支持的网站 CC DOM；`in-player` 的兼容显示不能简单称为原生字幕替换。严格模式（含等待/报错）不显示外置字幕或状态浮层，导入 SRT 需显式使用兼容模式；诊断分开 `waiting-for-CC` / `pending` / `translated` / `unsupported` / `error`。
 
 **PDF 分级：** (a) 浏览器 PDF.js + OCR + 双栏栅格导出，(b) 独立高保真 BabelDOC 任务 API 与异步结果，(c) 真正在线容器且具备模型凭据/计算资源/真实排版验收。三者必须在 UI 和文档保持区分。
+
+### 2026-10-21 新窗口 P0 原位字幕与网页复验（基于已完成 CI；不是 Windows L3）
+
+- 最新生产内核改动截至 `98769cc8e39597297f6e85a90c327b2efc929c21`：严格原位字幕零浮层，字幕源/译文/渲染状态分开，SRT 兼容显示需明确选择，修复网站 header 语义标题的完整翻译。浏览器全套 fixture 包含 12 个字幕场景并通过。
+- [真实网页 CI](https://github.com/ACIDCH/personal-immersive-translator/actions/runs/39587623542)：Philips Careers **72/72 eligible**、7.77 秒、0 失败；IANA **72/72 eligible**、7.55 秒、0 失败。两页未新增水平溢出，原文恢复成功。Eligible 并不等于页面全部可见文字或人工译质验收。
+- [真实公开 HTML5 字幕 CI](https://github.com/ACIDCH/personal-immersive-translator/actions/runs/39588813281)：页面 [Able Player 原生 HTML5 示例](https://ableplayer.github.io/ableplayer/demos/other-native.html)，真实视频和发布方 WebVTT 的 **15 条 Cue**，真实 `google-free`；实际修改 `VTTCue.text`、诊断 `translated/native-track`、无外置字幕层、STOP 精确恢复，6.26 秒。此场景为 `LIVE-PROBE PASS`，不是 YouTube/Netflix/Bilibili PASS。
+- 同一公开视频工作流的 YouTube 为 **HTTP 200 但 CC 不显示**，Bilibili 为 **HTTP 412**，均未发生可验证字幕翻译。最终判定 `PARTIAL_PASS_REAL_PUBLIC_CAPTIONS`；不得用绿色非阻断 GitHub Job 代替各平台的实际结论。
+- **PR #55 保留 Draft，未合并、未发布 Stable；用户 Windows L3、真实长期播放和授权平台场景仍需验收。** 本文列的工作流是当次样本的固定证据，继续开发须按新 HEAD 重新核对。
 
 ## 三、文档与界面内容问题登记
 
@@ -68,7 +76,7 @@
 ## 五、不能靠文案解决的真实 P0/P1 工程阻断
 
 1. **WEB-P0** — 未在真实 Philips Careers 页面用当前 PIT 安装版 + 指定真实 Provider 完成逐段双语截图/DOM 操作/导航搜索框前后对照。涉及实际页版本、字体、语言、浏览器缩放，仍需 L3。
-2. **VID-P0** — 未在获授权真实 YouTube、Netflix、Panopto 播放器和有 CC 的账号完成原文轨、翻译请求、回填 route、停止恢复全链路。受控 HTML 字幕样例 ≠ 平台实战。
+2. **VID-P0** — 真实公开原生 HTML5/WebVTT 已完成独立 L2 回填与恢复；但 YouTube CI HTTP 200 无可见 CC、Bilibili HTTP 412，真实 YouTube、Netflix、Panopto 登录/授权播放器仍无可确认的字幕原位 L3。公开原生轨通过 ≠ 平台适配器全部通过。
 3. **PDF-P1** — BabelDOC 独立 Python/Railway 服务尚无公网 `health.ready:true`、凭据、真实 10/50/100 页文件和 PDF 输出截图比对。
 4. **ASR-P1** — faster-whisper tiny 合成音频能跑不等于实时字幕。需要 15/30 分钟 CPU p50/p95、网络/峰值、真实外语口音、播放器跳播与停止恢复。
 5. **IMG-P1** — 复杂纹理、照片/漫画的语义补绘未实现；当前原位覆盖仅在有限背景安全区域工作。
