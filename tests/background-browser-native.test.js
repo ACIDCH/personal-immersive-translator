@@ -193,9 +193,11 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal((await task('fixed-task','First translation task paragraph')).ok,true);
  values.set('pit_settings_v1',{standardProvider:'browser',source:'en',target:'ja'});
  assert.equal((await task('fixed-task','Second translation task paragraph')).ok,true);
- assert.equal(requests.at(-1).target,'zh');
+ assert.equal(requests.at(-1).target,'offscreen');
+ assert.equal(requests.at(-1).targetLanguage,'zh');
  assert.equal((await task('new-task','New translation task paragraph')).ok,true);
- assert.equal(requests.at(-1).target,'ja');
+ assert.equal(requests.at(-1).target,'offscreen');
+ assert.equal(requests.at(-1).targetLanguage,'ja');
  values.set('pit_settings_v1',{standardProvider:'browser',source:'en',target:'ja',providerPreferences:{browser:{enabled:false}}});
  assert.equal((await task('fixed-task','Disabled provider must stop old tasks')).ok,false);
 
