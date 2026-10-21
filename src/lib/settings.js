@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   glossary: '',
   blockedHosts: '',
   webDisplay: 'bilingual',
-  webScope: 'smart',
+  webScope: 'full',
   hoverTranslate: false,
   floatingControl: false,
   inputTranslate: false,
@@ -57,7 +57,7 @@ export function normalizeSettings(value = {}) {
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
   if (!['bilingual','translation-only'].includes(clean.webDisplay)) clean.webDisplay='bilingual';
-  if (!['smart','full'].includes(clean.webScope)) clean.webScope='smart';
+  if (!['smart','full'].includes(clean.webScope)) clean.webScope='full';
   if (!['subtle','underline','highlight'].includes(clean.translationTheme)) clean.translationTheme='subtle';
   if (!LANGUAGES.includes(clean.inputTarget)) clean.inputTarget='en';
   clean.hoverTranslate=Boolean(clean.hoverTranslate);
