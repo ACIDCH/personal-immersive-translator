@@ -52,6 +52,12 @@ async def main():
         await popup.goto(f'chrome-extension://{eid}/popup.html')
         await popup.get_by_role('button',name='视频字幕',exact=True).click()
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=14000)
+        caption_nodes={
+          'youtube':('.ytp-caption-segment','Visible YouTube captions now'),
+          'bilibili':('.bpx-player-subtitle-panel-text','Bilibili video subtitle line'),
+          'netflix':('[data-uia="subtitle-text"]','Netflix subtitle example'),
+          'panopto':('.captionText','Panopto lecture original caption')
+        }
         for name,url,content in SITES:
           async def route_html(route):
             await route.fulfill(status=200,content_type='text/html',
@@ -60,12 +66,25 @@ async def main():
           page=await ctx.new_page()
           await page.goto(url)
           await page.bring_to_front()
+          selector,source=caption_nodes[name]
+          original=page.locator(selector)
+          assert await original.inner_text()==source
           await popup.get_by_role('button',name='翻译视频字幕').click()
-          await page.locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=23000)
-          result={'platform':name,'fixture_visible_caption':'pass'}
-          results.append(result)
+          # With editable site DOM captions PIT translates the actual player
+          # caption node. The old V1 test looked only for an extra overlay
+          # and therefore timed out when correct in-place replacement worked.
+          await original.get_by_text('译文:'+source,exact=True).wait_for(timeout=23000)
+          visible_overlay=await page.evaluate("""()=>{
+            const overlay=document.querySelector('.pit-caption-overlay');
+            return Boolean(overlay && getComputedStyle(overlay).display!=='none');
+          }""")
+          assert visible_overlay is False, (name,'An external translation overlay duplicates DOM CC')
           await popup.get_by_role('button',name='停止字幕翻译').click()
           await page.locator('.pit-caption-overlay').wait_for(state='detached',timeout=8000)
+          assert await original.inner_text()==source,(name,'Original DOM caption must be restored')
+          result={'platform':name,'fixture_visible_caption':'pass',
+            'in_player_replacement':True,'restored_on_stop':True}
+          results.append(result)
           await page.close()
           print('PLATFORM VISIBLE-CC FIXTURE:',json.dumps(result,ensure_ascii=False),flush=True)
 
@@ -90,8 +109,11 @@ async def main():
           layer.innerHTML='<span class="ytp-caption-segment">Subtitles appeared after player setup</span>';
           document.body.append(layer);
         }""")
-        await page.locator('.pit-caption-translated').get_by_text(
+        await page.locator('.ytp-caption-segment').get_by_text(
           '译文:Subtitles appeared after player setup',exact=True).wait_for(timeout=23000)
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(el)=>getComputedStyle(el).display==='none'"),(
+          'Late site captions should be replaced in the player without overlay')
         await page.evaluate("""()=>{
           document.querySelector('.ytp-caption-window-container').remove();
         }""")
@@ -114,9 +136,14 @@ async def main():
         await page.frame_locator('iframe').locator('.captionText').wait_for(timeout=9000)
         await page.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
-        await page.frame_locator('iframe').locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=25000)
-        results.append({'platform':'panopto-iframe','fixture_visible_caption':'pass'})
+        frame_caption=page.frame_locator('iframe').locator('.captionText')
+        await frame_caption.get_by_text(
+          '译文:Embedded Panopto lecture subtitle',exact=True).wait_for(timeout=25000)
         await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await frame_caption.inner_text()=='Embedded Panopto lecture subtitle',(
+          'PIT must restore iframe caption content after STOP')
+        results.append({'platform':'panopto-iframe','fixture_visible_caption':'pass',
+          'in_player_replacement':True,'restored_on_stop':True})
         await page.close()
 
         url='https://example.org/manual-subtitles'
