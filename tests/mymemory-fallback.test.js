@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {translateBatch} from '../src/lib/providers.js';
 import {normalizeSettings,isStandardServiceConfigured} from '../src/lib/settings.js';
 
-test('MyMemory is opt-in and Chrome remains the default',()=>{
- assert.equal(normalizeSettings().standardProvider,'browser');
+test('MyMemory remains opt-in while new installs use a zero-key live public service',()=>{
+ assert.equal(normalizeSettings().standardProvider,'google-free');
  assert.equal(normalizeSettings({standardProvider:'mymemory'}).standardProvider,'mymemory');
  assert.equal(isStandardServiceConfigured({standardProvider:'mymemory'}),true);
 });
