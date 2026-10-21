@@ -3,7 +3,7 @@ import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_P
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
 import {detectLanguagesWithContext,detectCaptionSampleLanguage,normalizeDetectedLanguage} from './lib/language-detection.js';
 import {probeProvider} from './lib/provider-catalog.js';
-import {PriorityTranslationQueue} from './lib/translation-queue.js';
+import {PriorityTranslationQueue,translateKeylessSliced} from './lib/translation-queue.js';
 import {PRODUCT_DEFAULTS,siteRule,effectiveVideo,expertPrompt,readingStyle} from './lib/product-settings.js';
 import * as syncRuntime from './lib/sync.js';
 
@@ -137,9 +137,8 @@ async function tabLanguageHint(sender){
 }
 async function runStandardProvider(texts,opts){
  if(opts.provider==='mymemory')return limitPublicMT(texts,()=>translateBatch(texts,opts));
- if(opts.provider==='google-free')return keylessQueue.enqueue(
-   ()=>translateBatch(texts,opts),
-   {context:opts.requestContext||'article'}
+ if(opts.provider==='google-free')return translateKeylessSliced(
+   keylessQueue,texts,opts,translateBatch
  );
  if(opts.provider!=='browser')return translateBatch(texts,opts);
  const hints=opts.source==='auto'?await detectLanguagesWithContext(texts):
