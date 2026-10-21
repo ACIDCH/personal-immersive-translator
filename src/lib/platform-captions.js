@@ -106,54 +106,106 @@
     }
     return {provider:rule.id,text:'',reason:'no-visible-captions'};
   }
-  function replaceVisibleCaption(doc,hostname,original,translation){
+  // A YouTube "caption window" may contain multiple text spans, but several
+  // windows can be shown at once for different speakers. Never concatenate
+  // independent player-owned windows and then try to write one translation
+  // into a different DOM subtree.
+  function groupedLeaves(doc,hostname,visible=isVisible){
     const rule=identify(hostname);
-    if(rule.id==='generic'||!original||!translation)return false;
-    const text=compact(original),translated=compact(translation);
-    if(!text||!translated)return false;
+    if(rule.id==='generic')return {provider:rule.id,groups:[],reason:'no-adapter'};
     discardStalePatches();
     for(const selector of rule.selectors){
-      let nodes;
-      try{nodes=[...doc.querySelectorAll(selector)].slice(0,35);}catch{continue;}
-      const leaves=nodes.filter(node=>node.childElementCount===0 &&
-        !node.closest?.('.pit-caption-overlay') &&
-        (isVisible(node)||(inline.has(node)&&isVisible(node.parentElement))));
-      if(!leaves.length||leaves.length>MAX_GROUP_NODES)continue;
-      // Multi-span updates are safe only inside one caption container;
-      // separate speakers/windows or transcript sections stay unmodified.
-      if(leaves.length>1&&!leaves.every(n=>n.parentElement===leaves[0].parentElement))
-        continue;
-      const parts=leaves.map(node=>displayedText(node,isVisible));
-      if(compact(parts.filter(Boolean).join(' '))!==text)continue;
-      const held=new Set(leaves.map(node=>inline.get(node)?.group).filter(Boolean));
-      const existing=inline.get(leaves[0])?.group;
-      if(held.size===1&&existing&&existing.original===text &&
-         existing.translation===translated&&existing.parts.length===leaves.length &&
-         existing.parts.every((part,i)=>part.node===leaves[i] &&
-           part.node.textContent===part.translated))return true;
-      for(const group of held)restoreGroup(group);
-      // Prevent mutating a site that rewrote part of the caption between
-      // extraction and replacement.
-      if(compact(leaves.map(node=>node.textContent).filter(Boolean).join(' '))!==text)
-        continue;
-      discardStalePatches();
-      if(inline.size+leaves.length>MAX_HELD_NODES)return false;
-      const group={original:text,translation:translated,parts:leaves.map((node,i)=>({
-        node,original:node.textContent,translated:i===0?translated:''
-      }))};
-      groups.add(group);
-      try{
+      let selected;
+      try{selected=[...doc.querySelectorAll(selector)].slice(0,35);}
+      catch{continue;}
+      const parents=new Map(),seen=new Set();
+      for(const node of selected){
+        if(node.closest?.('.pit-caption-overlay'))continue;
+        // Netflix often selects a wrapper; find its visible leaf text nodes
+        // without mutating text inside arbitrary controls or the player root.
+        const descendants=node.childElementCount>0
+          ?[...node.querySelectorAll('*')].filter(child=>child.childElementCount===0)
+          :[node];
+        for(const leaf of descendants){
+          if(seen.has(leaf))continue;
+          if(leaf.closest?.('button,input,textarea,[contenteditable],.pit-caption-overlay'))continue;
+          if(!visible(leaf)&&!(inline.has(leaf)&&leaf.parentElement&&visible(leaf.parentElement)))continue;
+          if(!displayedText(leaf,visible))continue;
+          seen.add(leaf);
+          const parent=rule.id==='netflix'
+            ?leaf.closest?.('.player-timedtext-text-container')||leaf.parentElement||leaf
+            :rule.id==='panopto'?node:leaf.parentElement||leaf;
+          if(!parents.has(parent))parents.set(parent,[]);
+          parents.get(parent).push(leaf);
+        }
+      }
+      const found=[...parents.values()].map(leaves=>({
+        leaves,text:compact(leaves.map(leaf=>displayedText(leaf,visible))
+          .filter(Boolean).join(' '))
+      })).filter(group=>group.text);
+      if(found.length)return {provider:rule.id,selector,groups:found};
+    }
+    return {provider:rule.id,groups:[],reason:'no-visible-captions'};
+  }
+  function readVisibleCaptionGroups(doc,hostname,visible=isVisible){
+    const selected=groupedLeaves(doc,hostname,visible);
+    return {provider:selected.provider,selector:selected.selector,
+      groups:selected.groups.map(group=>({text:group.text})),
+      reason:selected.reason};
+  }
+  function replaceVisibleCaptionGroups(doc,hostname,translations){
+    if(!Array.isArray(translations)||!translations.length||
+       translations.length>MAX_GROUP_NODES)return false;
+    const wanted=translations.map(item=>({
+      text:compact(item?.text),translation:compact(item?.translation)
+    }));
+    if(wanted.some(x=>!x.text||!x.translation))return false;
+    const selected=groupedLeaves(doc,hostname);
+    const snapshots=selected.groups;
+    // Atomic preflight: don't translate one speaker but leave the other
+    // untranslated when a player changes its caption DOM during a request.
+    if(snapshots.length!==wanted.length||snapshots.some((g,i)=>
+      g.text!==wanted[i].text||g.leaves.length>MAX_GROUP_NODES))return false;
+    const oldGroups=new Set(snapshots.flatMap(g=>g.leaves.map(n=>inline.get(n)?.group))
+      .filter(Boolean));
+    const untouched=snapshots.every((g,i)=>
+      g.leaves.every((node,k)=>{
+        const held=inline.get(node);
+        return held?.group?.translation===wanted[i].translation&&
+          held.group.original===wanted[i].text&&
+          node.textContent===held.translated&&
+          held.group.parts[k]?.node===node;
+      }));
+    if(untouched)return true;
+    for(const held of oldGroups)restoreGroup(held);
+    if(snapshots.some((g,i)=>compact(g.leaves.map(n=>n.textContent).filter(Boolean).join(' '))!==wanted[i].text))
+      return false;
+    const newNodes=snapshots.reduce((n,g)=>n+g.leaves.length,0);
+    if(inline.size+newNodes>MAX_HELD_NODES)return false;
+    const patched=[];
+    try{
+      for(let i=0;i<snapshots.length;i++){
+        const g=snapshots[i],w=wanted[i];
+        const group={original:w.text,translation:w.translation,
+          parts:g.leaves.map((node,k)=>({
+            node,original:node.textContent,translated:k===0?w.translation:''
+          }))};
         for(const part of group.parts){
-          inline.set(part.node,{original:part.original,translated:part.translated,group});
+          inline.set(part.node,{original:part.original,
+            translated:part.translated,group});
           part.node.textContent=part.translated;
         }
-        return true;
-      }catch{
-        restoreGroup(group);
-        return false;
+        patched.push(group);
+        groups.add(group);
       }
+      return true;
+    }catch{
+      for(const group of patched)restoreGroup(group);
+      return false;
     }
-    return false;
+  }
+  function replaceVisibleCaption(doc,hostname,original,translation){
+    return replaceVisibleCaptionGroups(doc,hostname,[{text:original,translation}]);
   }
   function restoreVisibleCaptions(){
     for(const group of [...groups])restoreGroup(group);
@@ -162,5 +214,5 @@
     const text=typeof current==='string'?current:current?.text;
     return Boolean(text && text!==previous);
   }
-  root.PITPlatformCaptions=Object.freeze({identify,compact,isVisible,readVisibleCaptions,replaceVisibleCaption,restoreVisibleCaptions,captionChanged});
+  root.PITPlatformCaptions=Object.freeze({identify,compact,isVisible,readVisibleCaptions,readVisibleCaptionGroups,replaceVisibleCaption,replaceVisibleCaptionGroups,restoreVisibleCaptions,captionChanged});
 })(globalThis);
