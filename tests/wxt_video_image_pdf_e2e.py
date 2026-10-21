@@ -192,6 +192,7 @@ async def main():
         # reopen the downloaded PDF with the extension's pinned PDF.js.
         file_laboratory=await ctx.new_page()
         await file_laboratory.goto(f'chrome-extension://{eid}/file-lab.html')
+        await file_laboratory.locator('.pit-workbench-nav a[href="#pdf-bilingual-lab"]').click()
         pdf_input=file_laboratory.locator('.pdf-bilingual-lab input[type=file]')
         for kind,raw_pdf in [('digital',pdf_fixture()),('scanned',scanned_pdf_fixture())]:
           await pdf_input.set_input_files({
