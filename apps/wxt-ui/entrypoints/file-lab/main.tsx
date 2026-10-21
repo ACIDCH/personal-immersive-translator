@@ -13,16 +13,16 @@ import '../../../shared-ui/document-lab.css';
 function FileWorkbench(){
  const [engine,setEngine]=useState('正在检查当前配置…');
  const serviceRequestVersion=useRef(0);
- const [selectedProvider,setSelectedProvider]=useState('browser');
+ const [selectedProvider,setSelectedProvider]=useState('google-free');
  const [settings,setSettings]=useState<any>(null);
  const [serviceBusy,setServiceBusy]=useState(false);
  const [diagnostic,setDiagnostic]=useState('');
  const names:Record<string,string>={
-   browser:'Chrome 本机翻译',mymemory:'MyMemory 在线免 Key',
+   'google-free':'Google 免费公共翻译',browser:'Chrome 本机翻译',mymemory:'MyMemory 在线免 Key',
    cloud:'PIT 自托管云端',microsoft:'Microsoft Translator',
    google:'Google Cloud Translation',deepl:'DeepL',libre:'LibreTranslate'
  };
- const services=['browser','mymemory','microsoft','google','deepl','cloud','libre'];
+ const services=['google-free','browser','mymemory','microsoft','google','deepl','cloud','libre'];
  const languages=[['zh','简体中文'],['en','English'],['fr','Français'],['ja','日本語'],
    ['ko','한국어'],['de','Deutsch'],['es','Español']] as const;
  async function refreshService(){
@@ -34,7 +34,7 @@ function FileWorkbench(){
    const id=s.fileProviderId&&s.fileProviderId!=='inherit'
      ?s.fileProviderId:s.standardProvider;
    setSettings(s);setSelectedProvider(id);
-   const configured=id==='browser'||id==='mymemory'||
+   const configured=id==='browser'||id==='mymemory'||id==='google-free'||
      (id==='microsoft'&&Boolean(s.microsoftKey))||
      (id==='google'&&Boolean(s.googleKey))||
      (id==='deepl'&&Boolean(s.deeplKey))||
@@ -83,12 +83,12 @@ function FileWorkbench(){
  }
  async function testCurrentService(){
    if(serviceBusy||!settings)return;
-   if(!['browser','mymemory'].includes(selectedProvider)){
+   if(!['browser','mymemory','google-free'].includes(selectedProvider)){
      setDiagnostic('该服务可能产生费用，请在服务中心明确确认后单独测试。');
      return;
    }
-   if(selectedProvider==='mymemory'&&!window.confirm(
-     '将发送固定公开测试句到 MyMemory（不发送你的文件），确认测试？'
+   if(['mymemory','google-free'].includes(selectedProvider)&&!window.confirm(
+     '将发送固定公开测试句到所选在线免费翻译服务（不发送你的文件），确认测试？'
    ))return;
    setServiceBusy(true);setDiagnostic('正在检测当前服务…');
    try{
@@ -102,14 +102,14 @@ function FileWorkbench(){
          (r?.reason?' '+String(r.reason).slice(0,180):''));
      }else{
        const r=await browser.runtime.sendMessage({
-         type:'TEST_PROVIDER',providerId:'mymemory',mode:'standard',
+         type:'TEST_PROVIDER',providerId:selectedProvider,mode:'standard',
          target,userInitiated:true
        });
        setDiagnostic((settings.target==='en'?
          '当前目标是英语，公开测试改用英语→中文，仅验证此语言对：':'')+
-         (r?.ok?'MyMemory 公开样句测试成功：'+
+         (r?.ok?'在线免 Key 公开样句测试成功：'+
          String(r.translationPreview||'').slice(0,120):
-         'MyMemory 测试失败：'+String(r?.error||r?.status||'未知错误').slice(0,220)));
+         '在线免费服务测试失败：'+String(r?.error||r?.status||'未知错误').slice(0,220)));
      }
    }catch(e){setDiagnostic('诊断失败：'+String(e instanceof Error?e.message:e));}
    finally{setServiceBusy(false);}
