@@ -162,9 +162,23 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
               throw new TranslationError('Google 免费接口连接失败或超时：'+
                 String(e?.message||e).slice(0,120));
             }
-            if(!response.ok)throw new TranslationError(
-              'Google 免费接口 HTTP '+response.status+'，可能被限流或暂不可用',
-              response.status);
+            if(!response.ok){
+              const error=new TranslationError(
+                'Google 免费接口 HTTP '+response.status+'，可能被限流或暂不可用',
+                response.status);
+              // Honor HTTP Retry-After on 429/503 without trusting large or
+              // malformed vendor delays. The shared queue decides whether a
+              // short retry is safe, and yields to video tasks while waiting.
+              const hint=response.headers?.get?.('retry-after');
+              if(hint){
+                const numeric=Number(hint);
+                const seconds=Number.isFinite(numeric)&&numeric>=0
+                  ?numeric:((Date.parse(hint)-Date.now())/1000);
+                if(Number.isFinite(seconds)&&seconds>=0)
+                  error.retryAfterMs=Math.min(60000,Math.ceil(seconds*1000));
+              }
+              throw error;
+            }
             let data;
             try{data=await response.json();}
             catch{throw new TranslationError('Google 免费接口返回内容无法解析');}
