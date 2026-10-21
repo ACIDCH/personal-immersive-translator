@@ -20,7 +20,7 @@ async def overflow(page,name,viewport,zoom=1.0):
         viewport:window.innerWidth};
     }""")
     assert value['scroll']<=value['client']+5,(name,viewport,zoom,value)
-    return dict(name=name,width=viewport,zoom=zoom,...value)
+    return {'name':name,'width':viewport,'zoom':zoom,**value}
 
 async def main():
     assert (EXT/'manifest.json').exists(),'Build WXT extension first'
