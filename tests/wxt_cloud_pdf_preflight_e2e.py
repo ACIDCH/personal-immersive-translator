@@ -26,6 +26,7 @@ async def main():
                 problems=[]
                 page.on('pageerror',lambda e:problems.append(str(e)))
                 await page.goto(f'chrome-extension://{eid}/file-lab.html')
+                await page.locator('.pit-workbench-nav a[href="#pdf-bilingual-lab"]').click()
                 pdf=page.locator('.pdf-bilingual-lab')
                 await pdf.get_by_role('heading',name='浏览器内 PDF / 扫描件双语翻译').wait_for(timeout=18000)
                 await page.evaluate("""async()=>{
