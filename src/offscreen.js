@@ -4,6 +4,7 @@
  */
 import {encodeMonoPcm16,averageEnergy,resampleChunks,ASR_SAMPLE_RATE} from './lib/wav.js';
 import {LiveStats,BoundedAudioQueue,makeAudioContext,MAX_ASR_REQUESTS,asrLimitReached} from './lib/live-pipeline.js';
+import {normalizeAsrResult} from './lib/asr-response.js';
 import {translateWithNative,checkNativeTranslator} from './lib/browser-native.js';
 const SEGMENT_MS=3000;
 let current=null;
@@ -77,7 +78,8 @@ async function flush(c){
     const asrMs=Math.round(performance.now()-started);
     c.failures=0;c.retryAt=0;
     c.stats.record(asrMs);
-    const text=String(result.text||'').trim().slice(0,5000);
+    const normalized=normalizeAsrResult(result);
+    const text=normalized.text;
     if(asrMs>12000){
       c.stats.drop(1);
       await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
@@ -86,12 +88,8 @@ async function flush(c){
       // Whisper can identify the spoken language even for a one-word
       // fragment. Carry only supported, sufficiently confident metadata
       // through to MT; never infer audio language from the webpage UI.
-      const lang=String(result.language||'').toLowerCase().trim()
-        .replace(/_/g,'-').split('-')[0];
-      const conf=result.languageConfidence;
-      const audioLanguage=['en','zh','fr','de','es','ja','ko'].includes(lang) &&
-        !(typeof conf==='number'&&(!Number.isFinite(conf)||conf<0.65||conf>1))
-        ?lang:null;
+      const audioLanguage=normalized.language;
+      const conf=normalized.languageConfidence;
       await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,
         text,capturedAt,segmentMs:SEGMENT_MS,asrMs,
         ...(audioLanguage?{language:audioLanguage,
