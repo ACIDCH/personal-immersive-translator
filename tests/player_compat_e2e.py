@@ -126,6 +126,39 @@ async def run():
       await bilingual.close()
       print('PASS bilingual native text-track original and translated overlay')
 
+      # Previously hidden caption tracks are read via hidden mode. In
+      # replacement mode they should become visible only AFTER translated
+      # cues are ready, then return to their pre-PIT visibility.
+      hidden_inline=await browser.new_page()
+      await setup(hidden_inline,"https://www.youtube.com/watch?v=hidden-inline",
+        '<video style="width:640px;height:360px"></video>')
+      await hidden_inline.evaluate("""()=>{
+        const track=document.querySelector('video').addTextTrack('subtitles','English','en');
+        track.mode='hidden';
+        track.addCue(new VTTCue(0,12,'Initially hidden caption'));
+        window.hiddenTrack=track;
+        const send=chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage=async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+          ?{preferences:{videoSettings:{enabled:true,
+            subtitleRenderMode:'replace-track',
+            preferPitTranslationOverPlatformMT:true}}}:send(msg);
+        window.pitAction('PIT_PREFERENCES_CHANGED');
+      }""")
+      await hidden_inline.wait_for_timeout(150)
+      reply=await hidden_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert reply['ok'],reply
+      await hidden_inline.wait_for_function("""()=>window.hiddenTrack.mode==='showing'
+        && window.hiddenTrack.cues[0].text==='译文:Initially hidden caption'""",
+        timeout=6000)
+      assert await hidden_inline.locator('.pit-caption-overlay').evaluate(
+        "e=>e.style.display")=='none'
+      await hidden_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await hidden_inline.evaluate("window.hiddenTrack.mode")=='hidden'
+      assert await hidden_inline.evaluate(
+        "window.hiddenTrack.cues[0].text")=='Initially hidden caption'
+      await hidden_inline.close()
+      print('PASS initially hidden native TextTrack swaps in-place and restores visibility')
+
       # Native WebVTT replacement edits the actual browser-rendered cue,
       # not a floating page caption, and restores it on STOP.
       native_inline=await browser.new_page()
