@@ -9,9 +9,23 @@ import '../../../shared-ui/design.css';
 import '../../../shared-ui/document-lab.css';
 
 // One extension-owned workbench, one native background Provider runtime.
-// Tabs are scrollable anchors, not separately hosted legacy tools.
+// Tabs are internal views; legacy tools stay mounted only when selected.
 function FileWorkbench(){
  const [engine,setEngine]=useState('正在检查当前配置…');
+ const sections=['document-lab','batch-file-lab','subtitle-file-lab','pdf-bilingual-lab'] as const;
+ type Section=typeof sections[number];
+ const [active,setActive]=useState<Section>(()=>{
+   const hash=location.hash.slice(1);
+   return sections.find(section=>section===hash)||'document-lab';
+ });
+ useEffect(()=>{
+   const onHash=()=>{
+     const section=sections.find(section=>section===location.hash.slice(1));
+     if(section)setActive(section);
+   };
+   window.addEventListener('hashchange',onHash);
+   return()=>window.removeEventListener('hashchange',onHash);
+ },[]);
  useEffect(()=>{
    let active=true;
    void browser.runtime.sendMessage({type:'GET_SETTINGS'}).then((reply:{settings?:any})=>{
@@ -39,16 +53,18 @@ function FileWorkbench(){
      </div>
    </header>
    <nav aria-label="文件翻译功能" className="pit-workbench-nav">
-     <a href="#document-lab">文档 · 图片 OCR</a>
-     <a href="#batch-file-lab">多文件批量</a>
-     <a href="#subtitle-file-lab">SRT / VTT / ASS 字幕</a>
-     <a href="#pdf-bilingual-lab">双语 PDF · BabelDOC</a>
+     {([['document-lab','文档 · 图片 OCR'],['batch-file-lab','多文件批量'],
+       ['subtitle-file-lab','SRT / VTT / ASS 字幕'],
+       ['pdf-bilingual-lab','双语 PDF · BabelDOC']] as const).map(([id,label])=>
+         <a key={id} href={'#'+id} aria-current={active===id?'page':undefined}
+           onClick={()=>setActive(id)}>{label}</a>)}
    </nav>
-   <p className="pit-workbench-engine" role="status">{engine}。所有模块共享当前 PIT 扩展设置，不会调用旧版独立翻译平台。</p>
-   <div id="document-lab" className="pit-workbench-module"><DocumentLab/></div>
-   <div id="batch-file-lab" className="pit-workbench-module"><BatchFileLab/></div>
-   <div id="subtitle-file-lab" className="pit-workbench-module"><SubtitleFileLab/></div>
-   <div id="pdf-bilingual-lab" className="pit-workbench-module"><PdfBilingualLab/></div>
+   <p className="pit-workbench-engine" role="status">{engine}。当前工具属于 PIT 扩展，设置与翻译引擎相互共用。</p>
+   <section id={active} className="pit-workbench-module" aria-label="当前翻译工具">
+     {active==='document-lab'?<DocumentLab/>:
+      active==='batch-file-lab'?<BatchFileLab/>:
+      active==='subtitle-file-lab'?<SubtitleFileLab/>:<PdfBilingualLab/>}
+   </section>
    <footer>高保真 BabelDOC / Whisper 需要真实就绪的独立服务。普通图片覆盖不等于语义补绘；所有文件处理结果必须由用户审查。</footer>
  </main>;
 }
