@@ -114,3 +114,20 @@
 .pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])>.pit-flow-translation{
  display:block !important;font-size:clamp(18px,2vw,30px) !important;
 }
+
+/* Explicit full-page reading translates controls as inline bilingual labels;
+   the host control keeps its original DOM identity and event handlers. */
+.pit-translation.pit-inline-translation{
+ display:inline !important;box-sizing:border-box !important;width:auto !important;
+ min-width:0 !important;max-width:100% !important;white-space:normal !important;
+ background:transparent !important;border:0 !important;
+ padding:0 !important;margin:0 0 0 .4ch !important;
+ font-size:.9em !important;line-height:inherit !important;font-weight:400 !important;
+ color:inherit !important;opacity:.85;
+}
+.pit-original-concealed:is(a,button,[role="button"]):not(li):not(td):not(th){
+ display:inline !important;font-size:0 !important;
+}
+.pit-original-concealed:is(a,button,[role="button"])>.pit-inline-translation{
+ display:inline !important;font-size:14px !important;
+}
