@@ -59,6 +59,8 @@ async def main():
                 assert actual.get("ok") is True,actual
                 assert actual.get("status") in (
                     "available","downloadable","downloading","unavailable"),actual
+                assert actual.get("code") not in ("no_response","status_timeout"), (
+                    "Chrome native model diagnostic was not routed to offscreen:",actual)
                 print("REAL CHROME OFFSCREEN Translator availability:",
                       actual.get("status"),actual.get("reason",""),
                       flush=True)
