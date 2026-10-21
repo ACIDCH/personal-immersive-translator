@@ -239,11 +239,12 @@ async function verifyLocalAsr(token){
     throw new TranslationError('当前本机 Whisper 服务使用未经批准的实验模式');
 }
 async function verifyCloudAsr(settings){
- const raw=String(settings.cloudEndpoint||''),token=String(settings.cloudToken||'');
+ const raw=String(settings.cloudAsrEndpoint||settings.cloudEndpoint||'');
+ const token=String(settings.cloudAsrToken||settings.cloudToken||'');
  if(token.length<16)throw new TranslationError('先在插件设置中配置 PIT 云端访问令牌');
  let url;
  try{url=new URL(raw);}catch{
-  throw new TranslationError('云端语音需要先部署 PIT Cloudflare Worker 并填写 HTTPS 地址');
+  throw new TranslationError('云端语音需要先部署 Whisper/Worker 服务并填写独立 HTTPS 地址');
  }
  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)
   throw new TranslationError('云端语音服务只接受已配置的纯 HTTPS 地址');
@@ -259,7 +260,7 @@ async function verifyCloudAsr(settings){
   if(!capabilities.ready||capabilities.routes?.asr!=='ready')
    throw Error('ASR model unavailable');
  }catch{
-  throw new TranslationError('PIT 云端语音模型不可用：请确认 Worker 已部署、AI 已绑定、访问令牌正确');
+  throw new TranslationError('PIT 云端语音模型不可用：请确认 ASR 服务已部署、模型可用且令牌正确');
  }
  return {endpoint:url.toString(),token};
 }
