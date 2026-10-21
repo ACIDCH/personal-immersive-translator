@@ -124,7 +124,7 @@ test('immersive reading settings keep validated controls and never opt in to AI'
    inputTarget:'unknown'
  });
  assert.equal(invalid.webDisplay,'bilingual');
- assert.equal(invalid.webScope,'smart');
+ assert.equal(invalid.webScope,'full');
  assert.equal(invalid.translationTheme,'subtle');
  assert.equal(invalid.inputTarget,'en');
 });
