@@ -195,6 +195,72 @@ async def main():
                 await popup.get_by_role("button",name="恢复原文").click()
                 await target.locator(".pit-translation").wait_for(state="detached",timeout=12000)
                 print("PASS: WXT React restores original DOM")
+                # Philips-like live career landing pages put display headlines
+                # inside a fixed grid column alongside form controls. PIT must
+                # translate only the headline, not turn its parent into a
+                # full-width translation banner or concatenate form labels.
+                landing="https://careers.philips.com/pit-responsive-hero-fixture"
+                async def serve_landing(route):
+                    await route.fulfill(status=200,content_type="text/html",body='''<!doctype html>
+                    <html lang="en"><head><style>
+                      body{margin:0;font-family:Arial,sans-serif}
+                      .hero{display:grid;grid-template-columns:50% 50%;width:100%;
+                        padding:45px;box-sizing:border-box;background:#2b6065}
+                      .hero-column{min-width:0;color:#fff}
+                      .hero h1{font-size:46px;line-height:1.2;margin:0;max-width:450px}
+                      .search-panel{display:flex;gap:10px;margin-top:20px}
+                      .search-panel input,.search-panel button{min-width:0;max-width:160px}
+                    </style></head><body>
+                    <header><nav>Working At Philips</nav></header>
+                    <main><section class="hero">
+                    <div class="hero-column">
+                      <h1 id="hero-title"><span>What you choose to do</span>
+                      with your career matters</h1>
+                      <div class="search-panel" role="search">
+                        <label>Search for job title<input aria-label="Job title" placeholder="Search for job title"></label>
+                        <label>Enter location<input aria-label="Location" placeholder="Enter location"></label>
+                        <button>Search Jobs</button>
+                      </div>
+                    </div><div aria-hidden="true">Player photo</div>
+                    </section>
+                    <section><p id="body-copy">It's not just a job when you're
+                      doing the work of your life.</p></section></main></body></html>''')
+                await context.route(landing,serve_landing)
+                hero=await context.new_page()
+                await hero.goto(landing);await hero.bring_to_front()
+                await popup.get_by_role('button',name='翻译当前网页').click()
+                await hero.locator('#hero-title > .pit-flow-translation').wait_for(timeout=18000)
+                hero_layout=await hero.evaluate("""()=>{
+                  const title=document.querySelector('#hero-title');
+                  const trans=title.querySelector('.pit-flow-translation');
+                  const column=document.querySelector('.hero-column');
+                  const form=document.querySelector('.search-panel');
+                  const rs=trans.getBoundingClientRect(),cs=column.getBoundingClientRect();
+                  return {titleInside:trans.parentElement===title,
+                    translated:trans.textContent,
+                    background:getComputedStyle(trans).backgroundColor,
+                    border:getComputedStyle(trans).borderLeftWidth,
+                    columnWidth:cs.width,
+                    translationWidth:rs.width,
+                    formTranslated:form.querySelectorAll('.pit-translation').length,
+                    searchButtons:form.querySelectorAll('button').length,
+                    overflow:document.documentElement.scrollWidth-innerWidth
+                  };
+                }""")
+                assert hero_layout['titleInside'],hero_layout
+                assert hero_layout['translated'].startswith('译文:What you choose'),hero_layout
+                assert hero_layout['formTranslated']==0 and hero_layout['searchButtons']==1,hero_layout
+                assert hero_layout['translationWidth']<=hero_layout['columnWidth']+2,hero_layout
+                assert hero_layout['overflow']<=2,hero_layout
+                assert hero_layout['border']=='0px',hero_layout
+                assert hero_layout['background'] in ('rgba(0, 0, 0, 0)','transparent'),hero_layout
+                await popup.get_by_role('button',name='恢复原文').click()
+                await hero.locator('#hero-title > .pit-flow-translation').wait_for(
+                  state='detached',timeout=8000)
+                await hero.close();await target.bring_to_front()
+                print('PASS: career hero bilingual translation stays inside headline column; form untouched')
+
+
 
                 await target.bring_to_front()
                 await popup.get_by_role("button",name="设置与诊断").click()
