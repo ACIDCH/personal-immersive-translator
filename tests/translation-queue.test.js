@@ -67,3 +67,46 @@ test('a failing public web slice does not misreport a completed article',async()
  /incomplete sub-batch/);
  assert.equal(q.waiting,0);
 });
+
+test('429 retry is bounded and releases the queue for captions while the article waits',async()=>{
+ const queue=new PriorityTranslationQueue();
+ const events=[];let attempts=0;
+ const request=translateKeylessSliced(queue,['One financial paragraph'],{
+  requestContext:'article'
+ },async parts=>{
+  attempts++;events.push('article-'+attempts);
+  if(attempts===1){
+   const err=Error('Google HTTP 429');err.status=429;throw err;
+  }
+  return parts.map(x=>'译文:'+x);
+ });
+ await new Promise(r=>setTimeout(r,100));
+ const video=queue.enqueue(async()=>{events.push('video');return true;},{context:'video'});
+ assert.equal(await video,true);
+ assert.deepEqual(await request,['译文:One financial paragraph']);
+ assert.deepEqual(events,['article-1','video','article-2']);
+ assert.equal(attempts,2);
+});
+test('Retry-After beyond bounded window is honored without repeated public requests',async()=>{
+ const queue=new PriorityTranslationQueue();
+ let attempts=0;
+ await assert.rejects(translateKeylessSliced(queue,['Hello'],{
+  requestContext:'article'
+ },async()=>{
+  attempts++;
+  const err=Error('HTTP 429');err.status=429;err.retryAfterMs=60000;
+  throw err;
+ }),e=>e.status===429);
+ assert.equal(attempts,1);
+});
+test('invalid or authorization errors are never retried by the free MT queue',async()=>{
+ let attempts=0;
+ const queue=new PriorityTranslationQueue();
+ await assert.rejects(translateKeylessSliced(queue,['Hello'],{
+  requestContext:'article'
+ },async()=>{
+  attempts++;
+  const e=Error('HTTP 401');e.status=401;throw e;
+ }),/401/);
+ assert.equal(attempts,1);
+});
