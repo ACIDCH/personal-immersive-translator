@@ -101,7 +101,13 @@
     const control=scope==='full'&&el.matches(FULL_CONTROLS);
     // Full-page candidates include site-header headings and labels. The
     // text collector must not silently re-exclude them as in smart mode.
-    const exclusions=scope==='full'?SKIP.replace(',button,nav,footer,header',''):SKIP;
+    // Only explicit clickable controls and semantic headings opt out of the
+    // header/nav exclusion. Generic header paragraphs are still skipped to
+    // avoid translating navigation groups as article body text.
+    const allowSiteChrome=control||(scope==='full'&&
+      el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]'));
+    const exclusions=allowSiteChrome
+      ?SKIP.replace(',button,nav,footer,header',''):SKIP;
     const parts=[];let textNode,rawChars=0,truncated=false;
     while((textNode=walker.nextNode())) {
       const parent=textNode.parentElement;
