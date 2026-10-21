@@ -142,8 +142,29 @@ export function mountProductSettings({form,get,save,view}){
  const files=section('files','文件 / PDF / OCR','复用现有 File Lab、PDF.js、Tesseract、字幕导入。高保真 PDF / ASR 需真实部署。');control(files,'fileProviderId','文件翻译服务','跟随全局或使用独立常规服务。',choices);button(files,'打开文件与图片工作台',()=>chrome.tabs.create({url:chrome.runtime.getURL('file-lab.html')}));
  const sync=section('sync','账号与加密同步','普通偏好按类同步；API Key、Token 与完整 AI Profiles 仅加密后上传。离线仍能翻译。');mountSync(sync,button,row,report);
  const help=section('help','快捷键 / 帮助 / 关于','Alt+A 翻译与恢复；Alt+W 整页。Shift+悬停与输入框三连空格需在阅读设置启用。');button(help,'浏览器快捷键管理',()=>chrome.tabs.create({url:'chrome://extensions/shortcuts'}));help.append(el('p','PIT '+chrome.runtime.getManifest().version+' · Draft 测试版 · MIT；沿用 WXT / React / PDF.js / Tesseract，未复制参考产品资产。'));
- const nav=document.querySelector('.options-nav');nav.replaceChildren();const items=[['baseSettings','基础与语言'],['services','翻译服务中心'],['browserModelSettings','本地语言包'],['standardKeys','服务凭据'],['aiKeys','AI 模型配置'],['experts','AI 专家'],['terms','术语与上下文'],['text','文本翻译'],['interaction','输入 / 悬停 / 悬浮球'],['readingSettings','阅读 / 样式 / 交互'],['video','视频字幕'],['files','文件 / 图片 OCR'],['cloudPdfSettings','云端 PDF'],['privacySettings','站点与隐私'],['advanced','高级与性能'],['sync','账号与同步'],['backupSettings','导入 / 导出'],['help','快捷键 / 关于']];
- const find=el('input','',{type:'search',placeholder:'搜索设置 / Search'});nav.append(find);for(const [id,title] of items)nav.append(el('a',title,{href:'#'+id}));
+ // Organized by the user journey instead of one flat 18-item list.
+ // Keep original section IDs and deep links stable for Popup/FileLab callers.
+ const nav=document.querySelector('.options-nav');nav.replaceChildren();
+ const navGroups=[
+  ['01 · 基础与服务',[
+   ['baseSettings','基础与语言'],['services','翻译服务中心'],['browserModelSettings','本地语言包'],
+   ['standardKeys','服务凭据'],['aiKeys','AI 模型配置'],['experts','AI 专家']]],
+  ['02 · 翻译场景',[
+   ['text','文本翻译'],['readingSettings','网页阅读与样式'],['interaction','输入 / 悬停 / 悬浮球'],
+   ['video','视频字幕'],['files','文档与图片 OCR'],['cloudPdfSettings','高保真 PDF']]],
+  ['03 · 规则与性能',[
+   ['terms','术语与上下文'],['privacySettings','站点与隐私'],['advanced','高级与性能']]],
+  ['04 · 数据与帮助',[
+   ['sync','账号与同步'],['backupSettings','导入 / 导出'],['help','快捷键 / 关于']]]
+ ];
+ const items=navGroups.flatMap(([,sections])=>sections);
+ const find=el('input','',{type:'search',placeholder:'搜索设置 / Search'});nav.append(find);
+ for(const [heading,sections] of navGroups){
+  const group=el('div','',{className:'pit-options-nav-group'});
+  group.append(el('p',heading,{className:'pit-options-nav-heading'}));
+  for(const [id,title] of sections)group.append(el('a',title,{href:'#'+id}));
+  nav.append(group);
+ }
  function navigate(){
   // Deep links may point to an obsolete section after an extension upgrade.
   // Never hide every settings panel when the hash is unknown.
