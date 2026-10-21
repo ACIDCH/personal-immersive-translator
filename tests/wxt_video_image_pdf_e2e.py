@@ -142,6 +142,12 @@ async def main():
         assert native['overlayVisible'] is False,(
           'Native replacement must not display a second external overlay:',native)
         report['video_cues']='pass'
+        # Popup diagnostics must reflect actual completed translations rather
+        # than treating "subtitle session started" as successful translation.
+        await video.bring_to_front()
+        await popup.get_by_role('button',name='检查字幕状态').click()
+        await popup.get_by_text('译文缓存 2 条',exact=False).wait_for(timeout=10000)
+        report['caption_diagnostics']='pass'
         await popup.get_by_role('button',name='停止字幕翻译').click()
         await video.locator('.pit-caption-overlay').wait_for(state='detached',timeout=10000)
         restored=await video.evaluate("""()=>{
