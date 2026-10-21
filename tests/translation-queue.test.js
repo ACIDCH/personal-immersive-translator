@@ -19,7 +19,7 @@ test('video subtitle requests go ahead of queued document batches, without preem
 test('failed provider does not block subsequent translation and no paid route is invoked',async()=>{
  const q=new PriorityTranslationQueue();
  await assert.rejects(q.enqueue(async()=>{throw Error('HTTP 429');}),/429/);
- assert.equal(await q.enqueue(async()=>['真实译文']),['真实译文']);
+ assert.deepEqual(await q.enqueue(async()=>['真实译文']),['真实译文']);
  assert.equal(q.busy,false);
 });
 test('public queue bounds pending memory and signals backpressure',async()=>{
