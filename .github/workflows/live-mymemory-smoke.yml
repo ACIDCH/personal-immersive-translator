@@ -6,6 +6,7 @@ on:
       - 'src/lib/providers.js'
       - 'src/lib/settings.js'
       - 'benchmarks/live_mymemory_provider_probe.mjs'
+      - 'benchmarks/live_google_free_probe.mjs'
       - '.github/workflows/live-mymemory-smoke.yml'
   workflow_dispatch:
 
@@ -24,10 +25,25 @@ jobs:
       - name: Call one real publicly documented low-volume MT endpoint (inconclusive allowed)
         continue-on-error: true
         run: node benchmarks/live_mymemory_provider_probe.mjs
+      - name: Observe the selected zero-key Google public adapter (non-gating)
+        continue-on-error: true
+        run: node benchmarks/live_google_free_probe.mjs
       - name: Report external truth separately from mock builds
         if: always()
         run: |
           node -e "const f=require('fs');const x=f.existsSync('live-mymemory-observation.json')?JSON.parse(f.readFileSync('live-mymemory-observation.json')):{status:'NOT_EXECUTED'};console.log('EXTERNAL FREE MT GATE:',x.status);f.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'### External live provider: '+x.status+'\\n\\nThis step is non-gating because third-party rate limits/network may block GitHub runners; a blocked test is not a pass.\\n')"
+      - name: Report Google public adapter live result explicitly
+        if: always()
+        run: |
+          node -e "const f=require('fs');const x=f.existsSync('live-google-free-observation.json')?JSON.parse(f.readFileSync('live-google-free-observation.json')):{status:'NOT_EXECUTED'};console.log('ACTUAL GOOGLE-FREE MT:',x.status);f.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'### Google public MT (non-gating): '+x.status+'\\n\\nPublic endpoint may rate-limit CI; a completed job alone is not provider readiness.\\n')"
+      - name: Upload Google public HTTP verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-google-free-mt-verdict
+          path: live-google-free-observation.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload aggregate no-content verdict
         if: always()
         uses: actions/upload-artifact@v4
