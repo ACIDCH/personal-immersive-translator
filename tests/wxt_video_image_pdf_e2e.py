@@ -114,15 +114,47 @@ async def main():
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=10000)
         await video.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
-        await video.locator('.pit-caption-translated').get_by_text(
-          '译文:A second overlapping lecture subtitle',exact=False).wait_for(timeout=22000)
-        both=await video.locator('.pit-caption-translated').inner_text()
-        assert '译文:Hello world from the lecture video' in both,both
-        assert '译文:A second overlapping lecture subtitle' in both,both
-        report['video_cues']='pass'
+        # PIT's default mode changes native VTTCue.text inside the player.
+        # An external overlay is deliberately hidden after both native cues
+        # are translated; checking .pit-caption-translated was a V1 false
+        # negative and did not prove the required in-player replacement.
+        expected=[
+          '译文:Hello world from the lecture video',
+          '译文:A second overlapping lecture subtitle'
+        ]
+        await video.wait_for_function("""expected=>{
+          const track=document.getElementById('lecture')?.textTracks?.[0];
+          const cues=track?.cues?[...track.cues]:[];
+          return cues.length===expected.length &&
+            cues.every((cue,i)=>cue.text===expected[i]);
+        }""",expected,timeout=22000)
+        native=await video.evaluate("""()=>{
+          const video=document.getElementById('lecture');
+          const overlay=document.querySelector('.pit-caption-overlay');
+          return {
+            mode:video.textTracks[0].mode,
+            lines:[...video.textTracks[0].cues].map(c=>c.text),
+            overlayVisible:Boolean(overlay && getComputedStyle(overlay).display!=='none')
+          };
+        }""")
+        assert native['lines']==expected,native
+        assert native['mode']=='showing',native
+        assert native['overlayVisible'] is False,(
+          'Native replacement must not display a second external overlay:',native)
+        report['video_cues']='pass (two native overlapping cue replacements; no external overlay)'
         await popup.get_by_role('button',name='停止字幕翻译').click()
         await video.locator('.pit-caption-overlay').wait_for(state='detached',timeout=10000)
-        report['video_stop']='pass'
+        restored=await video.evaluate("""()=>{
+          const v=document.getElementById('lecture');
+          return {mode:v.textTracks[0].mode,
+            lines:[...v.textTracks[0].cues].map(c=>c.text)};
+        }""")
+        assert restored['mode']=='showing',restored
+        assert restored['lines']==[
+          'Hello world from the lecture video',
+          'A second overlapping lecture subtitle'
+        ],restored
+        report['video_stop']='pass (both native originals restored)'
         print('WXT NATIVE VIDEO CAPTIONS AND STOP: PASS',flush=True)
 
         filepage=await ctx.new_page()
