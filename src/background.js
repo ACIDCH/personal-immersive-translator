@@ -105,6 +105,17 @@ async function nativeOffscreenReady(){
  }
  throw new TranslationError('PIT 离屏翻译执行模块没有响应；请在扩展管理页重新加载插件并查看后台日志。');
 }
+async function askOffscreen(message,timeoutMs=12000){
+ let timer;
+ try{
+  return await Promise.race([
+   chrome.runtime.sendMessage({target:'offscreen',...message}),
+   new Promise((_,reject)=>{timer=setTimeout(
+    ()=>reject(new TranslationError('浏览器离线翻译引擎响应超时；请重新载入扩展、检查 Chrome 语言包，或手动改选在线常规服务')),
+    timeoutMs);})
+  ]);
+ }finally{clearTimeout(timer);}
+}
 function fallbackNativeSource(text,pageSource){
  const s=String(text||'');
  if(/[ぁ-ヿ]/u.test(s))return 'ja';
@@ -142,10 +153,10 @@ async function runStandardProvider(texts,opts){
   if(source===opts.target)out.splice(i,part.length,...part);
   else{
    await nativeOffscreenReady();
-   const result=await chrome.runtime.sendMessage({
-     target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_TRANSLATE',
+   const result=await askOffscreen({
+     type:'PIT_OFFSCREEN_BROWSER_TRANSLATE',
      texts:part,source,target:opts.target
-   });
+   },30000);
    if(!result?.ok||!Array.isArray(result.translations)||result.translations.length!==part.length)
     throw new TranslationError(result?.error||'Chrome 内置翻译服务暂不可用，请在 PIT 设置下载语言包或切换服务商');
    out.splice(i,part.length,...result.translations);
@@ -412,9 +423,10 @@ async function handle(message, sender) {
       return {status:'unavailable',runtime:'offscreen',
         code:'web_api_absent',reason:'Chrome Translator API 在 PIT 离屏执行环境中不可用'};
     }
-    const reply=await chrome.runtime.sendMessage({
-      target:'offscreen',type:'PIT_OFFSCREEN_BROWSER_STATUS',source,target
-    });
+    let reply;
+    try{reply=await askOffscreen({type:'PIT_OFFSCREEN_BROWSER_STATUS',source,target},8000);}
+    catch(error){return {status:'unavailable',runtime:'offscreen',
+      code:'status_timeout',reason:String(error.message||error)};}
     if(!reply?.ok)return {status:'unavailable',runtime:'offscreen',
       reason:String(reply?.error||'离屏语言包状态请求没有返回结果').slice(0,200),
       code:String(reply?.code||(reply===undefined?'no_response':'unavailable'))};
