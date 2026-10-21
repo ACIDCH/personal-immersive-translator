@@ -37,11 +37,11 @@
 <p class="muted">目标语言使用上方“目标语言”设置；例如英语→中文。自动识别原文仍通过 Chrome 的语言检测功能完成。</p>
 <div class="buttons"><button type="button" id="nativeModelCheck">检查语言包可用性</button>
 <button type="button" id="nativeModelDownload">主动下载／启用选中语言包</button></div>
-<p class="muted">如内置语言包不可用，可由你主动选择在线备用方案。此服务会将需要翻译的原文发送到 MyMemory；有第三方隐私及每日额度限制，绝不自动切换。</p>
+<p class="muted">如果主动选择 Chrome 本地服务但语言包不可用，可以在服务中心测试 Google 公共免费翻译或 MyMemory 后手动切换。两项在线服务都会上传你选择翻译的文本；不会静默从本机切换到远程，也不会自动启用 AI。</p>
 <div class="buttons"><button type="button" id="nativeFallbackMyMemory">改用 MyMemory 在线免 Key 翻译（明确授权发送原文）</button></div>
 <p id="nativeModelStatus" role="status" aria-live="polite" class="muted"></p>
 </section>
-<section id="standardKeys" class="panel"><h2>常规翻译凭据</h2><p class="muted">Chrome 无法使用内置模型时可手动选用 MyMemory：它会向第三方传输原文；不适合机密内容或长文档。PIT 设置了每天 4,500 字符的本地上限，服务端可能有更严格限制。不自动切换在线服务，也不自动消耗 AI 额度。</p><p class="muted">PIT 云端模型需要先部署 Cloudflare Worker，并绑定 Workers AI。未部署时不能使用；本模式不要求本机 Python。</p><label>PIT 云端 Worker HTTPS 地址<input name="cloudEndpoint" type="url" spellcheck="false" placeholder="https://pit-translate.yourname.workers.dev"></label><label>PIT 云端访问令牌（Worker PIT_ACCESS_TOKEN）<input name="cloudToken" type="password" autocomplete="off" placeholder="至少 16 个随机字符"></label>
+<section id="standardKeys" class="panel"><h2>常规翻译凭据</h2><p class="muted">新安装默认 Google 公共免 Key 在线翻译，原文会发送至 Google，且该非官方接口可能被限流。MyMemory 是另一项需要用户主动选择的在线服务，具有每日字符限额。Chrome 本地 Translator 需要真实语言包才可用。以下 Microsoft / Google Cloud / DeepL 等官方 API 需要各自的凭据；填写 Key 仅代表已配置，不代表连接成功。自动翻译不会自行切换到付费 AI。</p><p class="muted">PIT 云端模型需要先部署 Cloudflare Worker，并绑定 Workers AI。未部署时不能使用；本模式不要求本机 Python。</p><label>PIT 云端 Worker HTTPS 地址<input name="cloudEndpoint" type="url" spellcheck="false" placeholder="https://pit-translate.yourname.workers.dev"></label><label>PIT 云端访问令牌（Worker PIT_ACCESS_TOKEN）<input name="cloudToken" type="password" autocomplete="off" placeholder="至少 16 个随机字符"></label>
 <label>独立云端 Whisper / Railway ASR HTTPS 地址（可选；不影响常规网页翻译）<input name="cloudAsrEndpoint" type="url" spellcheck="false" placeholder="https://your-pit-asr.up.railway.app"></label>
 <label>独立云端 ASR Bearer 令牌（PIT_CLOUD_ASR_TOKEN）<input name="cloudAsrToken" type="password" autocomplete="off" placeholder="最少 16 字符；仅保存在插件本机设置"></label>
 <label>Microsoft Key<input name="microsoftKey" type="password" autocomplete="off" placeholder="仅存于本地浏览器"></label>
