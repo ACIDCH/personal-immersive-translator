@@ -80,7 +80,10 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(opening,1);
  assert.equal(network,0);
  assert.deepEqual(requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').map(x=>x.source),['fr','de']);
- assert.deepEqual(requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').map(x=>x.target),['zh','zh']);
+ assert.deepEqual(requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').map(x=>x.target),['offscreen','offscreen'],
+  'The target field must route to the offscreen document');
+ assert.deepEqual(requests.filter(x=>x.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE').map(x=>x.targetLanguage),['zh','zh'],
+  'The targetLanguage field must retain the actual requested language');
  const prefs=await call({type:'PIT_PUBLIC_PREFERENCES'});
  assert.equal(prefs.ok,true);
  assert.equal(prefs.preferences.standardProvider,'browser');
@@ -125,6 +128,8 @@ test('MV3 background routes default browser MT to offscreen with real CLD hints,
  assert.equal(diag.ok,true,JSON.stringify(diag));
  assert.equal(diag.status,'downloadable');
  assert.equal(diag.runtime,'offscreen');
+ assert.equal(requests.at(-1).target,'offscreen');
+ assert.equal(requests.at(-1).targetLanguage,'zh');
  const actualProbe=await call({type:'PIT_BROWSER_PROBE',source:'en',target:'zh'},
    {id:chrome.runtime.id,url:chrome.runtime.getURL('pit-options.html')});
  assert.equal(actualProbe.ok,true,JSON.stringify(actualProbe));
