@@ -1,4 +1,4 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {browser} from '#imports';
 import {createRoot} from 'react-dom/client';
 import {DocumentLab} from '../../../shared-ui/DocumentLab';
@@ -12,6 +12,7 @@ import '../../../shared-ui/document-lab.css';
 // Tabs are internal views; legacy tools stay mounted only when selected.
 function FileWorkbench(){
  const [engine,setEngine]=useState('正在检查当前配置…');
+ const serviceRequestVersion=useRef(0);
  const [selectedProvider,setSelectedProvider]=useState('browser');
  const [settings,setSettings]=useState<any>(null);
  const [serviceBusy,setServiceBusy]=useState(false);
@@ -23,7 +24,9 @@ function FileWorkbench(){
  };
  const services=['browser','mymemory','microsoft','google','deepl','cloud','libre'];
  async function refreshService(){
+   const version=++serviceRequestVersion.current;
    const reply=await browser.runtime.sendMessage({type:'GET_SETTINGS'});
+   if(version!==serviceRequestVersion.current)return;
    const s=reply?.settings;
    if(!s)throw Error('无法读取 PIT 全局翻译设置');
    const id=s.fileProviderId&&s.fileProviderId!=='inherit'
@@ -112,7 +115,8 @@ function FileWorkbench(){
    load();
    browser.storage.onChanged.addListener(changed);
    window.addEventListener('focus',load);
-   return()=>{mounted=false;browser.storage.onChanged.removeListener(changed);
+   return()=>{mounted=false;serviceRequestVersion.current++;
+     browser.storage.onChanged.removeListener(changed);
      window.removeEventListener('focus',load);};
  },[]);
  return <main className="pit-file-workbench">
@@ -124,9 +128,9 @@ function FileWorkbench(){
        </div>
      </div>
      <div className="pit-workbench-actions">
-       <a href="/pit-options.html#services">翻译服务及测试</a>
-       <a href="/pit-options.html#files">文件引擎设置</a>
-       <a href="/pit-options.html#sync">账号与同步</a>
+       <a href="/pit-options.html#services" target="_blank" rel="noopener noreferrer">翻译服务及测试</a>
+       <a href="/pit-options.html#files" target="_blank" rel="noopener noreferrer">文件引擎设置</a>
+       <a href="/pit-options.html#sync" target="_blank" rel="noopener noreferrer">账号与同步</a>
      </div>
    </header>
    <nav aria-label="文件翻译功能" className="pit-workbench-nav">
@@ -148,7 +152,8 @@ function FileWorkbench(){
          onClick={()=>void testCurrentService()}>
          {serviceBusy?'正在处理…':'检测当前服务'}
        </button>
-       <a href={'/pit-options.html#services/'+selectedProvider}>服务配置与完整测试</a>
+       <a href={'/pit-options.html#services/'+selectedProvider}
+         target="_blank" rel="noopener noreferrer">服务配置与完整测试</a>
      </div>
      <p className="pit-workbench-engine" role="status">{engine}。选择此处默认服务会同步网页、视频和文件的新任务；不会暗中使用付费 AI。</p>
      {diagnostic&&<p className="pit-workbench-diagnostic" role="status">{diagnostic}</p>}
