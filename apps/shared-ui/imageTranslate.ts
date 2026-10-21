@@ -107,7 +107,7 @@ export async function inplaceImagePng(
     if(!ctx)throw Error('Canvas 不可用');
     ctx.drawImage(bitmap,0,0);
     const original=ctx.getImageData(0,0,width,height);
-    const boxes=validateOcrOverlayRegions(regions,width,height).map((b,i)=>{
+    const boxes=validateOcrOverlayRegions(regions,width,height).map((b:Rect,i:number)=>{
       if(!translations[i]?.trim())throw Error('文字区域译文为空');
       return {...b,text:translations[i]};
     });
