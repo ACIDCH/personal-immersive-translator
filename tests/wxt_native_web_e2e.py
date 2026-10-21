@@ -159,14 +159,16 @@ async def main():
                 popup.on("pageerror",lambda e: errors.append("popup:"+str(e)))
                 await popup.goto(f"chrome-extension://{eid}/popup.html")
                 await popup.get_by_role("button",name="翻译当前网页").wait_for(timeout=15000)
-                # Trusted WXT popup must be able to run the real keyless
-                # provider diagnostic instead of the former Options-only
-                # rejection. No paid model or personal webpage is sent.
-                await popup.get_by_role("button",name="测试当前翻译服务").click()
-                await popup.wait_for_function("""()=>
-                  ['Chrome 本地模型未就绪','Chrome 本地语言包可用'].some(text=>
-                    document.body.textContent.includes(text))
-                """,timeout=30000)
+                # Browser/MyMemory have an explicit in-popup free probe;
+                # configured Microsoft requires its own precise service card.
+                # Ensure the popup preserves that provider instead of silently
+                # testing a different browser-native model.
+                async with context.expect_page(timeout=12000) as opened_service:
+                    await popup.get_by_role("button",name="测试当前翻译服务").click()
+                service_page=await opened_service.value
+                await service_page.wait_for_load_state()
+                assert '#services/microsoft' in service_page.url,service_page.url
+                await service_page.close()
                 assert '仅设置界面' not in await popup.locator('.pit-quick-preferences').inner_text()
                 target=await context.new_page()
                 target.on("pageerror",lambda e:errors.append("target:"+str(e)))
