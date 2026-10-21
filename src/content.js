@@ -202,11 +202,18 @@
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
     const heading=el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]');
     const inline=scope==='full'&&el.matches(FULL_CONTROLS);
-    const node=document.createElement(heading||inline?'span':'div');
+    const withinBlock=el.matches('p,blockquote,figcaption,[role="paragraph"]');
+    const contained=heading||inline||withinBlock||el.matches('li,td,th');
+    const node=document.createElement(contained?'span':'div');
     node.className='pit-translation'+(isAI?' pit-ai':'')+
       (heading?' pit-flow-translation':'')+(inline?' pit-inline-translation':'');
     node.textContent=prefs.longParagraphLineBreak?translation.replace(/([.!?。！？])\s*/g,'$1\n'):translation;
     applyReadingStyle(node,prefs);
+    // A paragraph inside a CSS grid must remain ONE grid item. Capture its
+    // original font size before translate-only mode collapses original glyphs.
+    if(withinBlock){
+      node.style.setProperty('font-size',getComputedStyle(el).fontSize,'important');
+    }
     if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
     if(theme==='none')node.style.setProperty('background-color','transparent','important');
     if(prefs.sameLanguageHighlight&&['zh','ja','ko'].includes(voiceTarget))node.style.setProperty('background-color',prefs.translationBgColor,'important');
@@ -214,7 +221,7 @@
     node.dataset.theme=theme;
     el.classList.add('pit-source-block');
     el.classList.toggle('pit-original-concealed',display==='translation-only');
-    if(heading||inline||el.matches('li,td,th')){
+    if(contained){
       if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);
     }else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     processed.set(el,{source,node,translation});
