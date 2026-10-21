@@ -90,19 +90,21 @@
             this.put(cue.key,known);restored++;
             continue;
           }
-          if(!distinct.has(cue.text))distinct.set(cue.text,[]);
-          distinct.get(cue.text).push(cue);
+          const id=this.deduplicateText?cue.text:cue.key;
+          if(!distinct.has(id))distinct.set(id,{text:cue.text,cues:[]});
+          distinct.get(id).cues.push(cue);
         }
         if(!distinct.size)return restored;
-        const texts=[...distinct.keys()];
+        const entries=[...distinct.values()];
+        const texts=entries.map(entry=>entry.text);
         const translations=await request(texts);
         if(!Array.isArray(translations)||translations.length!==texts.length||
            translations.some(t=>typeof t!=='string'||!t.trim()))
           throw new Error('Caption translations did not match the source cues');
-        texts.forEach((text,index)=>{
+        entries.forEach(({text,cues},index)=>{
           const translation=translations[index];
           if(this.deduplicateText)this.rememberText(text,translation);
-          for(const cue of distinct.get(text))this.put(cue.key,translation);
+          for(const cue of cues)this.put(cue.key,translation);
         });
         return missing.length;
       }finally{
