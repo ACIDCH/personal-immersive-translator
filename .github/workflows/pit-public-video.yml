@@ -6,6 +6,12 @@ on:
       - 'benchmarks/public_video_real_probe.py'
       - '.github/workflows/pit-public-video.yml'
   workflow_dispatch:
+    inputs:
+      probe_bilibili:
+        description: 'Explicitly retry public Bilibili after previous HTTP 412 (no bypass)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +45,8 @@ jobs:
       - name: Observe actual authorized public-player visible captions with real Google-free MT
         id: live
         continue-on-error: true
+        env:
+          PIT_PUBLIC_BILIBILI_PROBE: ${{ inputs.probe_bilibili && '1' || '0' }}
         run: python benchmarks/public_video_real_probe.py
       - name: Distinguish genuine proof from public-site blockers
         if: always()

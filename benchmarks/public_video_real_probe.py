@@ -5,7 +5,7 @@ real Google public translation endpoint. No page interception, login, DRM bypass
 captions, external subtitle overlays or privileged streaming requests.
 A network-blocked or unavailable CC outcome is INCONCLUSIVE, not PASS.
 """
-import asyncio,json,time,tempfile
+import asyncio,json,time,tempfile,os
 from pathlib import Path
 from playwright.async_api import async_playwright
 
@@ -199,8 +199,11 @@ async def observe_native_public(ctx,popup):
           if(!sample)return null;
           v.currentTime=sample.startTime+Math.min(.3,(sample.endTime-sample.startTime)/3);
           v.pause();
+          const tests=cues.filter(c=>c.endTime-c.startTime>=.5 &&
+            /[A-Za-z]/.test(c.text)&&c.startTime<90).slice(0,5)
+            .map(c=>({startTime:c.startTime,endTime:c.endTime,original:c.text}));
           return {original:sample.text,startTime:sample.startTime,
-            endTime:sample.endTime,cueCount:cues.length};
+            endTime:sample.endTime,cueCount:cues.length,seekSamples:tests};
         }""")
         if not observed:
             row['caption_state']='NO_USABLE_PUBLIC_ENGLISH_CC_CUES'
@@ -235,6 +238,41 @@ async def observe_native_public(ctx,popup):
                     row['translation_state']='PROVIDER_OR_NATIVE_RENDER_ERROR'
                     break
             await asyncio.sleep(.7)
+        # Real publisher VTT and real provider: exercise seeking and common
+        # playback rates without fabricating cues or reporting mock passes.
+        row['seek_rate_checks']=[]
+        if row['translation_state']=='NATIVE_REPLACEMENT_OBSERVED':
+            for rate,sample in zip((.5,1.0,1.5,2.0),observed['seekSamples'][1:5]):
+                passed=False
+                try:
+                    await page.evaluate("""({rate,start,end})=>{
+                      const v=document.querySelector('video#video1');
+                      v.playbackRate=rate;
+                      v.currentTime=start+Math.min(.25,(end-start)/3);
+                      v.pause();
+                    }""",{'rate':rate,'start':sample['startTime'],
+                           'end':sample['endTime']})
+                    end_at=time.monotonic()+6
+                    while time.monotonic()<end_at:
+                        worked=await page.evaluate("""({start,original})=>{
+                          const v=document.querySelector('video#video1');
+                          const t=[...v.textTracks].find(x=>x.language?.split('-')[0]==='en');
+                          const cue=t?.cues&&[...t.cues].find(x=>
+                            Math.abs(x.startTime-start)<.001);
+                          const overlay=document.querySelector('.pit-caption-overlay');
+                          return t?.mode==='showing' && cue?.text!==original &&
+                            /[㐀-鿿]/.test(cue?.text||'') &&
+                            (!overlay||getComputedStyle(overlay).display==='none');
+                        }""",{'start':sample['startTime'],'original':sample['original']})
+                        if worked:
+                            passed=True
+                            break
+                        await asyncio.sleep(.5)
+                except Exception:
+                    passed=False
+                row['seek_rate_checks'].append({'speed':rate,'native_replacement':passed})
+        row['seek_rate_all_passed']=(len(row['seek_rate_checks'])==4 and
+            all(x['native_replacement'] for x in row['seek_rate_checks']))
         row['overlay_absent']=await page.evaluate("""()=>{
           const el=document.querySelector('.pit-caption-overlay');
           return !el || getComputedStyle(el).display==='none';
@@ -249,6 +287,19 @@ async def observe_native_public(ctx,popup):
           return !!cue && cue.text===original;
         }""",{'start':observed['startTime'],'original':observed['original']})
         row['restored_original_cue']=restored
+        if row['seek_rate_checks']:
+            all_restored=await page.evaluate("""samples=>{
+              const v=document.querySelector('video#video1');
+              const t=[...v.textTracks].find(x=>x.language?.split('-')[0]==='en');
+              return samples.every(s=>{
+                const cue=t?.cues&&[...t.cues].find(x=>
+                  Math.abs(x.startTime-s.startTime)<.001);
+                return cue?.text===s.original;
+              });
+            }""",observed['seekSamples'])
+            row['seek_cues_restored_on_stop']=all_restored
+            restored=restored and all_restored
+            row['restored_original_cue']=restored
         if row['translation_state']=='NATIVE_REPLACEMENT_OBSERVED' and not restored:
             row['translation_state']='STOP_FAILED'
         return row
@@ -290,7 +341,17 @@ async def main():
                 report['sites'].append(native)
                 print('PIT REAL PLAYER OBSERVATION: '+json.dumps(native,ensure_ascii=False),flush=True)
                 for item in PUBLIC:
-                    value=await observe(ctx,popup,item)
+                    if item[0]=='bilibili' and os.environ.get('PIT_PUBLIC_BILIBILI_PROBE')!='1':
+                        # Prior public CI repeatedly received HTTP 412. Never
+                        # hammer access-controlled hosts on every PR commit.
+                        value={'platform':'bilibili',
+                          'page_state':'SKIPPED_AFTER_PRIOR_HTTP_412',
+                          'previous_http_status':412,'current_http_status':None,
+                          'caption_state':'NOT_CHECKED','translation_state':'NOT_CHECKED',
+                          'provider':'google-free','real_page':False,'real_provider':False,
+                          'reason':'Requires explicit owner-selected probe from an accessible environment'}
+                    else:
+                        value=await observe(ctx,popup,item)
                     report['sites'].append(value)
                     print('PIT REAL PLAYER OBSERVATION: '+json.dumps(value,ensure_ascii=False),flush=True)
             finally:
