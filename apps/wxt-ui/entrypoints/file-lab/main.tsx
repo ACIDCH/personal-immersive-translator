@@ -60,11 +60,12 @@ function FileWorkbench(){
            onClick={()=>setActive(id)}>{label}</a>)}
    </nav>
    <p className="pit-workbench-engine" role="status">{engine}。当前工具属于 PIT 扩展，设置与翻译引擎相互共用。</p>
-   <section id={active} className="pit-workbench-module" aria-label="当前翻译工具">
-     {active==='document-lab'?<DocumentLab/>:
-      active==='batch-file-lab'?<BatchFileLab/>:
-      active==='subtitle-file-lab'?<SubtitleFileLab/>:<PdfBilingualLab/>}
-   </section>
+   {/* Keep each engine mounted while navigating: unmounting in-flight file
+       translation would discard progress/cancel controls and lost PDF state. */}
+   <section id="document-lab" className="pit-workbench-module" hidden={active!=='document-lab'}><DocumentLab/></section>
+   <section id="batch-file-lab" className="pit-workbench-module" hidden={active!=='batch-file-lab'}><BatchFileLab/></section>
+   <section id="subtitle-file-lab" className="pit-workbench-module" hidden={active!=='subtitle-file-lab'}><SubtitleFileLab/></section>
+   <section id="pdf-bilingual-lab" className="pit-workbench-module" hidden={active!=='pdf-bilingual-lab'}><PdfBilingualLab/></section>
    <footer>高保真 BabelDOC / Whisper 需要真实就绪的独立服务。普通图片覆盖不等于语义补绘；所有文件处理结果必须由用户审查。</footer>
  </main>;
 }
