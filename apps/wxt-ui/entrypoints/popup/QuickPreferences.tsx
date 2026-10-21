@@ -35,7 +35,7 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
  async function checkFreeProvider(){
    if(probeBusy||!settings)return;
    const provider=settings.standardProvider;
-   if(!['browser','mymemory'].includes(provider)){
+   if(!['browser','mymemory','google-free'].includes(provider)){
      setProbeResult('当前选择的服务需要在设置中心进行独立诊断；不会暗中切换免费或付费服务。');
      return;
    }
@@ -74,17 +74,17 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
      setProbeResult('服务诊断失败：'+String(error instanceof Error?error.message:error).slice(0,170));
    }finally{setProbeBusy(false);}
  }
- async function chooseOnlineFree(){
+ async function chooseOnlineFree(provider:'google-free'|'mymemory'='google-free'){
    if(probeBusy||!settings||!window.confirm(
-     '先用公开短句测试 MyMemory，再切换默认常规翻译服务。实际网页与字幕原文将发送至 MyMemory 第三方，且有使用额度限制。确认？'
+     '先用公开短句测试 '+(provider==='google-free'?'Google 公共免费翻译':'MyMemory')+'，确认可用后才切换。实际网页和字幕内容会发送至该在线服务；公共接口可能限流或失效。继续？'
    ))return;
-   setProbeBusy(true);setProbeResult('正在对 MyMemory 进行真实连通性和译文检查…');
+   setProbeBusy(true);setProbeResult('正在对 '+provider+' 进行真实连通性和译文检查…');
    try{
      const target=settings.target==='en'?'zh':settings.target;
      let timer:ReturnType<typeof setTimeout>|undefined;
      const result=await Promise.race([
        browser.runtime.sendMessage({
-         type:'TEST_PROVIDER',mode:'standard',providerId:'mymemory',
+         type:'TEST_PROVIDER',mode:'standard',providerId:provider,
          target,userInitiated:true,costConfirmed:false
        }),
        new Promise<never>((_,reject)=>{timer=setTimeout(
@@ -92,12 +92,12 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
      ]).finally(()=>clearTimeout(timer));
      if(!result?.ok)throw Error(String(result?.error||result?.status||'服务未返回有效译文'));
      const saved=await browser.runtime.sendMessage({
-       type:'PATCH_SETTINGS',patch:{standardProvider:'mymemory'}
+       type:'PATCH_SETTINGS',patch:{standardProvider:provider}
      });
      if(!saved?.ok)throw Error(String(saved?.error||'无法保存翻译服务'));
      setSettings(saved.settings);
      setNotice('已切换至真实试译成功的免 Key 服务；新网页和视频任务将使用该服务，除非设有覆盖规则。');
-     setProbeResult('MyMemory 试译成功：'+String(result.translationPreview||'').slice(0,140));
+     setProbeResult('在线翻译试译成功：'+String(result.translationPreview||'').slice(0,140));
    }catch(error){
      setProbeResult('未切换服务：'+String(error instanceof Error?error.message:error).slice(0,180));
    }finally{setProbeBusy(false);}
@@ -117,7 +117,7 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
   <label className="pit-field">{en?'Translation service':'翻译服务'}<select aria-label="翻译服务" value={selected} onChange={e=>{const p=catalog.find((x:any)=>(x.profileId||x.id)===e.target.value);if(p)void patch(p.ai?{aiProvider:p.id,...(p.profileId?{activeAIProfileId:p.profileId}:{})}:{standardProvider:p.id});}}>{catalog.filter((p:any)=>{const id=p.profileId||p.id;return id===selected||(settings.providerPreferences[id]?.visible!==false&&settings.providerPreferences[id]?.enabled!==false);}).map((p:any)=><option key={p.profileId||p.id} value={p.profileId||p.id} disabled={settings.providerPreferences[p.profileId||p.id]?.enabled===false}>{p.name} · {p.category}</option>)}</select></label>
   <div className="pit-service-actions">
    <button type="button" disabled={probeBusy}
-     onClick={()=>{if(mode==='standard'&&['browser','mymemory'].includes(settings.standardProvider))void checkFreeProvider();else void open('services/'+selected);}}>
+     onClick={()=>{if(mode==='standard'&&['browser','mymemory','google-free'].includes(settings.standardProvider))void checkFreeProvider();else void open('services/'+selected);}}>
      {probeBusy?'检测中…':en?'Test selected service':'测试当前翻译服务'}
    </button>
    <button type="button" onClick={()=>void open('services/'+selected)}>
@@ -127,7 +127,8 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
   {settings.standardProvider==='browser'&&mode==='standard'&&
    <div className="pit-service-readiness">
      <p>Chrome 本地模型需要在本机安装语言包。若当前无法翻译，不会自动把网页发往在线翻译或付费 AI。</p>
-     <button type="button" onClick={()=>void chooseOnlineFree()}>明确改用 MyMemory 在线免费翻译</button>
+     <button type="button" onClick={()=>void chooseOnlineFree('google-free')}>检测并切换 Google 免费在线翻译</button>
+     <button type="button" onClick={()=>void chooseOnlineFree('mymemory')}>检测并切换 MyMemory 备用翻译</button>
    </div>}
   {probeResult&&<p role="status" className="native-hint">{probeResult}</p>}
   <label className="pit-field">{en?'AI expert':'AI 专家'}<select aria-label="AI 专家" disabled={mode!=='ai'} value={settings.activeExpertId} onChange={e=>void patch({activeExpertId:e.target.value})}><option value="">{mode==='ai'?'不使用专家':'常规 MT 不适用'}</option>{[...EXPERTS,...settings.customExperts].filter((x:any)=>settings.installedExperts.includes(x.id)).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
