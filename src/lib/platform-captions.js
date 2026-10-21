@@ -91,8 +91,12 @@
   function readVisibleCaptions(doc,hostname,visible=isVisible){
     // Detection and mutation must share the same visible leaf grouping.
     const found=groupedLeaves(doc,hostname,visible);
+    // The summary should not repeat identical fragments exposed by
+    // duplicate player wrappers. Do NOT dedupe groupedLeaves: two speaker
+    // windows must still be patched and restored independently.
+    const unique=[...new Set(found.groups.map(g=>g.text).filter(Boolean))];
     return {provider:found.provider,
-      text:compact(found.groups.map(g=>g.text).join(' ')),
+      text:compact(unique.join(' ')),
       selector:found.selector,reason:found.reason};
   }
   // A YouTube "caption window" may contain multiple text spans, but several
