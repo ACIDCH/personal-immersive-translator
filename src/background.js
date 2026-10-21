@@ -3,6 +3,7 @@ import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_P
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
 import {detectLanguagesWithContext,detectCaptionSampleLanguage,normalizeDetectedLanguage} from './lib/language-detection.js';
 import {probeProvider} from './lib/provider-catalog.js';
+import {PriorityTranslationQueue} from './lib/translation-queue.js';
 import {PRODUCT_DEFAULTS,siteRule,effectiveVideo,expertPrompt,readingStyle} from './lib/product-settings.js';
 import * as syncRuntime from './lib/sync.js';
 
@@ -49,6 +50,7 @@ async function getSettings() {
   const item = await chrome.storage.local.get(SETTINGS_KEY);
   return normalizeSettings(item[SETTINGS_KEY]);
 }
+const keylessQueue=new PriorityTranslationQueue({maxQueued:64});
 let publicMtLock=Promise.resolve();
 function limitPublicMT(texts,task){
  const next=publicMtLock.then(async()=>{
@@ -135,6 +137,10 @@ async function tabLanguageHint(sender){
 }
 async function runStandardProvider(texts,opts){
  if(opts.provider==='mymemory')return limitPublicMT(texts,()=>translateBatch(texts,opts));
+ if(opts.provider==='google-free')return keylessQueue.enqueue(
+   ()=>translateBatch(texts,opts),
+   {context:opts.requestContext||'article'}
+ );
  if(opts.provider!=='browser')return translateBatch(texts,opts);
  const hints=opts.source==='auto'?await detectLanguagesWithContext(texts):
    texts.map(()=>({language:opts.source,confidence:'explicit'}));
@@ -487,7 +493,8 @@ async function handle(message, sender) {
       if(Date.now()-last<60000)return {ok:false,status:'rate-limited',confirmedLive:false,error:'请等待一分钟再测试 MyMemory。'};
       probeTimes.set(id,Date.now());
     }
-    const result=await probeProvider(settings,message,runStandardProvider);
+    const result=await probeProvider(settings,message,
+      (texts,opts)=>runStandardProvider(texts,{...opts,requestContext:'probe'}));
     // Only the fixed public probe and sanitized diagnostic are persisted.
     await chrome.storage.local.set({['pit_probe_'+(message.profileId||id)]:result}).catch(()=>{});
     return result;
@@ -537,6 +544,8 @@ async function handle(message, sender) {
       }catch(e){if(e instanceof TranslationError)throw e;}
     }
   }
+  const requestContext=message.pageContext==='video'?'video':
+    message.type==='TRANSLATE_DOCUMENT'?'document':'article';
   const isAI = message.mode === 'ai';
   if (message.mode !== 'standard' && message.mode !== 'ai') throw new TranslationError('翻译模式无效');
   const provider = isAI ? settings.aiProvider : settings.standardProvider;
@@ -584,7 +593,9 @@ async function handle(message, sender) {
       if(count>=80)throw new TranslationError('本次实时 AI 字幕达到 80 次请求上限，请停止并明确重新启动');
       await chrome.storage.session.set({pit_live_ai_requests:count+1});
     }
-    const translations=await runStandardProvider(texts,{...settings,provider,source,target,context,pageSource});
+    const translations=await runStandardProvider(texts,{
+      ...settings,provider,source,target,context,pageSource,requestContext
+    });
     return {translations,provider,cached:false,transient:true};
   }
   // A short ambiguous label (e.g. "Menu") can be French on one site and
@@ -598,7 +609,9 @@ async function handle(message, sender) {
   const values = await Promise.all(payloads.map(p=>cachedTranslation(chrome.storage.local,p).catch(()=>null)));
   const missing = texts.map((text,index)=>({text,index})).filter(({index})=>values[index]===null);
   if (missing.length) {
-    const newly = await runStandardProvider(missing.map(x=>x.text), {...settings, provider, source,target,context,pageSource});
+    const newly = await runStandardProvider(missing.map(x=>x.text), {
+      ...settings,provider,source,target,context,pageSource,requestContext
+    });
     for (let j=0;j<newly.length;j++) {
       const i=missing[j].index;
       values[i]=newly[j];
