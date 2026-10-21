@@ -305,7 +305,7 @@
         const translated=state.cache.get(key);
         const replaced=config.subtitleRenderMode==='replace-track' &&
           platform.replaceVisibleCaption?.(document,location.hostname,text,translated);
-        if(replaced)state.renderRoute='platform-dom';
+        if(replaced){state.renderRoute='platform-dom';lastError='';}
         if(!replaced&&config.subtitleRenderMode==='replace-track'){
           state.renderRoute='unsupported';
           lastError='当前字幕节点不可安全原位替换；严格模式不会冒充原位翻译显示外置字幕。可检查字幕源或显式选择兼容显示。';
