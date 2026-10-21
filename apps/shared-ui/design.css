@@ -205,3 +205,15 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
    border-color:#997437;color:#ffe4a8}
  .pit-reader-console .pit-service-readiness{background:var(--pit-surface)}
 }
+
+/* Keep optional deployment-only controls accessible but out of the main
+   translation path. Expand explicitly when Whisper is configured. */
+.pit-reader-console .pit-advanced-tools{border:1px solid #879bb54f;
+  border-radius:10px;margin:12px 0;padding:0 12px;background:var(--pit-surface)}
+.pit-reader-console .pit-advanced-tools>summary{padding:12px 2px;
+  font-size:12px;font-weight:650;line-height:1.5;color:var(--pit-text);
+  cursor:pointer;list-style:revert}
+.pit-reader-console .pit-advanced-tools[open]{padding-bottom:12px}
+.pit-reader-console .pit-advanced-tools>summary:focus-visible{
+  outline:3px solid var(--pit-focus);outline-offset:2px}
+.pit-reader-console .native-hint:empty{display:none}

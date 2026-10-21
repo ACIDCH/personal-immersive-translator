@@ -527,6 +527,9 @@ export function NativeWebControls(){
      <label className="pit-field">导入字幕 SRT / VTT / ASS（可选）
        <input type="file" accept=".srt,.vtt,.ass,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
      </label>
+     <details className="pit-advanced-tools">
+       <summary>语音识别字幕 · 需要独立服务（可选）</summary>
+       <p className="native-hint">仅当网站没有可读字幕，且你已自行配置并授权 Whisper 服务时使用。普通字幕翻译不需要语音模型。</p>
      <div className="native-actions">
        <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('start','cloud')}>云端 Whisper 语音字幕</button>
        <button type="button" disabled={captionBusy} onClick={()=>void liveAsr('stop')}>停止实时语音字幕</button>
@@ -536,6 +539,7 @@ export function NativeWebControls(){
        <input type="password" autoComplete="off" placeholder="PIT_BRIDGE_TOKEN" value={asrToken}
          onChange={event=>setAsrToken(event.target.value)}/>
      </label>
+     </details>
    </section>}
    {feature==='files'&&<section className="pit-feature-section" aria-label="文件与图片">
      <p className="native-hint">统一文件工作台：PDF、Office、EPUB、TXT/UTF、Markdown、图片 OCR 及字幕；云端高保真 PDF 需要实际部署服务器。</p>
