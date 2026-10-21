@@ -20,7 +20,7 @@ export function mountProductSettings({form,get,save,view}){
  }
  const button=(parent,text,fn)=>{const b=el('button',text,{type:'button'});b.addEventListener('click',()=>Promise.resolve(fn()).catch(report));parent.append(b);return b;};
  const basic=document.getElementById('baseSettings');
- control(basic,'uiLanguage','界面语言 / Interface language','与翻译目标语言独立；扩展控制标签使用所选语言。',[['zh','中文'],['en','English']]);
+ control(basic,'uiLanguage','界面语言偏好 / UI language preference','目前只切换部分标题和文档语言标记；完整英文界面尚未完成。此设置不改变译文的目标语言。',[['zh','中文（主界面）'],['en','English（部分界面）']]);
  const services=section('services','翻译服务中心','每项测试都请求对应适配器，不修改默认，不使用翻译缓存。免 Key 服务仍受环境与额度限制。');
  const search=el('input','',{type:'search',placeholder:'搜索服务 / Search services'});services.append(search);
  const compare=el('div','',{className:'buttons'});services.append(compare);const selected=new Set();
@@ -110,7 +110,7 @@ export function mountProductSettings({form,get,save,view}){
  const choices=[['inherit','跟随全局'],...providerCatalog(get()).filter(x=>!x.ai).map(x=>[x.id,x.name])];
  control(video,'providerId','视频专用翻译服务','站点覆盖 > 视频专用 > 全局。',choices,'videoSettings');
  control(video,'source','字幕源语言','手动覆盖优先；自动使用字幕轨语言。',['auto',...LANGUAGES],'videoSettings');control(video,'target','字幕目标语言','独立于网页目标语。',['inherit',...LANGUAGES],'videoSettings');
- control(video,'subtitleRenderMode','字幕嵌入方式','默认在视频画面内随播放器定位；对于允许修改的 HTML5 TextTrack，可选择直接替换原字幕，停止时恢复。直播/受保护播放器不保证支持。',[['in-player','视频画面内双语字幕（稳定）'],['replace-track','原生字幕轨直接替换（HTML5，测试）']],'videoSettings');
+ control(video,'subtitleRenderMode','字幕嵌入方式','默认严格原位替换：只改写允许编辑的 TextTrack 或已显示的网站字幕 DOM；无法安全修改时明确提示，不偷偷退回外置字幕。兼容模式在播放器区域内显示 PIT 字幕浮层，它不是原生轨替换。真实登录平台/DRM 未验收。',[['replace-track','优先原位替换（默认；严格模式）'],['in-player','兼容播放器区域浮层（非原生轨）']],'videoSettings');
  control(video,'subtitleFontSize','字幕字号','12–48 px',{min:12,max:48},'videoSettings');control(video,'subtitlePosition','字幕位置','全屏仍可显示。',['bottom','top'],'videoSettings');
  control(video,'subtitleColor','字幕文字颜色','保存后更新。',null,'videoSettings');control(video,'subtitleBackground','字幕背景颜色','保存后更新。',null,'videoSettings');
  for(const id of ['youtube','bilibili','netflix','panopto','generic']){const box=el('fieldset','');box.append(el('legend',id+' · 受控测试 / 实站待验收'));video.append(box);
