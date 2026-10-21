@@ -190,13 +190,15 @@
           parts:g.leaves.map((node,k)=>({
             node,original:node.textContent,translated:k===0?w.translation:''
           }))};
+        // Register ownership before the first DOM write so even an
+        // exception from a custom node setter can roll back this group.
+        patched.push(group);
+        groups.add(group);
         for(const part of group.parts){
           inline.set(part.node,{original:part.original,
             translated:part.translated,group});
           part.node.textContent=part.translated;
         }
-        patched.push(group);
-        groups.add(group);
       }
       return true;
     }catch{
