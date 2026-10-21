@@ -117,6 +117,16 @@ test('failed translated cues never poison text-dedup cache',async()=>{
  assert.equal(await c.prefetch(cues,async()=>['有效译文']),2);
  assert.equal(c.byText.get('same'),'有效译文');
 });
+test('AI contextual subtitles must retranslate same words at new timestamps',async()=>{
+ const c=new CaptionCache(10,{deduplicateText:false});
+ const first=normalizeCues([{startTime:0,endTime:2,text:'Right'}]);
+ const second=normalizeCues([{startTime:20,endTime:22,text:'Right'}]);
+ assert.equal(await c.prefetch(first,async()=>['向右']),1);
+ assert.equal(await c.prefetch(second,async()=>['对的']),1);
+ assert.equal(c.get(first[0].key),'向右');
+ assert.equal(c.get(second[0].key),'对的');
+ assert.equal(c.byText.size,0);
+});
 test('caption text cache is size bounded independently from cue timing cache',async()=>{
  const c=new CaptionCache(2);
  const cues=normalizeCues([
