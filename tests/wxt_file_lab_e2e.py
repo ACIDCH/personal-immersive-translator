@@ -173,6 +173,27 @@ async def main():
         assert linked['fileProviderId']=='inherit',linked
         assert await page.locator('#pit-workbench-provider').input_value()=='microsoft'
         report['linked_provider_switch']='pass'
+        # The workbench source/target selectors must write to the same
+        # settings used by the Popup, PDF tools and service worker.
+        assert await page.locator('#pit-workbench-source option').count()==8
+        assert await page.locator('#pit-workbench-target option').count()==7
+        await page.locator('#pit-workbench-source').select_option('fr')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        await page.locator('#pit-workbench-target').select_option('en')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        pair=await page.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1""")
+        assert pair['source']=='fr' and pair['target']=='en',pair
+        await page.locator('#pit-workbench-source').select_option('auto')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        await page.locator('#pit-workbench-target').select_option('zh')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        final_pair=await page.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1""")
+        assert final_pair['source']=='auto' and final_pair['target']=='zh',final_pair
+        report['linked_language_pair']='pass'
         # Actual document translation MUST go through PIT's native provider,
         # not a client-side simulated translation function.
         options=await context.new_page()
