@@ -320,6 +320,7 @@
         const prior=state.contextHistory.join('\n');
         const translations=await fetchBatch([text],generation,prior);
         if(state.active && generation===state.generation) {
+          state.failedAt=0;lastError='';
           state.cache.put(key,translations[0]);
           if(state.mode==='ai' && state.contextHistory.at(-1)!==text)
             state.contextHistory=[...state.contextHistory.slice(-2),text];
@@ -377,6 +378,7 @@
           .slice(0,10).map(c=>c.text).join('\n'):'';
       await state.cache.prefetch(upcoming,texts=>fetchBatch(texts,generation,nearby));
       if(generation===state.generation && state.active) {
+        state.failedAt=0;lastError='';
         renderTimedCues(cues,video.currentTime);
       }
     } catch(error) {
