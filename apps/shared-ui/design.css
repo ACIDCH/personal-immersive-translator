@@ -166,3 +166,42 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
  .pit-file-workbench .document-field textarea{background:#111b2d;color:#eaf0fa;border-color:#4b6385}
  .pit-file-workbench .document-result{background:#0e1829;color:#eaf0fa;border-color:#385577}
 }
+
+
+/* Pre-delivery visual consistency: legible surfaces in both OS themes,
+   predictable four-tab popup navigation and no clipped controls at zoom. */
+.pit-reader-console{width:min(440px,100%)!important;min-width:0!important;
+  overflow-wrap:anywhere;box-sizing:border-box}
+.pit-reader-console .pit-feature-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pit-reader-console .pit-feature-tabs button{min-width:0;min-height:44px;
+  line-height:1.4;overflow-wrap:anywhere;white-space:normal}
+.pit-reader-console .pit-quick-preferences,
+.pit-reader-console .pit-feature-section{min-width:0}
+.pit-reader-console .pit-language-pair{grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr)}
+.pit-reader-console .pit-language-pair select{min-width:0;max-width:100%}
+.pit-reader-console .pit-setting-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pit-reader-console .native-actions button{min-width:0;overflow-wrap:anywhere;
+  white-space:normal;line-height:1.45}
+.pit-reader-console .pit-caption-render-choice{margin-bottom:5px}
+.pit-reader-console .pit-render-explanation{font-size:12px;line-height:1.55;
+  color:var(--pit-muted);margin:0 0 10px}
+.pit-reader-console .pit-inline-warning{font-size:12px;line-height:1.55;
+  padding:10px 12px;margin:8px 0;border:1px solid #c18a37;
+  border-radius:9px;background:#fffaee;color:#724c0c}
+.pit-reader-console .pit-service-readiness{background:var(--pit-surface);
+  border-color:#879bb560}
+.pit-reader-console .pit-service-readiness>p{color:var(--pit-text)}
+.pit-reader-console .pit-service-readiness>button{margin:3px 0}
+.pit-reader-console .pit-quick-links{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pit-reader-console .pit-quick-links button{min-width:0;overflow-wrap:anywhere}
+@media(max-width:385px){
+ .pit-reader-console{padding:12px!important}
+ .pit-reader-console .pit-feature-tabs{gap:3px}
+ .pit-reader-console .pit-feature-tabs button{padding:8px 2px;font-size:10px}
+ .pit-reader-console .pit-quick-preferences{padding:10px}
+}
+@media(prefers-color-scheme:dark){
+ .pit-reader-console .pit-inline-warning{background:#3b2e19;
+   border-color:#997437;color:#ffe4a8}
+ .pit-reader-console .pit-service-readiness{background:var(--pit-surface)}
+}

@@ -18,6 +18,7 @@ export function NativeWebControls(){
  const [scope,setScope]=useState<'smart'|'full'>('full');
  const [captionFile,setCaptionFile]=useState<File|null>(null);
  const [captionSource,setCaptionSource]=useState('auto');
+ const [renderMode,setRenderMode]=useState<'replace-track'|'in-player'>('replace-track');
  const [captionBusy,setCaptionBusy]=useState(false);
  const [captionInspection,setCaptionInspection]=useState('');
  const [asrToken,setAsrToken]=useState('');
@@ -37,6 +38,8 @@ export function NativeWebControls(){
      if(!active||!settings)return;
      setDisplay(settings.webDisplay==='translation-only'?'translation-only':'bilingual');
      setScope(settings.webScope==='full'?'full':'smart');
+     setRenderMode(settings.videoSettings?.subtitleRenderMode==='in-player'?
+       'in-player':'replace-track');
      void browser.tabs.query({active:true,currentWindow:true}).then(([tab])=>{
        if(!active||!tab?.url||!/^https?:\/\//.test(tab.url))return;
        const hostname=new URL(tab.url).hostname.toLowerCase();
@@ -280,6 +283,26 @@ export function NativeWebControls(){
    }catch(error){setStatus(backendName+' ASR 错误：'+String(error instanceof Error?error.message:error));}
    finally{setCaptionBusy(false);}
  }
+ async function saveCaptionRenderMode(next:'replace-track'|'in-player'){
+   if(captionBusy||working)return;
+   setCaptionBusy(true);
+   try{
+     const response=await browser.runtime.sendMessage({type:'GET_SETTINGS'});
+     if(!response?.settings)throw Error('无法读取视频设置');
+     const saved=await browser.runtime.sendMessage({
+       type:'PATCH_SETTINGS',
+       patch:{videoSettings:{...response.settings.videoSettings,subtitleRenderMode:next}}
+     });
+     if(!saved?.ok)throw Error(saved?.error||'保存字幕模式失败');
+     setRenderMode(next);
+     setCaptionInspection(next==='replace-track'
+       ?'已启用严格原位模式。仅修改播放器现有字幕；无法安全原位替换时不显示外置字幕。'
+       :'已启用兼容字幕模式。适用于导入 SRT/VTT/ASS，可能在视频上叠加字幕，不属于原位替换。');
+   }catch(error){
+     setCaptionInspection('切换字幕模式失败：'+String(
+       error instanceof Error?error.message:error));
+   }finally{setCaptionBusy(false);}
+ }
  async function inspectCaptionState(){
    setCaptionInspection('正在读取播放器字幕状态…');
    try{
@@ -467,6 +490,20 @@ export function NativeWebControls(){
        <button type="button" aria-pressed={mode==='ai'} onClick={()=>setMode('ai')}>AI 字幕精译</button>
      </div>
      <p className="native-hint">优先读取视频原生字幕；短字幕无法识别源语言时可手动选择。无字幕时需主动允许 Whisper。</p>
+     <label className="pit-field pit-caption-render-choice">字幕显示方式
+       <select aria-label="字幕显示方式" value={renderMode}
+         disabled={captionBusy}
+         onChange={e=>void saveCaptionRenderMode(
+           e.target.value==='in-player'?'in-player':'replace-track')}>
+         <option value="replace-track">严格原位替换（默认，无外置字幕）</option>
+         <option value="in-player">兼容显示（可导入字幕，允许叠加）</option>
+       </select>
+     </label>
+     <p className="pit-render-explanation">
+       {renderMode==='replace-track'
+         ?'直接替换播放器现有 CC 或字幕轨；如果播放器不开放字幕节点，会报告限制，不会假装翻译成功。'
+         :'用于没有原生可修改字幕轨的 SRT/VTT/ASS 文件；可能在播放器上覆盖显示，不能视为原生字幕替换。'}
+     </p>
      <label className="pit-field">原始字幕语言
        <select aria-label="原始字幕语言" value={captionSource} onChange={e=>setCaptionSource(e.target.value)}>
          <option value="auto">自动检测（默认）</option>
@@ -482,6 +519,11 @@ export function NativeWebControls(){
        <button type="button" disabled={captionBusy} onClick={()=>void inspectCaptionState()}>检查字幕状态</button>
      </div>
      {captionInspection&&<p className="native-hint" role="status">{captionInspection}</p>}
+     {captionFile&&renderMode==='replace-track'&&
+       <p className="pit-inline-warning" role="status">
+         已选择字幕文件。手动导入不会创建播放器原生轨道；
+         请先选择上方“兼容显示”，否则启动时会明确拒绝，避免显示不完整的译文。
+       </p>}
      <label className="pit-field">导入字幕 SRT / VTT / ASS（可选）
        <input type="file" accept=".srt,.vtt,.ass,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
      </label>

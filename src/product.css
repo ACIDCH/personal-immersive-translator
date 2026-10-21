@@ -57,3 +57,29 @@ body.options{background:var(--pit-bg);color:var(--pit-text);font:15px/1.6 system
 .pit-service-group[hidden],.pit-service-group [hidden]{display:none!important}
 @media(max-width:600px){.pit-service-group{padding:12px}
  .pit-service-group .provider-grid{grid-template-columns:minmax(0,1fr)}}
+
+
+/* Delivery-readiness: stronger navigation readability and sensible scaling
+   without duplicating or replacing the service-management components. */
+.options-nav{z-index:3}
+.options-nav a{display:block;min-height:40px;line-height:1.5}
+.options-nav input[type=search]{width:100%;max-width:100%;min-width:0}
+.options .panel h2{line-height:1.35}
+.options .provider-card{min-width:0;overflow-wrap:anywhere}
+.options .provider-card button{white-space:normal;overflow-wrap:anywhere}
+.options .buttons button{min-height:40px}
+.options #saveActions{position:sticky;bottom:0;z-index:2;
+  padding:14px 8px;background:var(--pit-bg);border-radius:12px}
+@media(min-width:801px){
+ .options main{max-width:1400px;padding-right:clamp(18px,3vw,44px)}
+}
+@media(max-width:800px){
+ .options-nav{max-height:none;flex-direction:row;flex-wrap:wrap;
+   gap:4px;padding:12px}
+ .options-nav .pit-options-nav-group{display:flex;flex-direction:row;
+   flex-wrap:wrap;gap:5px;width:100%;margin:2px 0}
+ .options-nav .pit-options-nav-heading{width:100%;margin:1px 0}
+ .options-nav a{min-height:36px;padding:7px 10px}
+ .options .provider-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr))}
+ .options #saveActions{padding:10px 2px}
+}
