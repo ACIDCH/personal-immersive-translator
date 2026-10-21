@@ -83,6 +83,15 @@ def infer_source(pdf:bytes)->tuple[str,str]:
         pass
     return "en","latin-default-review-required"
 
+@app.get("/livez")
+def livez():
+    """Railway startup liveness only; never claims BabelDOC or paid MT ready.
+
+    Authentic full readiness remains available on /health with Bearer auth.
+    No secret, model path or service configuration is returned publicly.
+    """
+    return {"status":"alive"}
+
 @app.get("/health")
 def health(authorization:str|None=Header(default=None)):
     require_bearer(authorization)
