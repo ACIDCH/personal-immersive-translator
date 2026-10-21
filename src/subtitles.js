@@ -29,7 +29,12 @@
     else if(restart)start(previous.mode,previous.cues||[],null,previous.source);
     quickToggle();autoStart();
   }
-  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],manualSource:'',nativePatches:new Map()};
+  const state = {active:false, generation:0, timer:null, video:null, track:null, originalMode:null, mode:'standard', overlay:null, cache:new core.CaptionCache(),busy:false,failedAt:0,seenAny:false,domMode:false,latestDomText:'',requestCount:0,domPending:false,importedCues:null,boundUrl:null,mediaUrl:null,contextHistory:[],languageSamples:[],manualSource:'',nativePatches:new Map()};
+  function rememberCaptionLanguage(text){
+    const sample=String(text||'').trim().slice(0,400);
+    if(!sample||state.languageSamples.at(-1)===sample)return;
+    state.languageSamples=[...state.languageSamples.slice(-7),sample];
+  }
   function allVideos(root, depth=0, output=[]) {
     if (!root || depth>3 || output.length>30) return output;
     const videos=root.querySelectorAll?.('video')||[];
@@ -103,7 +108,7 @@
     state.generation++;
     state.cache=new core.CaptionCache(350);
     state.busy=false;state.domPending=false;state.failedAt=0;
-    state.seenAny=false;state.latestDomText='';state.contextHistory=[];
+    state.seenAny=false;state.latestDomText='';state.contextHistory=[];state.languageSamples=[];
     state.domMode=!next;
     render('');
     return true;
@@ -232,6 +237,7 @@
     const reply=chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:state.mode,pageContext:'video',taskId:taskPrefix+'-'+generation,
       captionSourceLanguage:state.manualSource||state.track?.language||'',
+      captionLanguageSample:state.mode==='standard'?state.languageSamples.join('\\n').slice(-1600):'',
       userInitiated:state.mode==='ai',context
     });
     let timeout;
@@ -290,6 +296,7 @@
         return;
       }
       state.seenAny=true;
+      rememberCaptionLanguage(text);
       state.latestDomText=text;
       const key='dom:'+text;
       if(state.cache.has(key)){
@@ -325,7 +332,9 @@
           state.failedAt=Date.now();
           render(state.mode==='ai'
             ?'AI 字幕调用失败，已停止自动重试；请检查模型/额度后手动重新启动。'
-            :'字幕翻译失败，可暂停重试或检查 API 配额');
+            :/无法可靠识别原文语言/.test(lastError)
+              ?'无法确定字幕原文语言：请手动选定原文语言，或播放更多字幕后重试。'
+              :'字幕翻译失败：'+lastError.slice(0,160));
         }
       } finally {
         if(generation===state.generation)state.domPending=false;
@@ -352,6 +361,7 @@
     if(state.busy || (state.failedAt &&
       (state.mode==='ai'||Date.now()-state.failedAt < 3000))) return;
     const upcoming=core.upcomingCues(cues,now,video.playbackRate,5);
+    for(const cue of upcoming)rememberCaptionLanguage(cue.text);
     if(!upcoming.length || !upcoming.some(c=>!state.cache.has(c.key))) return;
     const budget=state.mode==='ai'?80:1200;
     if(state.requestCount>=budget){render('本次字幕翻译已达到安全请求上限');return;}
@@ -393,7 +403,7 @@
     platform?.restoreVisibleCaptions?.();
     releaseTrack(state.track,state.originalMode);
     state.overlay?.remove();state.overlay=null;
-    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.manualSource='';
+    state.video=null;state.track=null;state.originalMode=null;state.cache.clear();state.busy=false;state.failedAt=0;state.seenAny=false;state.domMode=false;state.latestDomText='';state.requestCount=0;state.domPending=false;state.importedCues=null;state.boundUrl=null;state.mediaUrl=null;state.contextHistory=[];state.languageSamples=[];state.manualSource='';
   }
   function embeddedPlayerHint(){
     for(const frame of [...document.querySelectorAll('iframe[src]')].slice(0,40)){
