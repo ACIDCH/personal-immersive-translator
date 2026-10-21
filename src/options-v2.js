@@ -27,12 +27,13 @@ export function mountProductSettings({form,get,save,view}){
  button(compare,'比较勾选的免 Key 服务',async()=>{for(const card of services.querySelectorAll('[data-provider]'))if(selected.has(card.dataset.provider))await card.runProbe();});
  const cards=el('div','',{className:'pit-services-groups'});services.append(cards);
  const serviceGroups=[
-  ['keyless','01 · 免费与本机服务','不要求付费 Key。Chrome 需要本机语言包；MyMemory 必须主动选择使用。'],
+  ['keyless','01 · 免费与本机服务','Google 公共翻译无需 Key；需联网并将原文发送 Google（非官方 SLA）。Chrome 需要本机语言包。'],
   ['standard','02 · 常规 API 与私有服务','配置完成不等于服务器已上线，每项测试独立运行。'],
   ['ai','03 · AI 高精度服务','Gemini、DeepSeek、自定义 AI 仅在用户主动启用后调用。']
  ];
- const groupOf=p=>p.ai?'ai':['browser','mymemory'].includes(p.id)?'keyless':'standard';
+ const groupOf=p=>p.ai?'ai':['google-free','browser','mymemory'].includes(p.id)?'keyless':'standard';
  function readiness(p,s){
+  if(p.id==='google-free')return '在线免 Key · 公共接口，需实际测试可用性';
   if(p.id==='browser')return '需下载语言包并在当前设备验证';
   if(p.id==='mymemory')return '在线免 Key · 每日字符额度有限';
   if(p.id==='microsoft')return s.microsoftKey?'已填 Key · 未验证':'未配置 Microsoft Key';
