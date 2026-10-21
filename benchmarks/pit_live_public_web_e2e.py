@@ -51,11 +51,17 @@ async def check_site(ctx,popup,url):
                 const p=await chrome.tabs.sendMessage(tab.id,{type:'PIT_GET_PROGRESS'});
                 if(!p?.progress)return null;
                 const v=p.progress;
+                const error=String(v.lastError||'');
+                const errorClass=/\\b429\\b/.test(error)?'HTTP_429':
+                  /\\b(500|502|503|504)\\b/.test(error)?'HTTP_5XX':
+                  /超时|timeout|连接失败|network/i.test(error)?'NETWORK_OR_TIMEOUT':
+                  /数量|不匹配|格式|空译文/i.test(error)?'INVALID_RESPONSE':
+                  /源语言|语言包/i.test(error)?'LANGUAGE_DETECTION_OR_PACK':
+                  error?'OTHER_TRANSLATION_FAILURE':'NONE';
                 return {eligible:v.eligible,translated:v.translated,
                   failedBatches:v.failedBatches,succeededBatches:v.succeededBatches,
                   remaining:v.remaining,busy:v.busy,
-                  coveragePercent:v.coveragePercent,
-                  lastError:v.lastError ? 'PROVIDER_OR_DOM_ERROR' : ''};
+                  coveragePercent:v.coveragePercent,errorClass};
               }catch{return null;}
             }""")
             if progress:
