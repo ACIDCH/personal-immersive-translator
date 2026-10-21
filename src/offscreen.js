@@ -212,7 +212,7 @@ chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
     return false;
   }
   if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS'){
-    checkNativeTranslator(msg.source,msg.target)
+    checkNativeTranslator(msg.source,msg.targetLanguage)
       .then(status=>respond({ok:true,status}))
       .catch(error=>respond({ok:false,error:String(error.message||error),
         code:String(error.code||'native_unavailable')}));
@@ -235,7 +235,7 @@ chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
       return false;
     }
     const started=performance.now();
-    translateWithNative([sample],{source:msg.source,target:msg.target})
+    translateWithNative([sample],{source:msg.source,target:msg.targetLanguage})
       .then(translations=>respond({ok:true,translation:translations[0],
         elapsedMs:Math.round(performance.now()-started)}))
       .catch(error=>respond({ok:false,error:String(error.message||error),
@@ -243,7 +243,7 @@ chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
     return true;
   }
   if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE'){
-    translateWithNative(msg.texts,{source:msg.source,target:msg.target})
+    translateWithNative(msg.texts,{source:msg.source,target:msg.targetLanguage})
       .then(translations=>respond({ok:true,translations}))
       .catch(error=>respond({ok:false,error:String(error.message||error),
         code:String(error.code||'native_failed')}));
