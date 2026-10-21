@@ -141,7 +141,7 @@ async def main():
         assert native['mode']=='showing',native
         assert native['overlayVisible'] is False,(
           'Native replacement must not display a second external overlay:',native)
-        report['video_cues']='pass (two native overlapping cue replacements; no external overlay)'
+        report['video_cues']='pass'
         await popup.get_by_role('button',name='停止字幕翻译').click()
         await video.locator('.pit-caption-overlay').wait_for(state='detached',timeout=10000)
         restored=await video.evaluate("""()=>{
@@ -154,7 +154,7 @@ async def main():
           'Hello world from the lecture video',
           'A second overlapping lecture subtitle'
         ],restored
-        report['video_stop']='pass (both native originals restored)'
+        report['video_stop']='pass'
         print('WXT NATIVE VIDEO CAPTIONS AND STOP: PASS',flush=True)
 
         filepage=await ctx.new_page()
