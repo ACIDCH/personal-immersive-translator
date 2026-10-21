@@ -12,7 +12,7 @@ export const PROVIDERS=Object.freeze([
  {id:'deepseek',name:'DeepSeek',category:'AI 模型',notice:'DeepSeek API；需要 Key，可能产生费用。',cost:true,ai:true}
 ]);
 export function providerCatalog(s){return [...PROVIDERS,...s.aiProfiles.map(p=>({id:'custom',profileId:p.id,name:p.name,category:'AI 模型',notice:p.protocol+' · '+p.model,cost:true,ai:true}))];}
-export function probeStatus(e){const m=String(e?.message||e);return e?.status===429?'rate-limited':[401,403].includes(e?.status)?'auth-failed':/超时|timeout/i.test(m)?'timeout':/语言包|download|模型|内置翻译/i.test(m)?'missing-pack':/语言|language/i.test(m)?'unsupported-language':/网络|fetch|network|CORS/i.test(m)?'network-error':'invalid-response';}
+export function probeStatus(e){const m=String(e?.message||e);return e?.status===429?'rate-limited':[401,403].includes(e?.status)?'auth-failed':/超时|timeout/i.test(m)?'timeout':/语言包|离线包|download|模型|内置翻译/i.test(m)?'missing-pack':/语言|language/i.test(m)?'unsupported-language':/网络|fetch|network|CORS/i.test(m)?'network-error':'invalid-response';}
 export async function probeProvider(s,msg,run){
  const id=msg.providerId||(msg.mode==='ai'?s.aiProvider:s.standardProvider);
  const entry=providerCatalog(s).find(p=>p.id===id&&(!msg.profileId||p.profileId===msg.profileId));
