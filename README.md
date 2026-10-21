@@ -1,13 +1,15 @@
-# 多模态翻译 · Multimodal Translate
+# PIT · Personal Immersive Translator｜沉浸式翻译开发版
 
-Open-source browser extension project for bilingual webpages, site-visible video subtitles, opt-in local speech transcription, image OCR and academic PDF workflows.
+PIT is a Chrome Manifest V3 / WXT + React browser extension in development for bilingual webpages, subtitles, Office/EPUB, image OCR and PDF workflows. It is **not** the commercial Immersive Translate source or a complete KISS/FluentRead fork.
+
+> **Current audit (2026-10-21, PIT 0.4.6):** [Canonical product/content status and acceptance matrix](docs/CONTENT_SYSTEM_AUDIT_2026-10-21.md). Historical documents below describe their original dates and may contain superseded defaults, release assumptions and pre-integration module states. **Draft PR #55; no Stable release or authenticated Windows L3 signoff.**
 
 **Current development architecture:** WXT + React controls package the existing `src/` translation runtime into the installed Chrome MV3 extension. This is **one runtime**, not a separate UI translation engine. The optional Cloudflare Pages portal remains a separate preview. See [core engineering readiness](docs/PIT_CORE_ENGINEERING_READINESS_20261019.md). The branch remains an unmerged Draft PR.
 
 The original GitHub repository slug is intentionally unchanged until GitHub Actions and pending PRs are migrated. Production-grade KISS integration, archived Immersive Translate reuse and live cloud deployments require separate licensing/quality gates.
 
 
-**Version under development:** 0.4.4 — release candidate preparation, **not production or real-account verified**.
+**Version under development:** 0.4.6 (matches `apps/wxt-ui/wxt.config.ts`) — functional development/UAT build, **not production or real-account verified**.
 
 ## Isolation
 
@@ -23,7 +25,8 @@ The original GitHub repository slug is intentionally unchanged until GitHub Acti
 - **BabelDOC (AGPL-3.0)**: separately installed executable, called from the local PDF/OCR bridge. It is not shipped in the extension ZIP.
 - **Tesseract (Apache-2.0)**: independently installed OCR executable, used through OCRmyPDF / the local image endpoint.
 - **KISS Translator (GPL-3.0)**: design research only. No GPL source is transplanted into this standalone MIT implementation.
-- PaddleOCR and browser Tesseract.js: candidates, **not presently integrated**.
+- **Tesseract.js (Apache-2.0):** actually packaged as a WXT-local WASM OCR worker with browser image/document flows; real-world multilingual photographs and arbitrary image inpainting remain unaccepted. PaddleOCR remains an unintegrated candidate.
+- **faster-whisper (MIT):** independently runnable CPU ASR container/API source and synthetic-audio model CI; real Railway deployment, authenticated video sessions, latency and budget remain unverified.
 
 Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.md).
 
@@ -35,11 +38,11 @@ Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.m
 
 | Mode | Current behavior | Requirements |
 | --- | --- | --- |
-| Web bilingual | Keyless Chrome Translator API is the default standard MT where language models are available; optional MyMemory, official keys and Cloudflare MT remain configurable; AI is opt-in | Chrome 138+ with supported/downloaded native language packs, or alternate configured provider |
+| Web bilingual | **Fresh-install default: Google public keyless MT (`google-free`)**, online and uploads requested text; Chrome native and MyMemory are alternatives, official BYOK/AI are separately configured. Reusable webpage DOM/restore core | Internet and working public HTTP endpoint (rate limits, no Google Cloud SLA); Chrome built-in requires an optional language pack. Real-site layout remains L3 pending |
 | HTML5/video subtitles | Native timed cues, user-visible platform CC, imported SRT/VTT/ASS; ASR opt-in when CC unavailable | Authorized accessible captions or explicitly configured Whisper; simulated players do not prove live-site access |
-| Local speech captions | Explicit tab audio capture → optional localhost Whisper → ordinary translation service | Manually installed multilingual whisper.cpp, model and bridge; no DRM bypass |
-| Image/OCR | WXT browser Tesseract.js worker, optional Gemini vision, local Tesseract/OCRmyPDF, experimental placement | OCR language packs/model download or separately configured provider; in-place overlay is not semantic inpainting |
-| PDF | Browser PDF.js fallback/scan hints; optional separate OCRmyPDF+BabelDOC Python container with async status and mounted-volume completed result recovery | Browser fallback needs no local Python; real layout-preserving BabelDOC requires independently deployed service/model credentials |
+| Speech/ASR captions | Explicit tab capture → configured local Whisper or independent cloud faster-whisper ASR → selected ordinary text MT | ASR model service must be installed/deployed with credentials; a working CI model is not an active HTTPS service. No DRM bypass |
+| Image/OCR | WXT-local Tesseract.js WASM and spatial OCR text boxes; optional Gemini vision, local OCRmyPDF, conservative flat-background PNG replacement | Actual model/language-pack availability and live image quality; in-place overlay is **not** semantic inpainting |
+| PDF and Office | Browser PDF.js raster bilingual fallback with OCR + positioned line reconstruction; DOCX/PPTX/XLSX/EPUB/TXT/MD/HTML workbench; optional independent BabelDOC jobs | Real high-fidelity BabelDOC API, credentials, compute/volume and actual document content quality require independent acceptance; raster PDF is not editable layout-preserved PDF |
 
 **Language selection:** zh / en / ja / ko / fr / de / es. Supported selection does **not** guarantee equal quality/compatibility across providers, platforms, BabelDOC and OCR models.
 
@@ -48,7 +51,7 @@ Read [upstream provenance and license audit](docs/UPSTREAM_LICENSE_AUDIT_zh-CN.m
 1. Open PR #55's latest successful **Multimodal Platform UI & BYOK validation** GitHub Actions workflow and download the **`multimodal-wxt-web-integration-test`** artifact. `personal-immersive-translator-alpha` is a different older native ZIP, not the WXT/React integrated build.
 2. Extract the WXT artifact and find its root `manifest.json`. The WXT output layout is different from the older native ZIP; do not mix files from the two builds.
 3. Open `chrome://extensions` or `edge://extensions`, enable Developer Mode and choose **Load unpacked**. Native Chrome Translator requires an eligible Chrome 138+ build and available language packs; other features have their own runtime requirements.
-4. Open Options and check built-in language pack support/readiness; if unavailable, select a configured **standard MT** alternative. AI providers remain opt-in. Do not commit API Keys to GitHub or Drive.
+4. Open Options → **翻译服务中心**, review the new-install `Google 免费公共翻译` option, and send a **public test sentence** with its per-service test button. This unofficial public endpoint can fail/limit requests and transmits requested text online. If it fails, manually choose another Provider; optional Chrome native translation requires supported language packs. AI remains opt-in. Do not commit Keys to GitHub or Drive.
 5. WXT can run Tesseract.js OCR in the browser. Optional local Whisper and high-fidelity BabelDOC still require their own model/service setup. See [cloud deployment](docs/P0_CLOUD_DEPLOYMENT.md) and [engineering readiness](docs/PIT_CORE_ENGINEERING_READINESS_20261019.md).
 
 For development from source, use Node.js 22+:
@@ -64,7 +67,7 @@ This installs the exactly pinned upstream PDF.js and regenerates the locally pac
 
 GitHub Actions checks Node tests, native Chromium MV3 installation, popup/settings, DOM fixtures, subtitle fixtures, and PDF/OCR bridge tests. Vendor PDF.js rendering is tested using a real generated PDF.
 
-**Not yet passed on real authenticated protected platforms:** Netflix, Panopto and all YouTube UI variants; real whisper.cpp multilingual 30-minute performance, real BabelDOC output on complex academic PDF, paid official API integration, or statistically valid superiority over Immersive Translate.
+**Not yet passed on real authenticated protected platforms:** Netflix, Panopto and all YouTube UI variants; real-user 30-minute ASR performance, real **deployed** Railway BabelDOC/faster-whisper and complex academic PDF output, paid official API integration, or statistically valid superiority over Immersive Translate. A separate CI using real Whisper tiny on synthetic speech and offline BabelDOC layout is not remote-service L3 signoff.
 
 [Release matrix](docs/INITIAL_MULTIMODAL_ACCEPTANCE.md) · [Player latency criteria](docs/PLAYER_LATENCY_VALIDATION_zh-CN.md) · [Security](docs/SECURITY.md) · [Benchmark methodology](benchmarks/README.md).
 
