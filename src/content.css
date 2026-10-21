@@ -101,3 +101,16 @@
 @keyframes pit-wait{to{transform:rotate(360deg)}}
 .pit-player-toggle{position:fixed;z-index:2147483646;border:1px solid #7bb7c4;border-radius:9px;background:#152a3eee;color:#e6f5fa;padding:7px 12px;font:13px system-ui;cursor:pointer}
 @media(prefers-reduced-motion:reduce){[data-pit-loading]::after{animation:none!important}}
+
+/* Outrank the generic translate-only hide rule for headings whose translated
+   line now lives inside the same semantic h1–h6. Nested publisher spans are
+   hidden while PIT's translated span stays readable. */
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"]):not(li):not(td):not(th){
+ display:block !important;font-size:0 !important;
+}
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])> :not(.pit-flow-translation){
+ display:none !important;
+}
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])>.pit-flow-translation{
+ display:block !important;font-size:clamp(18px,2vw,30px) !important;
+}
