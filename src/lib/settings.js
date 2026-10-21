@@ -4,7 +4,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   ...PRODUCT_DEFAULTS,
   target: 'zh',
   source: 'auto',
-  standardProvider: 'browser',
+  // Free remote MT is functional on fresh installs without a local model.
+  // Chrome native remains selectable for offline/privacy-conscious users.
+  standardProvider: 'google-free',
   cloudEndpoint: '',
   cloudToken: '',
   cloudPdfEndpoint: '',
@@ -36,7 +38,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autoTranslateHosts: '',
   translationTheme: 'subtle'
 });
-export const STANDARD_PROVIDERS = ['browser', 'mymemory', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
+export const STANDARD_PROVIDERS = ['google-free', 'browser', 'mymemory', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
@@ -50,7 +52,7 @@ export function normalizeSettings(value = {}) {
   }
   if (!LANGUAGES.includes(clean.target)) clean.target = 'zh';
   if (!['auto', ...LANGUAGES].includes(clean.source)) clean.source = 'auto';
-  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'browser';
+  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'google-free';
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
@@ -105,6 +107,7 @@ export function applyPortablePreferences(current,data){
 export function isStandardServiceConfigured(value){
  const s=normalizeSettings(value);
  switch(s.standardProvider){
+ case 'google-free':return true; // Public external endpoint; live probe is authoritative.
  case 'browser':return true; // Free on-device Chrome API; pack readiness is checked at runtime.
  case 'mymemory':return true; // Owner explicitly opts in to public MT.
  case 'cloud':
