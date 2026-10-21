@@ -19,6 +19,7 @@ export function NativeWebControls(){
  const [captionFile,setCaptionFile]=useState<File|null>(null);
  const [captionSource,setCaptionSource]=useState('auto');
  const [captionBusy,setCaptionBusy]=useState(false);
+ const [captionInspection,setCaptionInspection]=useState('');
  const [asrToken,setAsrToken]=useState('');
  const [status,setStatus]=useState('打开普通网页后点击翻译。');
  const [progress,setProgress]=useState<Progress|null>(null);
@@ -279,11 +280,41 @@ export function NativeWebControls(){
    }catch(error){setStatus(backendName+' ASR 错误：'+String(error instanceof Error?error.message:error));}
    finally{setCaptionBusy(false);}
  }
+ async function inspectCaptionState(){
+   setCaptionInspection('正在读取播放器字幕状态…');
+   try{
+     const [tab]=await browser.tabs.query({active:true,currentWindow:true});
+     if(!tab?.id||!/^https?:\\/\\//.test(tab.url||''))throw Error('当前不是可访问的视频网页');
+     const key='pit_caption_frame_'+tab.id;
+     const saved=await browser.storage.session.get(key);
+     const frameId=typeof saved[key]==='number'&&saved[key]>0?saved[key]:0;
+     const reply=await browser.tabs.sendMessage(tab.id,{
+       type:'PIT_CAPTIONS_DIAGNOSTICS'
+     },{frameId});
+     if(!reply?.ok)throw Error('字幕脚本未就绪，请先开启视频字幕翻译');
+     const state=reply.status==='error'?'翻译失败':
+       reply.status==='waiting-for-CC'?'等待播放器字幕':
+       reply.status==='ready'?'已读取原文字幕':
+       '字幕功能未运行';
+     const count=Math.max(0,Number(reply.translationCount)||0);
+     setCaptionInspection([
+       state,'译文缓存 '+count+' 条',
+       '识别来源：'+String(reply.source||'unknown'),
+       '字幕语言：'+String(reply.language||'unknown'),
+       '展示：'+(reply.renderMode==='replace-track'?'优先播放器内原位替换':'用户设置的兼容显示'),
+       count===0&&reply.status==='ready'?'已读取原文，但尚不能证明翻译成功':'',
+       reply.lastError?'最近错误：'+String(reply.lastError).slice(0,180):''
+     ].filter(Boolean).join(' · '));
+   }catch(error){
+     setCaptionInspection('字幕诊断不可用：'+
+       String(error instanceof Error?error.message:error).slice(0,180));
+   }
+ }
  async function captions(action:'start'|'stop'){
    if(captionBusy)return;
    if(action==='start' && mode==='ai' &&
       !window.confirm('连续视频字幕将调用自选 AI，可能产生 API 费用。确认启动？'))return;
-   setCaptionBusy(true);
+   setCaptionBusy(true);setCaptionInspection('');
    setStatus('正在检测可访问的视频及字幕…');
    try{
      const [tab]=await browser.tabs.query({active:true,currentWindow:true});
@@ -432,7 +463,9 @@ export function NativeWebControls(){
      <div className="native-actions">
        <button type="button" disabled={captionBusy} onClick={()=>void captions('start')}>翻译视频字幕</button>
        <button type="button" disabled={captionBusy} onClick={()=>void captions('stop')}>停止字幕翻译</button>
+       <button type="button" disabled={captionBusy} onClick={()=>void inspectCaptionState()}>检查字幕状态</button>
      </div>
+     {captionInspection&&<p className="native-hint" role="status">{captionInspection}</p>}
      <label className="pit-field">导入字幕 SRT / VTT / ASS（可选）
        <input type="file" accept=".srt,.vtt,.ass,text/vtt" onChange={event=>setCaptionFile(event.target.files?.[0]??null)}/>
      </label>
