@@ -199,6 +199,7 @@ async def main():
                 # inside a fixed grid column alongside form controls. PIT must
                 # translate only the headline, not turn its parent into a
                 # full-width translation banner or concatenate form labels.
+                await popup.get_by_label('翻译范围').select_option('full')
                 landing="https://careers.philips.com/pit-responsive-hero-fixture"
                 async def serve_landing(route):
                     await route.fulfill(status=200,content_type="text/html",body='''<!doctype html>
@@ -211,7 +212,7 @@ async def main():
                       .search-panel{display:flex;gap:10px;margin-top:20px}
                       .search-panel input,.search-panel button{min-width:0;max-width:160px}
                     </style></head><body>
-                    <header><nav>Working At Philips</nav></header>
+                    <header><nav><a href="/careers">Working At Philips</a></nav></header>
                     <main><section class="hero">
                     <div class="hero-column">
                       <h1 id="hero-title"><span>What you choose to do</span>
@@ -243,13 +244,16 @@ async def main():
                     columnWidth:cs.width,
                     translationWidth:rs.width,
                     formTranslated:form.querySelectorAll('.pit-translation').length,
+                    navTranslated:document.querySelectorAll('nav a > .pit-inline-translation').length,
+                    buttonTranslated:form.querySelectorAll('button > .pit-inline-translation').length,
                     searchButtons:form.querySelectorAll('button').length,
                     overflow:document.documentElement.scrollWidth-innerWidth
                   };
                 }""")
                 assert hero_layout['titleInside'],hero_layout
                 assert hero_layout['translated'].startswith('译文:What you choose'),hero_layout
-                assert hero_layout['formTranslated']==0 and hero_layout['searchButtons']==1,hero_layout
+                assert hero_layout['formTranslated']==1 and hero_layout['searchButtons']==1,hero_layout
+                assert hero_layout['navTranslated']==1 and hero_layout['buttonTranslated']==1,hero_layout
                 assert hero_layout['translationWidth']<=hero_layout['columnWidth']+2,hero_layout
                 assert hero_layout['overflow']<=2,hero_layout
                 assert hero_layout['border']=='0px',hero_layout
@@ -258,7 +262,8 @@ async def main():
                 await hero.locator('#hero-title > .pit-flow-translation').wait_for(
                   state='detached',timeout=8000)
                 await hero.close();await target.bring_to_front()
-                print('PASS: career hero bilingual translation stays inside headline column; form untouched')
+                await popup.get_by_label('翻译范围').select_option('smart')
+                print('PASS: career hero headline + inline navigation/CTA translation preserves layout and controls')
 
 
 
