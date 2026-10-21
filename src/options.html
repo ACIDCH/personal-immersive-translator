@@ -42,6 +42,8 @@
 <p id="nativeModelStatus" role="status" aria-live="polite" class="muted"></p>
 </section>
 <section id="standardKeys" class="panel"><h2>常规翻译凭据</h2><p class="muted">Chrome 无法使用内置模型时可手动选用 MyMemory：它会向第三方传输原文；不适合机密内容或长文档。PIT 设置了每天 4,500 字符的本地上限，服务端可能有更严格限制。不自动切换在线服务，也不自动消耗 AI 额度。</p><p class="muted">PIT 云端模型需要先部署 Cloudflare Worker，并绑定 Workers AI。未部署时不能使用；本模式不要求本机 Python。</p><label>PIT 云端 Worker HTTPS 地址<input name="cloudEndpoint" type="url" spellcheck="false" placeholder="https://pit-translate.yourname.workers.dev"></label><label>PIT 云端访问令牌（Worker PIT_ACCESS_TOKEN）<input name="cloudToken" type="password" autocomplete="off" placeholder="至少 16 个随机字符"></label>
+<label>独立云端 Whisper / Railway ASR HTTPS 地址（可选；不影响常规网页翻译）<input name="cloudAsrEndpoint" type="url" spellcheck="false" placeholder="https://your-pit-asr.up.railway.app"></label>
+<label>独立云端 ASR Bearer 令牌（PIT_CLOUD_ASR_TOKEN）<input name="cloudAsrToken" type="password" autocomplete="off" placeholder="最少 16 字符；仅保存在插件本机设置"></label>
 <label>Microsoft Key<input name="microsoftKey" type="password" autocomplete="off" placeholder="仅存于本地浏览器"></label>
 <label>Microsoft Region（全球单服务资源可留空）<input name="microsoftRegion" type="text" placeholder="例如 eastus"></label>
 <label>Google Cloud Translation Key<input name="googleKey" type="password" autocomplete="off"></label>
