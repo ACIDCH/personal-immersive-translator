@@ -75,11 +75,32 @@ export function QuickPreferences({mode,onSelection}:{mode:'standard'|'ai';onSele
    }finally{setProbeBusy(false);}
  }
  async function chooseOnlineFree(){
-   if(!settings||!window.confirm(
-     '确认将默认常规翻译改为 MyMemory 吗？网页原文会发送至 MyMemory 第三方服务器，存在字符额度限制。'
+   if(probeBusy||!settings||!window.confirm(
+     '先用公开短句测试 MyMemory，再切换默认常规翻译服务。实际网页与字幕原文将发送至 MyMemory 第三方，且有使用额度限制。确认？'
    ))return;
-   await patch({standardProvider:'mymemory'});
-   setProbeResult('已明确选择 MyMemory。可点击「测试此服务」检验真实连接。');
+   setProbeBusy(true);setProbeResult('正在对 MyMemory 进行真实连通性和译文检查…');
+   try{
+     const target=settings.target==='en'?'zh':settings.target;
+     let timer:ReturnType<typeof setTimeout>|undefined;
+     const result=await Promise.race([
+       browser.runtime.sendMessage({
+         type:'TEST_PROVIDER',mode:'standard',providerId:'mymemory',
+         target,userInitiated:true,costConfirmed:false
+       }),
+       new Promise<never>((_,reject)=>{timer=setTimeout(
+         ()=>reject(Error('15 秒仍未得到有效试译结果')),15000);})
+     ]).finally(()=>clearTimeout(timer));
+     if(!result?.ok)throw Error(String(result?.error||result?.status||'服务未返回有效译文'));
+     const saved=await browser.runtime.sendMessage({
+       type:'PATCH_SETTINGS',patch:{standardProvider:'mymemory'}
+     });
+     if(!saved?.ok)throw Error(String(saved?.error||'无法保存翻译服务'));
+     setSettings(saved.settings);
+     setNotice('已切换至真实试译成功的免 Key 服务；新网页和视频任务将使用该服务，除非设有覆盖规则。');
+     setProbeResult('MyMemory 试译成功：'+String(result.translationPreview||'').slice(0,140));
+   }catch(error){
+     setProbeResult('未切换服务：'+String(error instanceof Error?error.message:error).slice(0,180));
+   }finally{setProbeBusy(false);}
  }
  const open=(hash:string)=>browser.tabs.create({url:browser.runtime.getURL('pit-options.html' as never)+'#'+hash});
  if(!settings)return <p role="status">正在读取设置…</p>;
