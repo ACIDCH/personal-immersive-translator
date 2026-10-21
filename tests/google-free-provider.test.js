@@ -17,7 +17,8 @@ test('Google free adapter uses the MIT-compatible public endpoint without any ke
   assert.equal(opts.method,'GET');
   calls.push(url.searchParams.get('q'));
   return {ok:true,status:200,json:async()=>[
-   [[calls.length===1?'你的职业选择很重要':'搜索职位',null,null,null]],null,'en'
+   [[url.searchParams.get('q').includes('career')
+     ?'你的职业选择很重要':'搜索职位',null,null,null]],null,'en'
   ]};
  };
  const settings={provider:'google-free',source:'auto',target:'zh'};
