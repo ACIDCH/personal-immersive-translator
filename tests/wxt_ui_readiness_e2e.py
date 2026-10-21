@@ -45,7 +45,7 @@ async def main():
                          'files','sync','help'):
             await opts.locator('.options-nav a[href="#'+target+'"]').click()
             panel=opts.locator('#'+target)
-            assert await panel.is_visible(),target
+            await panel.wait_for(state='visible',timeout=8000)
           await opts.locator('.options-nav a[href="#services"]').click()
           cards=opts.locator('.pit-service-group .provider-card[data-provider]')
           count=await cards.count()
