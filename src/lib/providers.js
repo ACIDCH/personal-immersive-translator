@@ -78,15 +78,52 @@ function aiPrompt(texts, opts) {
   ].filter(Boolean).join('\n');
 }
 function splitPublicText(text,limit=450){
- const out=[],enc=new TextEncoder();let part='';
- for(const char of text){
-  if(enc.encode(part+char).length>limit){
-   if(!part)throw new TranslationError('字符超过免费接口限制');
-   out.push(part);part=char;
-  }else part+=char;
+ // Unicode-safe O(n) chunking with preference for sentence/word boundaries.
+ // Arbitrary byte slicing broke long French/English words and CJK phrases.
+ // The concatenation of returned parts must reproduce the source exactly.
+ const out=[],encoder=new TextEncoder();
+ let part='',bytes=0,lastBoundary=0;
+ const boundary=/[\s,.;:!?。，；：！？、]/u;
+ const refreshBoundary=()=>{
+   lastBoundary=0;
+   for(const [index,ch] of Array.from(part).entries()){
+     // lastBoundary is a UTF-16 offset, not a Unicode code-point index.
+     void index;
+   }
+   for(let k=0;k<part.length;){
+     const ch=String.fromCodePoint(part.codePointAt(k));
+     k+=ch.length;
+     if(boundary.test(ch))lastBoundary=k;
+   }
+ };
+ for(const ch of String(text)){
+   const bytesOfChar=encoder.encode(ch).length;
+   if(bytesOfChar>limit)throw new TranslationError('字符超过免费接口限制');
+   if(bytes+bytesOfChar>limit){
+     if(!part)throw new TranslationError('字符超过免费接口限制');
+     if(lastBoundary>=Math.floor(part.length*.55)){
+       out.push(part.slice(0,lastBoundary));
+       part=part.slice(lastBoundary);
+       bytes=encoder.encode(part).length;
+       refreshBoundary();
+     }else{out.push(part);part='';bytes=0;lastBoundary=0;}
+   }
+   part+=ch;bytes+=bytesOfChar;
+   if(boundary.test(ch))lastBoundary=part.length;
  }
  if(part)out.push(part);
  return out;
+}
+function joinPublicTranslations(parts,translated){
+ let joined='';
+ for(let i=0;i<translated.length;i++){
+   const next=translated[i];
+   if(i>0&&(/[\s]$/u.test(parts[i-1])||/^\s/u.test(parts[i]))&&
+       /[\p{Script=Latin}0-9]$/u.test(joined)&&
+       /^[\p{Script=Latin}0-9]/u.test(next)&&!/\s$/u.test(joined))joined+=' ';
+   joined+=next;
+ }
+ return joined;
 }
 export async function translateBatch(texts, opts, fetchFn = fetch) {
   assertTexts(texts);
@@ -150,7 +187,7 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
       // unofficial endpoint's rate limits. All text is committed only after
       // the full batch succeeds; unrelated pages never share results.
       await Promise.all(Array.from({length:Math.min(3,jobs.length)},()=>worker()));
-      const translated=new Map(unique.map((text,i)=>[text,completed[i].join('')]));
+      const translated=new Map(unique.map((text,i)=>[text,joinPublicTranslations(pieces[i],completed[i])]));
       return toPlainStringArray(texts.map(text=>translated.get(text)),texts.length);
     }
     case 'mymemory': {
