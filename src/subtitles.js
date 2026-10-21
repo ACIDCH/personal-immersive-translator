@@ -66,10 +66,12 @@
     return tracks.find(t=>t.mode==='showing') || tracks.find(t=>t.mode==='hidden') || tracks[0] || null;
   }
   function releaseTrack(track, originalMode) {
-    // Only undo a mode change that this extension made. A user's new
-    // language choice must never be reverted by restoring an old track.
-    if(track && originalMode==='disabled' && track.mode==='hidden')
-      track.mode='disabled';
+    if(!track)return;
+    // Restore a track visibility state that PIT changed for in-player
+    // captions. A user switching the caption track remains in control.
+    if((originalMode==='disabled'||originalMode==='hidden') &&
+       (track.mode==='hidden'||track.mode==='showing'))
+      track.mode=originalMode;
   }
   function refreshPlaybackSource() {
     if(state.video && !state.video.isConnected) {
@@ -128,7 +130,7 @@
   }
   function inlineNativeTranslation(cues,time){
     if(config.subtitleRenderMode!=='replace-track'||state.domMode||
-       state.importedCues||state.track?.mode!=='showing')return false;
+       state.importedCues||!state.track||state.track.mode==='disabled')return false;
     let raw=[];
     try{raw=state.track.cues?[...state.track.cues]:[];}catch{return false;}
     const patches=[];
@@ -152,6 +154,10 @@
           state.nativePatches.set(entry.item,entry);
         }
       }
+      // HTML5 tracks are often hidden solely to read cue data. Make them
+      // visible only after valid translated cues exist, then restore the
+      // original mode on STOP/track switch.
+      if(state.track.mode==='hidden')state.track.mode='showing';
       return true;
     }catch{restoreNativeTrack();return false;}
   }
