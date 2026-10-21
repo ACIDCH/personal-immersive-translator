@@ -83,6 +83,9 @@ body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);mar
 .pit-workbench-engine{margin:14px 0;padding:12px 16px;background:#eaf4f8;
   color:#275c70;border:1px solid #cde4eb;border-radius:12px;overflow-wrap:anywhere}
 .pit-workbench-module{scroll-margin-top:80px;min-width:0;margin:16px 0 22px}
+.pit-workbench-module[hidden]{display:none!important}
+.pit-workbench-nav a[aria-current=page]{color:#fff;background:#176d86;border-color:#176d86;font-weight:650}
+.pit-workbench-nav a:focus-visible{outline:3px solid #408fff;outline-offset:2px}
 .pit-file-workbench footer{color:#6b8090;padding-top:12px;border-top:1px solid #d6e4ec}
 @media(max-width:750px){.pit-file-workbench{width:calc(100% - 20px);padding-top:10px}
   .pit-workbench-header{flex-direction:column;align-items:flex-start;padding:16px}
