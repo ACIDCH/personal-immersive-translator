@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {chooseDetectedLanguage,normalizeDetectedLanguage,detectLanguages,detectLanguagesWithContext}
+import {chooseDetectedLanguage,normalizeDetectedLanguage,detectLanguages,detectLanguagesWithContext,detectCaptionSampleLanguage}
   from '../src/lib/language-detection.js';
 import {translateBatch} from '../src/lib/providers.js';
 
@@ -88,4 +88,25 @@ test('group-level language does not overwrite text confidently detected in anoth
   'Hola'
  ],detector);
  assert.deepEqual(output.map(x=>x.language),['fr','de','auto']);
+});
+
+test('caption-only source inference uses reliable bounded CLD rather than page UI language',async()=>{
+ let called=0,last='';
+ const detector=async text=>{
+  called++;last=text;
+  return {isReliable:true,languages:[
+   {language:'en',percentage:91},{language:'fr',percentage:3}
+  ]};
+ };
+ assert.equal(await detectCaptionSampleLanguage('Short cue',detector),null);
+ assert.equal(called,0,'Do not invent a language from short subtitle fragments');
+ const sample='We are studying the financial markets and international trade today.';
+ assert.equal(await detectCaptionSampleLanguage(sample,detector),'en');
+ assert.equal(last,sample);
+ assert.equal(await detectCaptionSampleLanguage('A'.repeat(2000),detector),'en');
+ assert.equal(last.length,1600,'Only a bounded same-video sample is inspected');
+ const uncertain=async()=>({isReliable:false,languages:[{language:'fr',percentage:99}]});
+ assert.equal(await detectCaptionSampleLanguage(sample,uncertain),null,
+   'Unknown CC source must not be silently guessed or sent to a free provider');
+ assert.equal(await detectCaptionSampleLanguage(null,detector),null);
 });
