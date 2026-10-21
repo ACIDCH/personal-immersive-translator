@@ -27,6 +27,8 @@ async def check_site(ctx,popup,url):
             return row
         await page.bring_to_front()
         row['visible_original_blocks']=await page.locator('main p,article p,h1,h2').count()
+        row['baseline_horizontal_overflow_px']=await page.evaluate(
+          "()=>Math.max(0,document.documentElement.scrollWidth-window.innerWidth)")
         await popup.get_by_role('button',name='翻译当前网页').click()
         await asyncio.sleep(.5)
         grant=popup.locator('.grant-site')
@@ -103,8 +105,10 @@ async def check_site(ctx,popup,url):
             row['status']='PASS_FULL_ELIGIBLE_CONTENT_AND_MT'
         elif row['status']=='NOT_RUN':
             row['status']='PARTIAL_OR_TIMED_OUT'
-        if row['layout']['horizontalOverflowPx']>24:
-            row['status']='LAYOUT_OVERFLOW'
+        row['new_horizontal_overflow_px']=max(0,row['layout']['horizontalOverflowPx']-
+          row['baseline_horizontal_overflow_px'])
+        if row['new_horizontal_overflow_px']>24:
+            row['status']='PIT_INTRODUCED_LAYOUT_OVERFLOW'
         await popup.get_by_role('button',name='恢复原文').click()
         await asyncio.sleep(.5)
         row['restored']=(await page.locator('.pit-translation').count())==0
