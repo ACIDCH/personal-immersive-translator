@@ -55,3 +55,29 @@ test('Google free adapter keeps multiple translated pieces in response order',as
   async()=>({ok:true,status:200,json:async()=>[[['Bonjour', 'Hello'],[' le monde',' world']],null,'en']}));
  assert.deepEqual(result,['Bonjour le monde']);
 });
+
+test('large identical paragraphs dispatch only once with bounded concurrency',async()=>{
+ const seen=[];let active=0,maxActive=0;
+ const repeated='A'.repeat(2600);
+ const out=await translateBatch([repeated,repeated,'Second text'],{
+  provider:'google-free',source:'en',target:'fr'
+ },async uri=>{
+  const u=new URL(uri);
+  active++;maxActive=Math.max(maxActive,active);
+  seen.push(u.searchParams.get('q'));
+  await new Promise(r=>setTimeout(r,2));
+  active--;
+  return {ok:true,status:200,json:async()=>[[['FR',null]],null,'en']};
+ });
+ assert.deepEqual(out,['FRFR','FRFR','FR']);
+ assert.equal(seen.length,3,'2600 chars split twice, duplicate input never sent again');
+ assert.ok(maxActive>=2&&maxActive<=3,'Three concurrent requests at most');
+});
+test('a free-provider 429 rejects the entire batch without silently replacing missing output',async()=>{
+ await assert.rejects(translateBatch(['Hello','World'],{
+  provider:'google-free',source:'en',target:'zh'
+ },async uri=>({
+  ok:!uri.includes('World'),status:429,
+  json:async()=>[[['你好']]]
+ })),e=>e.status===429);
+});
