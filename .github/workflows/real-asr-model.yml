@@ -27,8 +27,20 @@ jobs:
           python-version: '3.12'
       - name: Install open ASR runtime and local synthetic voice
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y espeak
+          # A generic apt-get update also checks unrelated preinstalled
+          # third-party repos on GitHub runners (e.g. Microsoft Ubuntu 26.04),
+          # which have intermittently returned 403 before ASR can start.
+          # Use only Ubuntu's official package index when espeak is missing.
+          if ! command -v espeak >/dev/null 2>&1; then
+            if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+              sudo apt-get update -qq \
+                -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources \
+                -o Dir::Etc::sourceparts=-
+            else
+              sudo apt-get update -qq
+            fi
+            sudo apt-get install -y espeak
+          fi
           python -m pip install --no-cache-dir \
             'faster-whisper>=1.1,<2' 'huggingface_hub>=0.24,<2' \
             'numpy>=1.26,<3' 'scipy>=1.12,<2'
