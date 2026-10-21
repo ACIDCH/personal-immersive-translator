@@ -1,7 +1,7 @@
 import {translateBatch, TranslationError} from './lib/providers.js';
 import {SETTINGS_KEY, normalizeSettings, hostIsBlocked, AI_PROVIDERS, STANDARD_PROVIDERS, isStandardServiceConfigured} from './lib/settings.js';
 import {cachedTranslation, saveTranslation, clearTranslations} from './lib/cache.js';
-import {detectLanguagesWithContext,normalizeDetectedLanguage} from './lib/language-detection.js';
+import {detectLanguagesWithContext,detectCaptionSampleLanguage,normalizeDetectedLanguage} from './lib/language-detection.js';
 import {probeProvider} from './lib/provider-catalog.js';
 import {PRODUCT_DEFAULTS,siteRule,effectiveVideo,expertPrompt,readingStyle} from './lib/product-settings.js';
 import * as syncRuntime from './lib/sync.js';
@@ -549,7 +549,16 @@ async function handle(message, sender) {
   if (!Array.isArray(texts) || texts.length < 1 || texts.length > 10 || texts.some(t => typeof t !== 'string' || t.length > 5000 || t.length < 1)) throw new TranslationError('翻译文本无效');
   const captionLang=message.type==='TRANSLATE_BATCH'&&(settings.source==='auto'||message.pageContext==='video')
     ? normalizeDetectedLanguage(message.captionSourceLanguage):null;
-  const source=message.type==='TEST_PROVIDER'?'en':(captionLang||settings.source);
+  let source=message.type==='TEST_PROVIDER'?'en':(captionLang||settings.source);
+  // In videos without a publisher language-tagged TextTrack, short CC
+  // fragments often cannot pass CLD individually. Infer only from bounded
+  // same-session caption context; never infer from the host page's UI language.
+  // No extra subtitle data is sent to the remote translation provider.
+  if(message.type==='TRANSLATE_BATCH'&&message.pageContext==='video'&&
+     source==='auto'&&!isAI&&['browser','mymemory'].includes(provider)){
+    const detected=await detectCaptionSampleLanguage(message.captionLanguageSample);
+    if(detected)source=detected;
+  }
   // A tab's page language describes article prose; it does not necessarily
   // describe Netflix/YouTube captions, media SRT or input-box text.
   const pageSource=source==='auto'&&['browser','mymemory'].includes(settings.standardProvider)&&
