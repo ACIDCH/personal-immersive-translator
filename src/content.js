@@ -9,7 +9,7 @@
   const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast,.pit-selection-card';
   const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
-  let scope='smart',display='bilingual',theme='subtle';
+  let scope='full',display='bilingual',theme='subtle';
   let prefs={},titleRecord=null,initialChars=0;
   let taskId='web-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   let candidateChars=0;
