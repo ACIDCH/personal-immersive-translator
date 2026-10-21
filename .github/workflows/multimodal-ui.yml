@@ -129,6 +129,8 @@ jobs:
         run: python tests/wxt_web_coverage_matrix_e2e.py
       - name: Benchmark native PIT on the same 24-paragraph fixture as KISS
         run: python tests/pit_translation_matrix_e2e.py
+      - name: Pre-delivery visual and navigation readiness in Chrome MV3
+        run: python tests/wxt_ui_readiness_e2e.py
       - name: Verify actual DOCX and PNG OCR inside the installed WXT extension
         run: python tests/wxt_file_lab_e2e.py
       - name: Check PDF cloud readiness gates before uploading a user file
@@ -151,6 +153,8 @@ jobs:
             wxt-sync-fixture-report.json
             pit-v2-options.png
             pit-v2-popup.png
+            pit-delivery-*.png
+            pit-delivery-ui-readiness.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Probe public websites in real Chromium (network-dependent, not provider quality)
