@@ -64,7 +64,7 @@ export function SubtitleFileLab(){
    }catch(e){setStatus('字幕翻译失败：'+String(e instanceof Error?e.message:e));}
    finally{currentAbort.current=null;setBusy(false);}
  }
- return <section className="document-lab subtitle-file-lab" id="subtitle-file-lab">
+ return <section className="document-lab subtitle-file-lab" id="pit-subtitle-editor">
    <h2>离线字幕文件翻译</h2>
    <p>不需要视频播放。导入自己拥有的 SRT/VTT/ASS 字幕，按原时间轴导出双语 SRT。不会上传视频或音频。</p>
    <label className="document-field">字幕文件（最多 2 MB）
