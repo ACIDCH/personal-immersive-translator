@@ -249,6 +249,13 @@
         ()=>reject(Error('字幕翻译服务超过 25 秒未返回，请检查网络或模型')),25000);})
     ]).finally(()=>clearTimeout(timeout));
     if(!response?.ok) throw new Error(response?.error || '字幕翻译失败');
+    // A service-worker restart, outdated adapter or partial upstream reply
+    // must not be counted as successfully translated speaker windows.
+    // Reject the *entire* response before any cue cache/DOM mutation.
+    if(!Array.isArray(response.translations)||
+       response.translations.length!==texts.length||
+       response.translations.some(t=>typeof t!=='string'||!t.trim()))
+      throw new Error('字幕译文数量不匹配或包含空译文，未写入播放器');
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){
       stop();throw new Error('播放器录像地址发生变化，字幕会话已停止');
     }
