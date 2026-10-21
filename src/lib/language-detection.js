@@ -74,3 +74,17 @@ export async function detectLanguagesWithContext(texts,detector=globalThis.chrom
   return {language:group.language,confidence:'group-cld'};
  });
 }
+
+
+/**
+ * Only captions belonging to the currently active video are evidence for
+ * subtitle language. A page's UI language is not a reliable hint for a
+ * lecture or film. This CLD sample stays local to the extension: it is never
+ * included in remote translator payloads, logs, or persistent settings.
+ */
+export async function detectCaptionSampleLanguage(sample,detector=globalThis.chrome?.i18n?.detectLanguage?.bind(globalThis.chrome.i18n)){
+ const text=typeof sample==='string'?sample.trim().slice(-1600):'';
+ if(text.length<35)return null;
+ const detected=await detectLanguages([text],detector);
+ return detected[0]?.language!=='auto'?detected[0]?.language||null:null;
+}
