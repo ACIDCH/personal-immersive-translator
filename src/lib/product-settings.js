@@ -14,7 +14,7 @@ export const PRODUCT_DEFAULTS=Object.freeze({schemaVersion:2,uiLanguage:'zh',pro
  temporaryAutoTranslateMinutes:0,temporaryAutoTranslateUntil:{},translationOnlyLanguages:[],siteRules:[],
  selectionTranslate:true,fileProviderId:'inherit'});
 const languages=['zh','en','fr','ja','ko','de','es'];
-const providers=['browser','mymemory','cloud','microsoft','google','deepl','libre'];
+const providers=['google-free','browser','mymemory','cloud','microsoft','google','deepl','libre'];
 const bounded=(v,d,min,max)=>Number.isFinite(Number(v))?Math.min(max,Math.max(min,Number(v))):d;
 const color=(v,d)=>/^#[a-f0-9]{6}$/i.test(v||'')?v:d;
 const record=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
