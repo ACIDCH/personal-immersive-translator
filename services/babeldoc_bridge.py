@@ -315,11 +315,11 @@ async def transcribe_audio(audio: UploadFile=File(...),x_pit_token: str|None=Hea
     async with asr_lock:
         if ASR_BACKEND=="faster":
             try:
-                text=await asyncio.to_thread(transcribe_local,data)
+                detailed=await asyncio.to_thread(transcribe_local,data,return_metadata=True)
             except (RuntimeError,ValueError,OSError) as exc:
                 raise HTTPException(status_code=503,
                     detail="本机 faster-whisper 模型加载或语音识别失败") from exc
-            return {"text":text}
+            return detailed if isinstance(detailed,dict) else {"text":str(detailed)[:5000]}
         if ASR_BACKEND=="server":
             try:
                 text=await transcribe_server(data)
