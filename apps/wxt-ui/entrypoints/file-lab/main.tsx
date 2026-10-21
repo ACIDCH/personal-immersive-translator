@@ -47,8 +47,11 @@ function FileWorkbench(){
  }
  async function chooseProvider(id:string){
    if(!services.includes(id)||serviceBusy)return;
-   if(id==='mymemory'&&!window.confirm(
-     'MyMemory 会将你选择翻译的文档内容发送至第三方在线服务。请勿用它翻译敏感文件；服务有字符额度限制。\\n确认将其设为网页、视频、文件的默认普通翻译服务？'
+   if(['mymemory','google-free'].includes(id)&&!window.confirm(
+     (id==='google-free'
+       ?'Google 免费公共翻译是非官方免 Key 在线接口；可能限流或不可用。'
+       :'MyMemory 免 Key 服务受每日额度及第三方限制。')+
+     '\\n切换后，网页、视频及文件中明确发起的翻译原文将发送给该第三方。请勿用于敏感内容。确认设为全局默认普通翻译服务？'
    ))return;
    setServiceBusy(true);setDiagnostic('');
    try{
