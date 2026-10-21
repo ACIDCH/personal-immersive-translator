@@ -35,7 +35,7 @@ function FileWorkbench(){
      (id==='deepl'&&Boolean(s.deeplKey))||
      (id==='cloud'&&Boolean(s.cloudEndpoint&&s.cloudToken))||
      (id==='libre'&&Boolean(s.libreUrl));
-   setEngine((names[id]||id)+' · '+(configured
+   setEngine('文件翻译服务：'+(names[id]||id)+' · '+(configured
      ?'配置存在，实际可用性仍需检测':'缺少必需配置，暂不可调用')+
      ' · '+s.source+' → '+s.target+
      (s.fileProviderId!=='inherit'?' · 文件专用覆盖':' · 继承全局'));
