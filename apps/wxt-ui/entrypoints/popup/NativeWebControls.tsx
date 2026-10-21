@@ -308,7 +308,8 @@ export function NativeWebControls(){
        '字幕语言：'+String(reply.language||'unknown'),
        '目标：'+(reply.renderMode==='replace-track'?'优先播放器内原位替换':'用户设置的兼容显示'),
        '实际：'+({['native-track']:'原生字幕轨直接替换',['platform-dom']:'播放器网页字幕原位替换',
-         overlay:'兼容叠加层（非原位替换）',none:'尚未显示任何译文'} as Record<string,string>)[reply.renderRoute||'none'],
+         overlay:'兼容叠加层（非原位替换）',
+         unsupported:'原位替换被播放器限制，未显示外置字幕',none:'尚未显示任何译文'} as Record<string,string>)[reply.renderRoute||'none'],
        count===0&&reply.status==='ready'?'已读取原文，但尚不能证明翻译成功':'',
        reply.lastError?'最近错误：'+String(reply.lastError).slice(0,180):''
      ].filter(Boolean).join(' · '));
