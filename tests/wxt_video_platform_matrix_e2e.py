@@ -88,6 +88,49 @@ async def main():
           await page.close()
           print('PLATFORM VISIBLE-CC FIXTURE:',json.dumps(result,ensure_ascii=False),flush=True)
 
+        # Real video CC often splits one sentence across adjacent spans.
+        # The first visible caption leaf receives the translation, while the
+        # remaining siblings are cleared and restored together on STOP.
+        multi='https://www.youtube.com/watch?v=pit-multiple-caption-segments'
+        async def multi_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+            <div class="ytp-caption-window-container">
+              <span class="ytp-caption-segment">First lecture segment</span>
+              <span class="ytp-caption-segment">continues here</span>
+            </div></body></html>''')
+        await ctx.route(multi,multi_html)
+        page=await ctx.new_page()
+        await page.goto(multi);await page.bring_to_front()
+        spans=page.locator('.ytp-caption-window-container .ytp-caption-segment')
+        assert await spans.count()==2
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await spans.nth(0).get_by_text(
+          '译文:First lecture segment continues here',exact=True).wait_for(timeout=23000)
+        assert await spans.nth(1).inner_text()=='',(
+          'Trailing caption fragment must not display untranslated duplicate text')
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(node)=>getComputedStyle(node).display==='none'")
+        # The publisher replaces both subtitle segments while playback goes
+        # on. PIT must release the old patch and translate the new sentence.
+        await page.evaluate("""()=>{
+          const nodes=[...document.querySelectorAll('.ytp-caption-segment')];
+          nodes[0].textContent='The next lecture';
+          nodes[1].textContent='topic is finance';
+        }""")
+        await spans.nth(0).get_by_text(
+          '译文:The next lecture topic is finance',exact=True).wait_for(timeout=23000)
+        assert await spans.nth(1).inner_text()==''
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        await page.locator('.pit-caption-overlay').wait_for(state='detached',timeout=8000)
+        assert [await spans.nth(i).inner_text() for i in range(2)]==[
+          'The next lecture','topic is finance'
+        ],'STOP must restore the latest publisher-owned subtitle text'
+        results.append({'platform':'youtube-split-and-updated-cc',
+          'fixture_visible_caption':'pass','in_player_replacement':True,
+          'publisher_updates_preserved':True,'restored_on_stop':True})
+        await page.close()
+        print('PLATFORM SPLIT-CC AND REPLACE: PASS',flush=True)
+
         # P0 regression: known video platforms often load their caption
         # layer only after PIT has started. Do not fail at first empty frame.
         delayed='https://www.youtube.com/watch?v=pit-delayed-captions'
@@ -164,6 +207,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==7 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==8 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
