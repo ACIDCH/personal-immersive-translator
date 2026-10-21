@@ -29,5 +29,20 @@ export default defineRailway(() => {
     }
   });
 
-  return project("pit-translation-services", {resources: [pdf]});
+  // Independently configured cloud speech service; model is pinned and
+  // downloaded at IMAGE BUILD time. No online model download at runtime.
+  const asr = service("pit-whisper-preview", {
+    source: github("ACIDCH/personal-immersive-translator", {
+      branch: "feat/chrome-native-no-key-translation-20261018"
+    }),
+    healthcheck: "/livez",
+    healthcheckTimeout: 300,
+    replicas: 1,
+    env: {
+      RAILWAY_DOCKERFILE_PATH: "services/cloud-asr/Dockerfile",
+      PIT_CLOUD_ASR_TOKEN: preserve()
+    }
+  });
+
+  return project("pit-translation-services", {resources: [pdf, asr]});
 });
