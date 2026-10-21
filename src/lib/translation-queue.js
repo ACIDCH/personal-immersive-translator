@@ -43,26 +43,67 @@ export class PriorityTranslationQueue {
  * arriving during an article slice is next in priority; no in-flight request
  * is cancelled or silently rerouted to a paid provider.
  */
+function transientPublicError(error){
+ const status=Number(error?.status);
+ return [429,500,502,503,504].includes(status)||
+   (status===0 && /连接失败|超时|network|timeout|fetch failed/i.test(String(error?.message||'')))||
+   (!Number.isFinite(status)&&/Google 免费接口连接失败或超时/.test(String(error?.message||'')));
+}
+function retryPublicDelay(error,attempt,context){
+ const hinted=Number(error?.retryAfterMs);
+ // Never thrash an endpoint that explicitly asks for a long cool-down.
+ if(Number.isFinite(hinted)&&hinted>18000)return null;
+ const start=context==='video'?650:context==='document'?3000:2200;
+ const fallback=start*Math.pow(2,attempt);
+ return Math.min(18000,Math.max(fallback,Number.isFinite(hinted)&&hinted>=0?hinted:0));
+}
+const sleep=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
+
+/**
+ * Limited public MT retries belong at the scheduling layer, NOT inside the
+ * provider's parallel worker, otherwise a stalled article monopolizes the
+ * video-priority queue. HTTP 429/5xx and connection timeouts may retry with
+ * bounded backoff and optional Retry-After; malformed/blank translations,
+ * auth errors and provider-limit messages are never retried.
+ *
+ * No invisible provider switch or paid AI fallback, and all partial slices
+ * remain private until every slice returns a complete string array.
+ */
 export async function translateKeylessSliced(queue,texts,opts,translate){
  if(!Array.isArray(texts)||!texts.length)return [];
+ const context=opts?.requestContext||'article';
  const slices=[];let batch=[],size=0;
- for(const text of texts){
-  if(typeof text!=='string')throw Error('Invalid public translation text');
-  if(batch.length&&(batch.length>=2||size+text.length>2600)){
+ for(const part of texts){
+  if(typeof part!=='string'||!part.trim())throw Error('Invalid public translation text');
+  if(batch.length&&(batch.length>=2||size+part.length>2600)){
    slices.push(batch);batch=[];size=0;
   }
-  batch.push(text);size+=text.length;
+  batch.push(part);size+=part.length;
  }
  if(batch.length)slices.push(batch);
  const translated=[];
- for(const slice of slices){
-  const values=await queue.enqueue(()=>translate(slice,opts),{
-   context:opts?.requestContext||'article'
-  });
-  if(!Array.isArray(values)||values.length!==slice.length||
-     values.some(t=>typeof t!=='string'||!t.trim()))
-   throw Error('Public provider returned an incomplete sub-batch');
-  translated.push(...values);
+ for(let i=0;i<slices.length;i++){
+  const slice=slices[i];
+  // Moderate sustained whole-page throughput without delaying subtitle jobs.
+  // Delay is OUTSIDE the serial queue so any waiting video has priority.
+  if(i>0&&context==='article')await sleep(240);
+  const maxRetries=context==='video'?1:2;
+  let answer=null;
+  for(let attempt=0;attempt<=maxRetries;attempt++){
+   try{
+    answer=await queue.enqueue(()=>translate(slice,opts),{context});
+    if(!Array.isArray(answer)||answer.length!==slice.length||
+       answer.some(t=>typeof t!=='string'||!t.trim()))
+      throw Error('Public provider returned an incomplete sub-batch');
+    break;
+   }catch(error){
+    if(attempt>=maxRetries||!transientPublicError(error))throw error;
+    const delay=retryPublicDelay(error,attempt,context);
+    if(delay===null)throw error;
+    await sleep(delay);
+   }
+  }
+  translated.push(...answer);
  }
  return translated;
 }
