@@ -23,6 +23,8 @@ function FileWorkbench(){
    google:'Google Cloud Translation',deepl:'DeepL',libre:'LibreTranslate'
  };
  const services=['browser','mymemory','microsoft','google','deepl','cloud','libre'];
+ const languages=[['zh','简体中文'],['en','English'],['fr','Français'],['ja','日本語'],
+   ['ko','한국어'],['de','Deutsch'],['es','Español']] as const;
  async function refreshService(){
    const version=++serviceRequestVersion.current;
    const reply=await browser.runtime.sendMessage({type:'GET_SETTINGS'});
@@ -59,6 +61,26 @@ function FileWorkbench(){
    }catch(e){setDiagnostic('保存失败：'+String(e instanceof Error?e.message:e));}
    finally{setServiceBusy(false);}
  }
+ async function setLanguage(key:'source'|'target',value:string){
+   if(serviceBusy||!settings)return;
+   const source=key==='source'?value:settings.source;
+   const target=key==='target'?value:settings.target;
+   if(source!=='auto'&&source===target){
+     setDiagnostic('原文与译文语言相同。请先修改另一侧语言后重试。');
+     return;
+   }
+   setServiceBusy(true);setDiagnostic('');
+   try{
+     const reply=await browser.runtime.sendMessage({
+       type:'PATCH_SETTINGS',patch:{[key]:value}
+     });
+     if(!reply?.ok)throw Error(String(reply?.error||'语言方向未保存'));
+     await refreshService();
+     setDiagnostic('语言方向已同步到全局设置。正在执行的文件任务不会被重新启动。');
+   }catch(error){
+     setDiagnostic('语言设置失败：'+String(error instanceof Error?error.message:error));
+   }finally{setServiceBusy(false);}
+ }
  async function testCurrentService(){
    if(serviceBusy||!settings)return;
    if(!['browser','mymemory'].includes(selectedProvider)){
@@ -83,9 +105,11 @@ function FileWorkbench(){
          type:'TEST_PROVIDER',providerId:'mymemory',mode:'standard',
          target,userInitiated:true
        });
-       setDiagnostic(r?.ok?'MyMemory 真实公开样句测试成功：'+
+       setDiagnostic((settings.target==='en'?
+         '当前目标是英语，公开测试改用英语→中文，仅验证此语言对：':'')+
+         (r?.ok?'MyMemory 公开样句测试成功：'+
          String(r.translationPreview||'').slice(0,120):
-         'MyMemory 测试失败：'+String(r?.error||r?.status||'未知错误').slice(0,220));
+         'MyMemory 测试失败：'+String(r?.error||r?.status||'未知错误').slice(0,220)));
      }
    }catch(e){setDiagnostic('诊断失败：'+String(e instanceof Error?e.message:e));}
    finally{setServiceBusy(false);}
@@ -155,7 +179,23 @@ function FileWorkbench(){
        <a href={'/pit-options.html#services/'+selectedProvider}
          target="_blank" rel="noopener noreferrer">服务配置与完整测试</a>
      </div>
-     <p className="pit-workbench-engine" role="status">{engine}。选择此处默认服务会同步网页、视频和文件的新任务；不会暗中使用付费 AI。</p>
+     <div className="pit-workbench-language-controls" aria-label="全局原文与译文语言">
+       <label htmlFor="pit-workbench-source">原文语言</label>
+       <select id="pit-workbench-source" value={settings?.source||'auto'}
+         disabled={serviceBusy||!settings}
+         onChange={event=>void setLanguage('source',event.target.value)}>
+         <option value="auto">自动检测</option>
+         {languages.map(([code,name])=><option value={code} key={code}>{name}</option>)}
+       </select>
+       <span aria-hidden="true">→</span>
+       <label htmlFor="pit-workbench-target">目标语言</label>
+       <select id="pit-workbench-target" value={settings?.target||'zh'}
+         disabled={serviceBusy||!settings}
+         onChange={event=>void setLanguage('target',event.target.value)}>
+         {languages.map(([code,name])=><option value={code} key={code}>{name}</option>)}
+       </select>
+     </div>
+     <p className="pit-workbench-engine" role="status">{engine}。这里与 Popup / 设置中心共用同一配置。语言与服务更新对新翻译请求生效；视频/站点独立覆盖规则仍然优先。</p>
      {diagnostic&&<p className="pit-workbench-diagnostic" role="status">{diagnostic}</p>}
    </section>
    {/* Keep each engine mounted while navigating: unmounting in-flight file
