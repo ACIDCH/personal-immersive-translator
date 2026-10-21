@@ -50,7 +50,7 @@
   const CONTENT_TARGETS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],div';
   // Opt-in complete scope also translates visible navigation/CTA labels
   // without moving, reparenting or replacing the actual clickable control.
-  const FULL_CONTROLS = 'nav a,header a,[role="navigation"] a,main button,main [role="button"]';
+  const FULL_CONTROLS = 'nav a,header a,[role="navigation"] a,main button,main [role="button"],form button';
   const targets=()=>scope==='full'?CONTENT_TARGETS+','+FULL_CONTROLS:TARGETS;
 
   let active = false, currentId = 0, mode = 'standard';
@@ -81,7 +81,10 @@
   function isUnsafe(el) {
     if(prefs.translateSidebar===false&&el.closest('aside,[role="complementary"]'))return true;
     if(scope==='full'&&el.matches(FULL_CONTROLS)){
-      return Boolean(el.closest('form,[contenteditable],[translate="no"],[aria-hidden="true"]'));
+      // Translate only the visible button or link label, never its form,
+      // inputs, data or validation state. Keep native submit/click behavior.
+      return Boolean(el.closest('[contenteditable],[translate="no"],[aria-hidden="true"]')||
+        el.matches('[contenteditable],[translate="no"],[aria-hidden="true"]'));
     }
     let part=el;
     while(part) {
