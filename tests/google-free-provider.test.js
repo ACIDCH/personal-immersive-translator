@@ -112,3 +112,12 @@ test('Latin-language translation pieces retain spaces when provider trims bounda
  assert.ok(/company career page\. This is/u.test(out[0]),
   'Translated French/English segments must not merge words across split boundaries');
 });
+
+test('public 429 retry-after header is exposed as bounded metadata',async()=>{
+ await assert.rejects(translateBatch(['Hello'],{
+  provider:'google-free',source:'en',target:'zh'
+ },async()=>({
+  ok:false,status:429,headers:{get(name){return name==='retry-after'?'4':null;}}
+ })),error=>error instanceof TranslationError&&error.status===429&&
+  error.retryAfterMs===4000);
+});
