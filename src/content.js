@@ -22,7 +22,20 @@
   function applyReadingStyle(node,settings){
     for(const [key,value] of Object.entries(settings.readingStyle||{}))node.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
     if(settings.longParagraphLineBreak||settings.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
-    if(theme==='none')node.style.setProperty('background-color','transparent','important');
+    // Product default is an unboxed, contextual bilingual line, not a
+    // tinted full-width callout. Allow explicit highlight theme separately.
+    if(theme==='subtle'||theme==='none'){
+      node.style.setProperty('background-color','transparent','important');
+      node.style.setProperty('color','inherit','important');
+    }
+    // Hero headings often live inside CSS grid/flex columns. The injected
+    // translation must inherit their width, not become another grid item.
+    if(node.classList.contains('pit-flow-translation')){
+      node.style.setProperty('font-size','.78em','important');
+      node.style.setProperty('padding','0','important');
+      node.style.setProperty('border','0','important');
+      node.style.setProperty('margin','.14em 0 0','important');
+    }
   }
   let hoverEnabled=false,inputEnabled=false;
   let voiceSource='auto',voiceTarget='zh';
@@ -107,6 +120,9 @@
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
     if(el.matches('div')&&el.closest('nav,'+(prefs.translateSidebar?'':'aside,')+'[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
+    // Hero search/filter panels are NOT prose. A catch-all div with several
+    // labels/inputs must never become a translated single paragraph.
+    if(el.matches('div')&&el.querySelector('input,textarea,select,button,form,[role="search"],[role="button"],[role="combobox"],[role="textbox"]'))return false;
     if(el.matches('div')&&el.children.length>0){
       // A wrapping DIV with its own rich descendants is not a leaf text unit.
       // Only permit literal text runs at leaf DIV level, so a whole article is
@@ -165,8 +181,9 @@
   }
   function attach(el,source,translation,isAI) {
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
-    const node=document.createElement('div');
-    node.className='pit-translation'+(isAI?' pit-ai':'');
+    const heading=el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]');
+    const node=document.createElement(heading?'span':'div');
+    node.className='pit-translation'+(isAI?' pit-ai':'')+(heading?' pit-flow-translation':'');
     node.textContent=prefs.longParagraphLineBreak?translation.replace(/([.!?。！？])\s*/g,'$1\n'):translation;
     applyReadingStyle(node,prefs);
     if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
@@ -176,8 +193,9 @@
     node.dataset.theme=theme;
     el.classList.add('pit-source-block');
     el.classList.toggle('pit-original-concealed',display==='translation-only');
-    if(el.matches('li,td,th')){if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);}
-    else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
+    if(heading||el.matches('li,td,th')){
+      if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);
+    }else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     processed.set(el,{source,node,translation});
     return true;
   }
@@ -590,8 +608,9 @@
       node.textContent=p.longParagraphLineBreak?record.translation.replace(/([.!?。！？])\s*/g,'$1\n'):record.translation;
       if(p.longParagraphLineBreak||p.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
       if(theme==='none')node.style.setProperty('background-color','transparent','important');
-      if(source.matches('li,td,th')){if(p.translationOrder==='translation-first')source.prepend(node);else source.append(node);}
-      else source.insertAdjacentElement(p.translationOrder==='translation-first'?'beforebegin':'afterend',node);
+      if(node.classList.contains('pit-flow-translation')||source.matches('li,td,th')){
+        if(p.translationOrder==='translation-first')source.prepend(node);else source.append(node);
+      }else source.insertAdjacentElement(p.translationOrder==='translation-first'?'beforebegin':'afterend',node);
     }
     if(!p.floatingControl)document.getElementById('pit-floating-translate')?.remove();
     if(auto&&(matches(p.autoTranslateHosts)||p.temporaryAutoTranslateUntil?.[host]>Date.now())&&!matches(p.blockedHosts)){
