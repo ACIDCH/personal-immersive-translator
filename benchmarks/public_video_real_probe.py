@@ -124,7 +124,7 @@ async def observe_native_public(ctx,popup):
     row={'platform':'public-native-html5','page_state':'NOT_CHECKED',
          'caption_state':'NOT_CHECKED','translation_state':'NOT_CHECKED',
          'provider':'google-free','real_page':True,'real_provider':True,
-         'real_media_and_vtt':True,'native_html5':True}
+         'real_media_and_vtt':False,'native_html5':True}
     page=await ctx.new_page()
     started=time.monotonic()
     try:
@@ -170,6 +170,7 @@ async def observe_native_public(ctx,popup):
             row['caption_state']='NO_USABLE_PUBLIC_ENGLISH_CC_CUES'
             return row
         row['caption_state']='PUBLISHER_NATIVE_VTT_AVAILABLE'
+        row['real_media_and_vtt']=True
         row['publisher_cue_count']=observed['cueCount']
         await page.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
