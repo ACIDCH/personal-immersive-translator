@@ -562,7 +562,8 @@ async function handle(message, sender) {
   // A tab's page language describes article prose; it does not necessarily
   // describe Netflix/YouTube captions, media SRT or input-box text.
   const pageSource=source==='auto'&&['browser','mymemory'].includes(settings.standardProvider)&&
-    message.pageContext==='article' ? await tabLanguageHint(sender):null;
+    message.pageContext==='article' ?
+      (await tabLanguageHint(sender)||normalizeDetectedLanguage(message.pageLanguage)):null;
   // Input enhancement is standard-MT only, explicitly user-triggered,
   // with target selected by the owner in extension options.
   const target = message.inputEnhancement===true && message.type==='TRANSLATE_BATCH' && !isAI
