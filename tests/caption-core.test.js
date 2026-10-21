@@ -82,3 +82,50 @@ test('manual video subtitle source has strict ISO language validation',()=>{
  assert.equal(normalizeCaptionSource('unknown'),'');
  assert.equal(normalizeCaptionSource(null),'');
 });
+
+test('KISS-inspired subtitle request dedup retains distinct cue timestamps and in-player placement',async()=>{
+ const c=new CaptionCache(8);
+ const cues=normalizeCues([
+  {startTime:0,endTime:1,text:'Repeat after me'},
+  {startTime:2,endTime:3,text:'Repeat after me'},
+  {startTime:4,endTime:5,text:'Next phrase'}
+ ]);
+ let sent=[];
+ assert.equal(await c.prefetch(cues,async texts=>{
+  sent.push(texts);return texts.map(x=>'译文:'+x);
+ }),3);
+ assert.deepEqual(sent,[['Repeat after me','Next phrase']]);
+ assert.deepEqual(cues.map(x=>c.get(x.key)),[
+  '译文:Repeat after me','译文:Repeat after me','译文:Next phrase'
+ ]);
+ // Another timestamp reuses same session's phrase, without second remote call.
+ const after=normalizeCues([{startTime:90,endTime:91,text:'Repeat after me'}]);
+ assert.equal(await c.prefetch(after,async()=>{throw Error('Should be cached');}),1);
+ assert.equal(c.get(after[0].key),'译文:Repeat after me');
+ c.clear();
+ assert.equal(c.map.size,0);
+ assert.equal(c.byText.size,0);
+});
+test('failed translated cues never poison text-dedup cache',async()=>{
+ const c=new CaptionCache(),cues=normalizeCues([
+  {startTime:0,endTime:1,text:'same'},{startTime:1,endTime:2,text:'same'}
+ ]);
+ await assert.rejects(c.prefetch(cues,async()=>['  ']),/did not match/);
+ assert.equal(c.map.size,0);
+ assert.equal(c.byText.size,0);
+ assert.equal(c.inflight.size,0);
+ assert.equal(await c.prefetch(cues,async()=>['有效译文']),2);
+ assert.equal(c.byText.get('same'),'有效译文');
+});
+test('caption text cache is size bounded independently from cue timing cache',async()=>{
+ const c=new CaptionCache(2);
+ const cues=normalizeCues([
+  {startTime:0,endTime:1,text:'one'},
+  {startTime:1,endTime:2,text:'two'},
+  {startTime:2,endTime:3,text:'three'}
+ ]);
+ await c.prefetch(cues,async arr=>arr.map(x=>'T:'+x));
+ assert.equal(c.byText.size,2);
+ assert.equal(c.map.size,2);
+ assert.equal(c.byText.has('one'),false);
+});
