@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {translateBatch,parseAIResponse,decodeEntities,TranslationError} from '../src/lib/providers.js';
 import {normalizeSettings,hostIsBlocked,portablePreferences,applyPortablePreferences,isStandardServiceConfigured} from '../src/lib/settings.js';
+import {probeStatus} from '../src/lib/provider-catalog.js';
 
+test('Chrome downloaded-model absence is diagnosed as missing-pack',()=>{
+ assert.equal(probeStatus(Error('Chrome 未下载离线包。请在 PIT 设置中主动下载')),'missing-pack');
+ assert.equal(probeStatus(Error('Chrome 语言包不可用')),'missing-pack');
+ assert.equal(probeStatus(Error('网络中断')),'network-error');
+});
 function mockResponse(output,check) {return async (url,init) => {check?.(url,init);return {ok:true,status:200,json:async()=>output};};}
 const config = {target:'zh', source:'en'};
 test('Microsoft request maps strings in correct order and uses region header',async()=>{
