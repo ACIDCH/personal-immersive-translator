@@ -83,7 +83,7 @@ export async function detectLanguagesWithContext(texts,detector=globalThis.chrom
  * included in remote translator payloads, logs, or persistent settings.
  */
 export async function detectCaptionSampleLanguage(sample,detector=globalThis.chrome?.i18n?.detectLanguage?.bind(globalThis.chrome.i18n)){
- const text=typeof sample==='string'?sample.trim().slice(-1600):'';
+ const text=typeof sample==='string'?sample.trim().slice(0,1200):'';
  if(text.length<35)return null;
  const detected=await detectLanguages([text],detector);
  return detected[0]?.language!=='auto'?detected[0]?.language||null:null;
