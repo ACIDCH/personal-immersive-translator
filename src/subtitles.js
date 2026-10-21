@@ -480,7 +480,9 @@
     if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)){void settingsReady.then(()=>{manuallyStopped=false;respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));quickToggle();});return true;}
     else if(msg?.type==='PIT_CAPTIONS_STOP'){manuallyStopped=true;stop();quickToggle();respond({ok:true});}
     else if(msg?.type==='PIT_PREFERENCES_CHANGED'){void refreshConfig().catch(()=>{});}
-    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',status:!config.enabled?'disabled':state.failedAt?'error':state.active?(state.seenAny?'ready':'waiting-for-CC'):'disabled',lastError});}
+    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',translationCount:state.cache.map.size,
+      active:state.active,renderMode:config.subtitleRenderMode||'in-player',
+      status:!config.enabled?'disabled':state.failedAt?'error':state.active?(state.seenAny?'ready':'waiting-for-CC'):'disabled',lastError});}
   });
   settingsReady=refreshConfig().catch(()=>{});
   // Event-driven discovery; existing 450 ms session timer remains the only poll.
