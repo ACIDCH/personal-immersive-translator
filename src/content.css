@@ -116,6 +116,17 @@
  display:block !important;font-size:clamp(18px,2vw,30px) !important;
 }
 
+/* In-paragraph translation stays inside the original grid/flex item, including
+   translation-only mode where the source is visually collapsed, not removed. */
+.pit-original-concealed:is(p,blockquote,figcaption,[role="paragraph"]):not(li):not(td):not(th){
+ display:block !important;font-size:0 !important;
+}
+.pit-original-concealed:is(p,blockquote,figcaption,[role="paragraph"])> :not(.pit-translation){
+ display:none !important;
+}
+.pit-original-concealed:is(p,blockquote,figcaption,[role="paragraph"])>.pit-translation{
+ display:block !important;visibility:visible !important;
+}
 /* Explicit full-page reading translates controls as inline bilingual labels;
    the host control keeps its original DOM identity and event handlers. */
 .pit-translation.pit-inline-translation{
