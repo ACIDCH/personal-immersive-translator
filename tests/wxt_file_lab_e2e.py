@@ -271,6 +271,7 @@ async def main():
         ImageDraw.Draw(image_batch).text((30,40),'HELLO WORLD 2026',
           font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',64),fill='black')
         image_data=io.BytesIO();image_batch.save(image_data,format='PNG')
+        await page.locator('.pit-workbench-nav a[href="#batch-file-lab"]').click()
         await page.locator('.batch-file-lab input[type="file"]').set_input_files([
           {'name':'batch.docx','mimeType':'application/octet-stream','buffer':ooxml_docx()},
           {'name':'batch.pptx','mimeType':'application/octet-stream','buffer':pptx_fixture()},
@@ -410,6 +411,7 @@ async def main():
         report['drag_drop_file_translation']='pass'
         print('WXT REAL DROP EVENT AND TRANSLATED TXT ZIP: PASS',flush=True)
 
+        await page.locator('.pit-workbench-nav a[href="#subtitle-file-lab"]').click()
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'lecture.vtt','mimeType':'text/vtt',
           'buffer':b'WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello world\n\n00:00:04.500 --> 00:00:08.000\nFinancial models\n'
@@ -451,6 +453,7 @@ async def main():
         assert 'Default' not in ass_result and '{\\i1}' not in ass_result,ass_result
         report['ass_subtitle_import']='pass'
         # The batch lab uses the same subtitle engine, not a third parser.
+        await page.locator('.pit-workbench-nav a[href="#batch-file-lab"]').click()
         await page.locator('.batch-file-lab input[type="file"]').set_input_files({
           'name':'seminar.ass','mimeType':'text/plain','buffer':ass.encode('utf8')
         })
@@ -478,6 +481,7 @@ async def main():
                 b'<w:t>Repeated finance sentence</w:t></w:r></w:p><w:p><w:r><w:t>Repeated finance sentence</w:t>'
               )
             output.writestr(name,contents)
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         await page.get_by_role('button',name='DOCX 文档').click()
         await page.locator('.document-lab').first.locator('input[type=file]').set_input_files({
           'name':'repeated.docx','mimeType':'application/octet-stream','buffer':repeat.getvalue()
@@ -520,6 +524,7 @@ async def main():
         font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',66)
         d.text((25,36),'HELLO WORLD 2026',font=font,fill='black')
         f=io.BytesIO();image.save(f,format='PNG')
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.png','mimeType':'image/png','buffer':f.getvalue()
         })
