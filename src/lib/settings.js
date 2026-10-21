@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   standardProvider: 'google-free',
   cloudEndpoint: '',
   cloudToken: '',
+  cloudAsrEndpoint: '',
+  cloudAsrToken: '',
   cloudPdfEndpoint: '',
   cloudPdfToken: '',
   aiProvider: 'gemini',
