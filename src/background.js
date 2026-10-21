@@ -555,7 +555,7 @@ async function handle(message, sender) {
   // same-session caption context; never infer from the host page's UI language.
   // No extra subtitle data is sent to the remote translation provider.
   if(message.type==='TRANSLATE_BATCH'&&message.pageContext==='video'&&
-     source==='auto'&&!isAI&&['browser','mymemory'].includes(provider)){
+     source==='auto'&&!isAI&&['browser','mymemory','google-free'].includes(provider)){
     const detected=await detectCaptionSampleLanguage(message.captionLanguageSample);
     if(detected)source=detected;
   }
