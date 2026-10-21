@@ -1,6 +1,7 @@
 import {isStandardServiceConfigured} from './settings.js';
 import {selectedAIProfile} from './ai-profiles.js';
 export const PROVIDERS=Object.freeze([
+ {id:'google-free',name:'Google 免费公共翻译',category:'在线免 Key',notice:'MIT 兼容适配器；原文发送 Google 公共接口（非官方 SLA），可能限流；不使用 Google Cloud Key。',cost:false},
  {id:'browser',name:'Chrome Translator',category:'本地免 Key',notice:'本机语言包；需 Chrome 支持。原文不出设备。',cost:false},
  {id:'mymemory',name:'MyMemory',category:'在线免 Key',notice:'原文发送 MyMemory；本地每日上限 4,500 字符，服务端另有限额。',cost:false},
  {id:'microsoft',name:'Microsoft Translator',category:'BYOK 标准 MT',notice:'官方 API，需 Key / 区域。免费额度不等于免 Key。',cost:true},
