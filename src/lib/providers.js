@@ -24,7 +24,7 @@ function language(code, provider) {
   return code;
 }
 function toPlainStringArray(values, expected) {
-  if (!Array.isArray(values) || values.length !== expected || values.some(v => typeof v !== 'string')) {
+  if (!Array.isArray(values) || values.length !== expected || values.some(v => typeof v !== 'string' || !v.trim())) {
     throw new TranslationError('服务返回的翻译数量不一致或响应格式无效');
   }
   return values;
