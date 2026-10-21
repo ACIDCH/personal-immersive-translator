@@ -34,6 +34,37 @@ export function detectSource(text){
   return {language:scores[0].language,confidence:'latin-heuristic-review-required'};
  return {language:'en',confidence:'latin-fallback-unverified'};
 }
+// The offscreen recorder sends canonical 16 kHz mono PCM16 WAV. Validate
+// every header field before paying for AI inference: RIFF/WAVE alone does not
+// prove that the audio is decodable or safe to attribute to this session.
+export function validAsrWav(wav){
+ if(!(wav instanceof Uint8Array)||wav.byteLength<46||
+    wav.byteLength>350000)return false;
+ const d=new DataView(wav.buffer,wav.byteOffset,wav.byteLength);
+ const ascii=(start,str)=>[...str].every((ch,i)=>wav[start+i]===ch.charCodeAt(0));
+ if(!ascii(0,'RIFF')||!ascii(8,'WAVE')||!ascii(12,'fmt ')||!ascii(36,'data'))return false;
+ const size=d.getUint32(4,true),fmtSize=d.getUint32(16,true);
+ const pcm=d.getUint16(20,true),channels=d.getUint16(22,true);
+ const sampleRate=d.getUint32(24,true),byteRate=d.getUint32(28,true);
+ const align=d.getUint16(32,true),bits=d.getUint16(34,true);
+ const bytes=d.getUint32(40,true);
+ return size===wav.byteLength-8 && fmtSize===16 && pcm===1 &&
+    channels===1 && sampleRate===16000 && byteRate===32000 &&
+    align===2 && bits===16 && bytes===wav.byteLength-44 &&
+    bytes>=2 && bytes%2===0;
+}
+const ASR_LANGUAGES=new Set(['en','zh','ja','ko','fr','de','es']);
+function detectedAsrLanguage(info){
+ const raw=String(info?.language||'').toLowerCase().trim().replace(/_/g,'-');
+ const code=raw.split('-')[0];
+ const probability=info?.language_probability;
+ if(!ASR_LANGUAGES.has(code)||
+    (typeof probability==='number'&&
+      (!Number.isFinite(probability)||probability<0.65||probability>1)))
+   return {language:null,languageConfidence:null};
+ return {language:code,
+   languageConfidence:typeof probability==='number'?probability:null};
+}
 function authorized(request,env){
  const secret=env?.PIT_ACCESS_TOKEN;
  return typeof secret==='string'&&secret.length>=16&&
@@ -71,10 +102,8 @@ export default {
    try{wav=new Uint8Array(await request.arrayBuffer());}
    catch{return json({error:'invalid_audio'},400);}
    if(wav.length>350000)return json({error:'audio_too_large'},413);
-   if(wav.length<44||
-      String.fromCharCode(...wav.slice(0,4))!=='RIFF'||
-      String.fromCharCode(...wav.slice(8,12))!=='WAVE')
-    return json({error:'invalid_wav'},400);
+   if(!validAsrWav(wav))
+    return json({error:'invalid_wav_pcm16_16khz_mono'},400);
    // The model expects a base64 audio blob, not a model-download URI or
    // a fetch of arbitrary user-provided URLs. Avoid remote SSRF entirely.
    let base64='';
@@ -89,7 +118,8 @@ export default {
     });
     const text=answer?.text;
     if(typeof text!=='string')return json({error:'invalid_asr_output'},502);
-    return json({text:text.trim().slice(0,5000),
+    const detected=detectedAsrLanguage(answer?.transcription_info);
+    return json({text:text.trim().slice(0,5000),...detected,
       engine:'@cf/openai/whisper-large-v3-turbo'});
    }catch(error){
     return json({error:'cloud_asr_unavailable'},Number(error?.status)===429?429:503);

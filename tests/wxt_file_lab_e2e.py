@@ -141,6 +141,18 @@ async def main():
         page.on("pageerror",lambda e:print("FILELAB PAGE ERROR:",str(e)[:300],flush=True))
         await page.goto(f'chrome-extension://{eid}/file-lab.html',wait_until='domcontentloaded',timeout=20000)
         await page.get_by_role('heading',name='文件与图片处理').wait_for(timeout=15000)
+        await page.get_by_role('heading',name='PIT 文件与图片翻译').wait_for(timeout=15000)
+        assert await page.locator('.pit-workbench-nav a').count()==4
+        service_link=page.locator('.pit-workbench-actions a[href="/pit-options.html#services"]')
+        assert await service_link.count()==1
+        assert await service_link.get_attribute('target')=='_blank',(
+          'Settings must open in another tab to preserve in-flight file jobs')
+        await page.locator('.pit-workbench-engine').get_by_text('文件翻译服务',exact=False).wait_for(timeout=15000)
+        assert await page.locator('#pit-workbench-provider option').count()==8
+        report['unified_file_workbench']='pass'
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
+        assert page.url.endswith('/file-lab.html#document-lab'),page.url
+        # Hash navigation must retain trusted TRANSLATE_DOCUMENT calls later.
         await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.docx',
           'mimeType':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -150,12 +162,46 @@ async def main():
         await page.locator('.document-result').get_by_text('My finance DOCX document').wait_for(timeout=15000)
         report['docx']='pass'
         print("WXT DOCUMENT LAB DOCX: PASS",flush=True)
+        # Change the ordinary MT in the same file workbench: it must persist
+        # to the sole background settings store, not just change a UI label.
+        await page.locator('#pit-workbench-provider').select_option('microsoft')
+        await page.get_by_text('已同步默认服务',exact=False).wait_for(timeout=10000)
+        linked=await page.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1""")
+        assert linked['standardProvider']=='microsoft',linked
+        assert linked['fileProviderId']=='inherit',linked
+        assert await page.locator('#pit-workbench-provider').input_value()=='microsoft'
+        report['linked_provider_switch']='pass'
+        # The workbench source/target selectors must write to the same
+        # settings used by the Popup, PDF tools and service worker.
+        assert await page.locator('#pit-workbench-source option').count()==8
+        assert await page.locator('#pit-workbench-target option').count()==7
+        await page.locator('#pit-workbench-source').select_option('fr')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        await page.locator('#pit-workbench-target').select_option('en')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        pair=await page.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1""")
+        assert pair['source']=='fr' and pair['target']=='en',pair
+        await page.locator('#pit-workbench-source').select_option('auto')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        await page.locator('#pit-workbench-target').select_option('zh')
+        await page.get_by_text('语言方向已同步到全局设置',exact=False).wait_for(timeout=10000)
+        final_pair=await page.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1""")
+        assert final_pair['source']=='auto' and final_pair['target']=='zh',final_pair
+        report['linked_language_pair']='pass'
         # Actual document translation MUST go through PIT's native provider,
         # not a client-side simulated translation function.
         options=await context.new_page()
         await options.goto(f'chrome-extension://{eid}/pit-options.html')
         await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
+        await options.locator('.options-nav a[href="#baseSettings"]').click()
         await options.locator('[name="standardProvider"]').select_option('microsoft')
+        await options.locator('.options-nav a[href="#standardKeys"]').click()
         await options.locator('[name="microsoftKey"]').fill('file-fixture-only')
         await options.get_by_role('button',name='保存设置').click()
         await options.get_by_text('设置已保存。').wait_for(timeout=8000)
@@ -261,6 +307,7 @@ async def main():
         ImageDraw.Draw(image_batch).text((30,40),'HELLO WORLD 2026',
           font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',64),fill='black')
         image_data=io.BytesIO();image_batch.save(image_data,format='PNG')
+        await page.locator('.pit-workbench-nav a[href="#batch-file-lab"]').click()
         await page.locator('.batch-file-lab input[type="file"]').set_input_files([
           {'name':'batch.docx','mimeType':'application/octet-stream','buffer':ooxml_docx()},
           {'name':'batch.pptx','mimeType':'application/octet-stream','buffer':pptx_fixture()},
@@ -400,6 +447,7 @@ async def main():
         report['drag_drop_file_translation']='pass'
         print('WXT REAL DROP EVENT AND TRANSLATED TXT ZIP: PASS',flush=True)
 
+        await page.locator('.pit-workbench-nav a[href="#subtitle-file-lab"]').click()
         await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
           'name':'lecture.vtt','mimeType':'text/vtt',
           'buffer':b'WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello world\n\n00:00:04.500 --> 00:00:08.000\nFinancial models\n'
@@ -424,6 +472,34 @@ async def main():
         assert '00:00:01,200 --> 00:00:03,400' in styled,styled
         assert 'Hello students\n译文:Hello students' in styled,styled
         assert 'STYLE' not in styled and 'NOTE' not in styled and 'invalid time' not in styled,styled
+        # ASS dialogue styles do not appear in the bilingual SRT; timecodes,
+        # visible text and commas must survive through the installed MV3 UI.
+        ass=('[Script Info]\nTitle: Finance seminar\n\n[Events]\n'+
+             'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'+
+             r'Dialogue: 0,0:00:01.25,0:00:03.50,Default,,0,0,0,,{\i1}Bonjour, world\Nnext line'+'\n')
+        await page.locator('.subtitle-file-lab input[type="file"]').set_input_files({
+          'name':'seminar.ass','mimeType':'text/plain','buffer':ass.encode('utf8')
+        })
+        async with page.expect_download(timeout=20000) as ass_event:
+          await page.get_by_role('button',name='翻译并导出双语 SRT').click()
+        ass_result=Path(await (await ass_event.value).path()).read_text(encoding='utf8')
+        assert '00:00:01,250 --> 00:00:03,500' in ass_result,ass_result
+        assert 'Bonjour, world\nnext line' in ass_result,ass_result
+        assert '译文:Bonjour, world' in ass_result,ass_result
+        assert 'Default' not in ass_result and '{\\i1}' not in ass_result,ass_result
+        report['ass_subtitle_import']='pass'
+        # The batch lab uses the same subtitle engine, not a third parser.
+        await page.locator('.pit-workbench-nav a[href="#batch-file-lab"]').click()
+        await page.locator('.batch-file-lab input[type="file"]').set_input_files({
+          'name':'seminar.ass','mimeType':'text/plain','buffer':ass.encode('utf8')
+        })
+        async with page.expect_download(timeout=20000) as batch_ass_event:
+          await page.get_by_role('button',name='翻译全部并打包 ZIP').click()
+        with zipfile.ZipFile(await (await batch_ass_event.value).path()) as archive:
+          bilingual=archive.read('translated/01-seminar-translated.srt').decode('utf8')
+          assert '00:00:01,250 --> 00:00:03,500' in bilingual,bilingual
+          assert 'Bonjour, world' in bilingual and '译文:Bonjour, world' in bilingual
+        report['ass_batch_zip']='pass'
         report['subtitle_metadata_filter']='pass'
         report['offline_subtitle_translation']='pass'
         print('WXT OFFLINE VTT TO BILINGUAL SRT: PASS',flush=True)
@@ -441,6 +517,7 @@ async def main():
                 b'<w:t>Repeated finance sentence</w:t></w:r></w:p><w:p><w:r><w:t>Repeated finance sentence</w:t>'
               )
             output.writestr(name,contents)
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         await page.get_by_role('button',name='DOCX 文档').click()
         await page.locator('.document-lab').first.locator('input[type=file]').set_input_files({
           'name':'repeated.docx','mimeType':'application/octet-stream','buffer':repeat.getvalue()
@@ -459,6 +536,7 @@ async def main():
         report['transient_retry_and_dedupe']='pass'
         print('WXT REAL HTTP 429 RETRY + DUPLICATE PARAGRAPH CACHE: PASS',flush=True)
 
+        await page.locator('.pit-workbench-nav a[href="#batch-file-lab"]').click()
         await page.locator('.batch-file-lab input[type=file]').set_input_files([
           {'name':'cancel.docx','mimeType':'application/octet-stream','buffer':ooxml_docx()},
           {'name':'not-run.pptx','mimeType':'application/octet-stream','buffer':pptx_fixture()}
@@ -477,12 +555,14 @@ async def main():
         assert not await page.get_by_role('button',name='取消批量处理').count()
         report['batch_user_cancel']='pass'
         print('WXT BATCH USER CANCEL / NO PARTIAL ZIP: PASS',flush=True)
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
         font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',66)
         d.text((25,36),'HELLO WORLD 2026',font=font,fill='black')
         f=io.BytesIO();image.save(f,format='PNG')
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         await page.locator('.document-lab').first.locator('input[type="file"]').set_input_files({
           'name':'fixture.png','mimeType':'image/png','buffer':f.getvalue()
         })

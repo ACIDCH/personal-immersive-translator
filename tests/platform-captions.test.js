@@ -23,3 +23,12 @@ test('deduplicates visible subtitle fragments and ignores hidden nodes',()=>{
  assert.equal(captionChanged('',result.text),true);
 });
 test('normalizes whitespace and bounds data size',()=>assert.equal(compact(' A\n    B '),'A B'));
+
+test('PIT defaults to caption text replacement with in-player fallback, not a detached subtitle panel',async()=>{
+ const {VIDEO_DEFAULTS,normalizeProduct}=await import('../src/lib/product-settings.js');
+ assert.equal(VIDEO_DEFAULTS.subtitleRenderMode,'replace-track');
+ const settings=normalizeProduct({});
+ assert.equal(settings.videoSettings.subtitleRenderMode,'replace-track');
+ // Previously saved user preference is not silently overwritten on upgrade.
+ assert.equal(normalizeProduct({videoSettings:{subtitleRenderMode:'in-player'}}).videoSettings.subtitleRenderMode,'in-player');
+});

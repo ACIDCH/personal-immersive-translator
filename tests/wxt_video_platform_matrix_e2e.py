@@ -33,6 +33,12 @@ async def main():
             const url=String(input?.url||input);
             if(url.startsWith('https://api.cognitive.microsofttranslator.com/')){
               const body=JSON.parse(opts.body);
+              // An intentionally incomplete provider response must never be
+              // applied to just one of two simultaneous player windows.
+              if(body.some(x=>x.Text.includes('Malformed speaker')))
+                return new Response(JSON.stringify([
+                  {translations:[{text:'错误：只有第一行译文'}]}
+                ]),{status:200,headers:{'content-type':'application/json'}});
               return new Response(JSON.stringify(body.map(x=>({translations:[{text:'译文:'+x.Text}]}))),
                 {status:200,headers:{'content-type':'application/json'}});
             }
@@ -42,7 +48,9 @@ async def main():
         settings=await ctx.new_page()
         await settings.goto(f'chrome-extension://{eid}/pit-options.html')
         await settings.locator('form[data-ready="1"]').wait_for(timeout=15000)
+        await settings.locator('.options-nav a[href="#baseSettings"]').click()
         await settings.locator('[name="standardProvider"]').select_option('microsoft')
+        await settings.locator('.options-nav a[href="#standardKeys"]').click()
         await settings.locator('[name="microsoftKey"]').fill('fixture')
         await settings.get_by_role('button',name='保存设置').click()
         await settings.get_by_text('设置已保存。').wait_for(timeout=10000)
@@ -50,6 +58,12 @@ async def main():
         await popup.goto(f'chrome-extension://{eid}/popup.html')
         await popup.get_by_role('button',name='视频字幕',exact=True).click()
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=14000)
+        caption_nodes={
+          'youtube':('.ytp-caption-segment','Visible YouTube captions now'),
+          'bilibili':('.bpx-player-subtitle-panel-text','Bilibili video subtitle line'),
+          'netflix':('[data-uia="subtitle-text"]','Netflix subtitle example'),
+          'panopto':('.captionText','Panopto lecture original caption')
+        }
         for name,url,content in SITES:
           async def route_html(route):
             await route.fulfill(status=200,content_type='text/html',
@@ -58,14 +72,288 @@ async def main():
           page=await ctx.new_page()
           await page.goto(url)
           await page.bring_to_front()
+          selector,source=caption_nodes[name]
+          original=page.locator(selector)
+          assert await original.inner_text()==source
           await popup.get_by_role('button',name='翻译视频字幕').click()
-          await page.locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=23000)
-          result={'platform':name,'fixture_visible_caption':'pass'}
-          results.append(result)
+          # With editable site DOM captions PIT translates the actual player
+          # caption node. The old V1 test looked only for an extra overlay
+          # and therefore timed out when correct in-place replacement worked.
+          await original.get_by_text('译文:'+source,exact=True).wait_for(timeout=23000)
+          visible_overlay=await page.evaluate("""()=>{
+            const overlay=document.querySelector('.pit-caption-overlay');
+            return Boolean(overlay && getComputedStyle(overlay).display!=='none');
+          }""")
+          assert visible_overlay is False, (name,'An external translation overlay duplicates DOM CC')
           await popup.get_by_role('button',name='停止字幕翻译').click()
           await page.locator('.pit-caption-overlay').wait_for(state='detached',timeout=8000)
+          assert await original.inner_text()==source,(name,'Original DOM caption must be restored')
+          result={'platform':name,'fixture_visible_caption':'pass',
+            'in_player_replacement':True,'restored_on_stop':True}
+          results.append(result)
           await page.close()
           print('PLATFORM VISIBLE-CC FIXTURE:',json.dumps(result,ensure_ascii=False),flush=True)
+
+        # A single no-key Google provider must work through the same real
+        # installed background pipeline for VIDEO, not only settings probes.
+        # Intercept the actual public HTTP boundary; this fixture does not
+        # prove that a third-party live video/Google endpoint is always up.
+        await sw.evaluate("""()=>{
+          const previous=globalThis.fetch.bind(globalThis);
+          globalThis.fetch=async(input,opts)=>{
+            const uri=String(input?.url||input);
+            if(uri.startsWith('https://translate.googleapis.com/translate_a/single')){
+              const url=new URL(uri);
+              const q=url.searchParams.get('q');
+              globalThis.__pitFreeVideoCalls=(globalThis.__pitFreeVideoCalls||0)+1;
+              return new Response(JSON.stringify([[['免费译文:'+q,q]],null,'en']),{
+                status:200,headers:{'content-type':'application/json'}
+              });
+            }
+            return previous(input,opts);
+          };
+        }""")
+        await settings.locator('.options-nav a[href="#baseSettings"]').click()
+        await settings.locator('[name="standardProvider"]').select_option('google-free')
+        await settings.get_by_role('button',name='保存设置').click()
+        await settings.get_by_text('设置已保存。').wait_for(timeout=10000)
+        free_url='https://www.youtube.com/watch?v=pit-free-service'
+        async def free_page(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+          <div class="ytp-caption-window-container">
+            <span class="ytp-caption-segment">Free video translation actually uses the provider</span>
+          </div></body></html>''')
+        await ctx.route(free_url,free_page)
+        page=await ctx.new_page()
+        await page.goto(free_url);await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await page.locator('.ytp-caption-segment').get_by_text(
+          '免费译文:Free video translation actually uses the provider',
+          exact=True).wait_for(timeout=25000)
+        assert await sw.evaluate("()=>globalThis.__pitFreeVideoCalls||0")>=1,(
+          'No real video translation request reached Google-free adapter')
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await page.locator('.ytp-caption-segment').inner_text()==(
+          'Free video translation actually uses the provider')
+        results.append({'platform':'youtube-keyless-provider-adapter',
+          'fixture_visible_caption':'pass','provider':'google-free',
+          'in_player_replacement':True,'restored_on_stop':True})
+        await page.close()
+        await settings.locator('.options-nav a[href="#baseSettings"]').click()
+        await settings.locator('[name="standardProvider"]').select_option('microsoft')
+        await settings.get_by_role('button',name='保存设置').click()
+        await settings.get_by_text('设置已保存。').wait_for(timeout=10000)
+
+        # Real video CC often splits one sentence across adjacent spans.
+        # The first visible caption leaf receives the translation, while the
+        # remaining siblings are cleared and restored together on STOP.
+        multi='https://www.youtube.com/watch?v=pit-multiple-caption-segments'
+        async def multi_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+            <div class="ytp-caption-window-container">
+              <span class="ytp-caption-segment">First lecture segment</span>
+              <span class="ytp-caption-segment">continues here</span>
+            </div></body></html>''')
+        await ctx.route(multi,multi_html)
+        page=await ctx.new_page()
+        await page.goto(multi);await page.bring_to_front()
+        spans=page.locator('.ytp-caption-window-container .ytp-caption-segment')
+        assert await spans.count()==2
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await spans.nth(0).get_by_text(
+          '译文:First lecture segment continues here',exact=True).wait_for(timeout=23000)
+        assert await spans.nth(1).inner_text()=='',(
+          'Trailing caption fragment must not display untranslated duplicate text')
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(node)=>getComputedStyle(node).display==='none'")
+        # The publisher replaces both subtitle segments while playback goes
+        # on. PIT must release the old patch and translate the new sentence.
+        await page.evaluate("""()=>{
+          const nodes=[...document.querySelectorAll('.ytp-caption-segment')];
+          nodes[0].textContent='The next lecture';
+          nodes[1].textContent='topic is finance';
+        }""")
+        await spans.nth(0).get_by_text(
+          '译文:The next lecture topic is finance',exact=True).wait_for(timeout=23000)
+        assert await spans.nth(1).inner_text()==''
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        await page.locator('.pit-caption-overlay').wait_for(state='detached',timeout=8000)
+        assert [await spans.nth(i).inner_text() for i in range(2)]==[
+          'The next lecture','topic is finance'
+        ],'STOP must restore the latest publisher-owned subtitle text'
+        results.append({'platform':'youtube-split-and-updated-cc',
+          'fixture_visible_caption':'pass','in_player_replacement':True,
+          'publisher_updates_preserved':True,'restored_on_stop':True})
+        await page.close()
+        print('PLATFORM SPLIT-CC AND REPLACE: PASS',flush=True)
+
+        # P0: split speakers must be independently translated and written
+        # back to THEIR OWN visible window, not flattened into one external
+        # overlay nor reported as unsupported after translation succeeds.
+        windows='https://www.youtube.com/watch?v=pit-separated-speakers'
+        async def window_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+          <div class="ytp-caption-window-container">
+            <div><span class="ytp-caption-segment">First speaker</span></div>
+            <div><span class="ytp-caption-segment">Second speaker</span></div>
+          </div></body></html>''')
+        await ctx.route(windows,window_html)
+        page=await ctx.new_page()
+        await page.goto(windows);await page.bring_to_front()
+        speakers=page.locator('.ytp-caption-segment')
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await speakers.nth(0).get_by_text('译文:First speaker',exact=True).wait_for(timeout=23000)
+        await speakers.nth(1).get_by_text('译文:Second speaker',exact=True).wait_for(timeout=23000)
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(node)=>getComputedStyle(node).display==='none'")
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await speakers.all_inner_texts()==['First speaker','Second speaker'],(
+          'Stopping must restore both publisher-owned independent windows')
+        results.append({'platform':'youtube-multiwindow-native',
+          'fixture_visible_caption':'pass','in_player_replacement':True,
+          'no_silent_overlay':True,'restored_on_stop':True})
+        await page.close()
+
+        # Some Netflix variants expose only the wrapper selector while the
+        # text is nested in child spans. Mutate only the leaf caption text,
+        # leaving the player container, event handlers and styles intact.
+        nested='https://www.netflix.com/watch/10009876'
+        async def nested_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+            <div class="player-timedtext">
+              <div class="player-timedtext-text-container">
+                <span class="caption-leaf">Nested Netflix caption</span>
+              </div>
+            </div></body></html>''')
+        await ctx.route(nested,nested_html)
+        page=await ctx.new_page()
+        await page.goto(nested);await page.bring_to_front()
+        leaf=page.locator('.caption-leaf')
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await leaf.get_by_text('译文:Nested Netflix caption',exact=True).wait_for(timeout=23000)
+        assert await page.locator('.player-timedtext-text-container').count()==1
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await leaf.inner_text()=='Nested Netflix caption'
+        results.append({'platform':'netflix-nested-leaf','fixture_visible_caption':'pass',
+          'in_player_replacement':True,'restored_on_stop':True})
+        await page.close()
+
+        # Real players may render a visual line rather than segment spans,
+        # sometimes within an open shadow root. Translate the existing leaf.
+        for variant in ('visual-line','open-shadow'):
+          url='https://www.youtube.com/watch?v=pit-'+variant
+          async def variant_html(route):
+            await route.fulfill(status=200,content_type='text/html',
+              body='<html><body><div id="variant-host"></div></body></html>')
+          await ctx.route(url,variant_html)
+          page=await ctx.new_page()
+          await page.goto(url)
+          await page.evaluate("""variant=>{
+            const host=document.getElementById('variant-host');
+            const root=variant==='open-shadow'
+              ?host.attachShadow({mode:'open'}):host;
+            const container=document.createElement('div');
+            container.className='ytp-caption-window-container';
+            const line=document.createElement('div');
+            line.className='caption-visual-line';
+            const leaf=document.createElement('span');
+            leaf.className='caption-leaf';
+            leaf.textContent='Public caption variant in '+variant;
+            line.append(leaf);container.append(line);root.append(container);
+          }""",variant)
+          await page.bring_to_front()
+          await popup.get_by_role('button',name='翻译视频字幕').click()
+          await page.wait_for_function("""variant=>{
+            const host=document.getElementById('variant-host');
+            const root=variant==='open-shadow'?host.shadowRoot:host;
+            return root?.querySelector('.caption-leaf')?.textContent===
+              '译文:Public caption variant in '+variant;
+          }""",arg=variant,timeout=23000)
+          diagnosis=await popup.evaluate("""async()=>{
+            const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+            return chrome.tabs.sendMessage(tab.id,{type:'PIT_CAPTIONS_DIAGNOSTICS'});
+          }""")
+          assert diagnosis['status']=='translated' and diagnosis['siteCaptionGroups']==1,diagnosis
+          assert await page.locator('.pit-caption-overlay').evaluate(
+            "(node)=>getComputedStyle(node).display==='none'")
+          await popup.get_by_role('button',name='停止字幕翻译').click()
+          restored=await page.evaluate("""variant=>{
+            const host=document.getElementById('variant-host');
+            const root=variant==='open-shadow'?host.shadowRoot:host;
+            return root?.querySelector('.caption-leaf')?.textContent;
+          }""",variant)
+          assert restored=='Public caption variant in '+variant,restored
+          results.append({'platform':'youtube-'+variant,
+            'fixture_visible_caption':'pass','in_player_replacement':True,
+            'restored_on_stop':True,'no_silent_overlay':True})
+          await page.close()
+
+        # P0: a provider can succeed at HTTP level while returning only
+        # one of two translated speaker windows. Never mutate one in player.
+        malformed='https://www.youtube.com/watch?v=pit-malformed-provider-reply'
+        async def malformed_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+           <div class="ytp-caption-window-container">
+             <div><span class="ytp-caption-segment">Malformed speaker one</span></div>
+             <div><span class="ytp-caption-segment">Malformed speaker two</span></div>
+           </div></body></html>''')
+        await ctx.route(malformed,malformed_html)
+        page=await ctx.new_page()
+        await page.goto(malformed);await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await popup.wait_for_function("""async()=>{
+          const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+          const x=await chrome.tabs.sendMessage(tab.id,{
+            type:'PIT_CAPTIONS_DIAGNOSTICS'
+          });
+          return x?.status==='error'&&x.translationCount===0;
+        }""",timeout=23000)
+        assert await page.locator('.ytp-caption-segment').all_inner_texts()==[
+          'Malformed speaker one','Malformed speaker two'
+        ]
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(el)=>getComputedStyle(el).display==='none'")
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        results.append({'platform':'youtube-incomplete-provider-response',
+          'fixture_visible_caption':'pass','partial_mutation_prevented':True,
+          'no_silent_overlay':True})
+        await page.close()
+
+        # P0 regression: known video platforms often load their caption
+        # layer only after PIT has started. Do not fail at first empty frame.
+        delayed='https://www.youtube.com/watch?v=pit-delayed-captions'
+        async def delayed_html(route):
+          await route.fulfill(status=200,content_type='text/html',
+            body='<html><body><video id="late-player" width="640" height="360" controls></video></body></html>')
+        await ctx.route(delayed,delayed_html)
+        page=await ctx.new_page()
+        await page.goto(delayed)
+        await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await popup.get_by_role('button',name='停止字幕翻译').wait_for(timeout=10000)
+        await page.locator('.pit-caption-overlay').wait_for(state='attached',timeout=11000)
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(el)=>getComputedStyle(el).display==='none'"),(
+          'Strict mode cannot show an external waiting message before CC exists')
+        before=await sw.evaluate("""()=>globalThis.pitPendingTranslationCount||0""")
+        await page.evaluate("""()=>{
+          const layer=document.createElement('div');
+          layer.className='ytp-caption-window-container';
+          layer.innerHTML='<span class="ytp-caption-segment">Subtitles appeared after player setup</span>';
+          document.body.append(layer);
+        }""")
+        await page.locator('.ytp-caption-segment').get_by_text(
+          '译文:Subtitles appeared after player setup',exact=True).wait_for(timeout=23000)
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(el)=>getComputedStyle(el).display==='none'"),(
+          'Late site captions should be replaced in the player without overlay')
+        await page.evaluate("""()=>{
+          document.querySelector('.ytp-caption-window-container').remove();
+        }""")
+        await page.locator('.pit-caption-translated').wait_for(state='detached',timeout=12000)
+        results.append({'platform':'youtube-delayed-cc','fixture_visible_caption':'pass'})
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        await page.close()
 
         parent='https://lms.example.org/course/one'
         child='https://sample.panopto.com/Panopto/Pages/Embed.aspx?id=lesson1'
@@ -81,11 +369,28 @@ async def main():
         await page.frame_locator('iframe').locator('.captionText').wait_for(timeout=9000)
         await page.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
-        await page.frame_locator('iframe').locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=25000)
-        results.append({'platform':'panopto-iframe','fixture_visible_caption':'pass'})
+        frame_caption=page.frame_locator('iframe').locator('.captionText')
+        await frame_caption.get_by_text(
+          '译文:Embedded Panopto lecture subtitle',exact=True).wait_for(timeout=25000)
         await popup.get_by_role('button',name='停止字幕翻译').click()
+        assert await frame_caption.inner_text()=='Embedded Panopto lecture subtitle',(
+          'PIT must restore iframe caption content after STOP')
+        results.append({'platform':'panopto-iframe','fixture_visible_caption':'pass',
+          'in_player_replacement':True,'restored_on_stop':True})
         await page.close()
 
+        # Imported cues have no publisher track to change. Explicitly opt
+        # into non-native compatibility rendering for this separate test.
+        # End-user must be able to switch this mode from the VIDEO panel,
+        # not by editing chrome.storage or finding a hidden settings page.
+        display=popup.get_by_role('combobox',name='字幕显示方式')
+        assert await display.input_value()=='replace-track'
+        await display.select_option('in-player')
+        await popup.get_by_text('已启用兼容字幕模式',exact=False).wait_for(timeout=10000)
+        chosen=await popup.evaluate("""async()=>(
+          await chrome.storage.local.get('pit_settings_v1')
+        ).pit_settings_v1.videoSettings.subtitleRenderMode""")
+        assert chosen=='in-player',chosen
         url='https://example.org/manual-subtitles'
         async def source_html(route):
           await route.fulfill(status=200,content_type='text/html',
@@ -98,12 +403,13 @@ async def main():
           'buffer':b'1\n00:00:00,000 --> 00:00:20,000\nManual subtitle for lecture\n\n'})
         await popup.get_by_role('button',name='翻译视频字幕').click()
         await page.locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=26000)
-        results.append({'platform':'user-srt','fixture_visible_caption':'pass'})
+        results.append({'platform':'user-srt','fixture_visible_caption':'pass',
+          'explicit_compatibility_mode':True,'native_replacement':False})
         await popup.get_by_role('button',name='停止字幕翻译').click()
         print('WXT PLATFORM MATRIX:',json.dumps(results,ensure_ascii=False),flush=True)
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==6 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==14 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())

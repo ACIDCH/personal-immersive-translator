@@ -44,3 +44,176 @@ footer{color:#7188aa;font-size:11px;margin-top:18px;line-height:1.5}
 .pit-site-rule{margin:14px 0;padding:11px;border:1px solid #334b68;border-radius:10px;background:#14263e}
 .pit-site-rule strong{color:#dceafa;font-size:12px;word-break:break-word}
 .pit-site-rule .native-actions{margin-top:8px}
+/* Shared PIT V2 identity for extension and file lab. */
+:root{--pit-bg:#f3f6fa;--pit-surface:#fff;--pit-text:#14283d;--pit-muted:#586b80;--pit-accent:#176d86;--pit-danger:#b72f49;--pit-focus:#408fff;--pit-radius:14px;--pit-space-1:8px;--pit-space-2:16px;--pit-space-3:24px}
+.pit-reader-console{background:var(--pit-bg);color:var(--pit-text);max-width:440px!important;min-width:340px!important;padding:20px!important}.pit-reader-console .hero{padding:0 0 16px}.pit-reader-console .hero h1{font-size:23px}.pit-reader-console .hero p{font-size:12px}.pit-reader-console .brand-icon{background:var(--pit-accent);color:white;border-radius:12px;width:42px;height:42px}.pit-quick-preferences{background:var(--pit-surface);border:1px solid #879bb540;padding:14px;border-radius:var(--pit-radius);margin-bottom:14px}.pit-account{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--pit-muted)}.pit-language-pair{display:grid;grid-template-columns:1fr 35px 1fr;gap:8px;align-items:end;margin:12px 0}.pit-language-pair label{display:flex;flex-direction:column;gap:5px;font-size:12px}.pit-language-pair select{width:100%;min-width:0;padding:9px;border:1px solid #879bb55c;border-radius:8px;background:var(--pit-surface);color:var(--pit-text)}.pit-quick-links{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.pit-reader-console button{border-radius:8px;transition:background .15s,transform .15s}.pit-reader-console button:active{transform:translateY(1px)}.pit-reader-console button:focus-visible,.pit-reader-console select:focus-visible{outline:3px solid var(--pit-focus);outline-offset:2px}.pit-reader-console .native-actions button:first-child{background:var(--pit-accent);color:#fff}.pit-reader-console .native-status{overflow-wrap:anywhere}.pit-reader-console .pit-feature-nav{flex-wrap:wrap}
+@media(prefers-color-scheme:dark){:root{--pit-bg:#0d1724;--pit-surface:#142233;--pit-text:#e0eaf5;--pit-muted:#9eafc2;--pit-accent:#287f99}.pit-reader-console select,.pit-reader-console input,.pit-reader-console button{background:var(--pit-surface);color:var(--pit-text)}}
+@media(prefers-reduced-motion:reduce){.pit-reader-console *{transition:none!important;animation:none!important}}
+/* Keep legacy dark-only labels readable in both V2 color schemes. */
+body:has(.pit-reader-console){background:var(--pit-bg);color:var(--pit-text);margin:0}
+.pit-reader-console .native-hint,.pit-reader-console .native-progress,.pit-reader-console .hero p,.pit-reader-console .subtitle,.pit-reader-console footer{color:var(--pit-muted)}
+.pit-reader-console .pit-field,.pit-reader-console .pit-setting-row label{color:var(--pit-text)}
+.pit-reader-console .pit-field select,.pit-reader-console .pit-setting-row select,.pit-reader-console .pit-field input:not([type="file"]){display:block;width:100%;margin-top:6px;padding:9px;border:1px solid #879bb55c;border-radius:8px;background:var(--pit-surface);color:var(--pit-text);font:inherit}
+.pit-reader-console .native-status,.pit-reader-console .pit-site-rule{background:var(--pit-surface);color:var(--pit-text);border-color:#879bb55c}
+.pit-reader-console .pit-site-rule strong{color:var(--pit-text)}
+.pit-reader-console .native-web button:disabled{cursor:not-allowed}
+
+/* Unified PIT file translation workbench. Existing document/OCR engines stay
+   mounted in the same extension tab and use the same background Provider. */
+.pit-file-workbench{--pit-file-ink:#162c3e;--pit-file-muted:#566d80;
+  width:min(1120px,calc(100% - 40px));margin:0 auto;padding:26px 0 56px;
+  color:var(--pit-file-ink);font:14px/1.6 Inter,"Segoe UI",system-ui,sans-serif}
+.pit-file-workbench a{color:#16667f}
+.pit-workbench-header{display:flex;align-items:center;justify-content:space-between;
+  gap:22px;padding:20px 23px;background:#f7fbfd;border:1px solid #d1e5eb;
+  border-radius:18px}
+.pit-workbench-brand{display:flex;align-items:center;gap:16px;min-width:0}
+.pit-workbench-brand>span{width:48px;height:48px;flex-shrink:0;display:grid;place-items:center;
+  color:white;background:linear-gradient(145deg,#1a7589,#1760a5);border-radius:14px;font-size:23px}
+.pit-workbench-brand small{font-size:10px;letter-spacing:.12em;color:#4e7084}
+.pit-workbench-brand h1{margin:3px 0;font-size:23px;line-height:1.25;color:#172e42}
+.pit-workbench-brand p{margin:0;font-size:12px;color:#587487}
+.pit-workbench-actions{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.pit-workbench-actions a,.pit-workbench-nav a{display:inline-block;padding:8px 12px;
+  text-decoration:none;border-radius:9px;border:1px solid #cee3e9;background:white;
+  color:#1a667e;font-size:12px;font-weight:650}
+.pit-workbench-actions a:hover,.pit-workbench-nav a:hover{background:#edf7fb}
+.pit-workbench-nav{display:flex;position:sticky;top:0;z-index:4;gap:10px;
+  flex-wrap:wrap;padding:12px 2px;background:#f5f8fc;border-bottom:1px solid #d2e4e9}
+.pit-workbench-engine{margin:14px 0;padding:12px 16px;background:#eaf4f8;
+  color:#275c70;border:1px solid #cde4eb;border-radius:12px;overflow-wrap:anywhere}
+.pit-workbench-service{margin:14px 0;border:1px solid #cde4eb;border-radius:14px;
+  background:#f7fbfd;padding:14px 16px}
+.pit-workbench-service-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pit-workbench-service-controls label{font-weight:650}
+.pit-workbench-service-controls select{flex:1 1 195px;max-width:350px}
+.pit-workbench-service-controls select,.pit-workbench-service-controls button{
+  border:1px solid #9fbcca;border-radius:9px;min-height:38px;padding:6px 10px;
+  font:inherit;background:#fff;color:#1c3e4f}
+.pit-workbench-service-controls button{font-weight:650;cursor:pointer}
+.pit-workbench-service-controls button:disabled{cursor:wait;opacity:.6}
+.pit-workbench-language-controls{display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;margin-top:12px}
+.pit-workbench-language-controls label{font-weight:650}
+.pit-workbench-language-controls select{min-height:38px;padding:6px 10px;
+  max-width:210px;flex:1 1 130px;font:inherit;background:#fff;color:#1c3e4f;
+  border:1px solid #9fbcca;border-radius:9px}
+.pit-workbench-language-controls select:focus-visible{outline:3px solid #408fff;outline-offset:2px}
+.pit-workbench-language-controls select:disabled{opacity:.65}
+.pit-workbench-service-controls a{font-weight:650}
+.pit-workbench-service-controls :is(select,button,a):focus-visible{
+  outline:3px solid #408fff;outline-offset:2px}
+.pit-workbench-service .pit-workbench-engine{margin:12px 0 0}
+.pit-workbench-diagnostic{overflow-wrap:anywhere;margin:10px 0 0;padding:10px 12px;
+  background:#f0f7f7;border:1px solid #9dc5c5;border-radius:9px}
+.pit-workbench-module{scroll-margin-top:80px;min-width:0;margin:16px 0 22px}
+.pit-workbench-module[hidden]{display:none!important}
+.pit-workbench-nav a[aria-current=page]{color:#fff;background:#176d86;border-color:#176d86;font-weight:650}
+.pit-workbench-nav a:focus-visible{outline:3px solid #408fff;outline-offset:2px}
+.pit-file-workbench footer{color:#6b8090;padding-top:12px;border-top:1px solid #d6e4ec}
+@media(max-width:750px){.pit-file-workbench{width:calc(100% - 20px);padding-top:10px}
+  .pit-workbench-header{flex-direction:column;align-items:flex-start;padding:16px}
+  .pit-workbench-brand h1{font-size:20px}
+  .pit-workbench-actions{justify-content:flex-start}
+  .pit-workbench-nav{gap:6px}
+  .pit-workbench-nav a{font-size:11px;padding:8px}}
+@media(prefers-color-scheme:dark){.pit-workbench-service{background:#182c3c;border-color:#3b5b6a}
+  .pit-workbench-service-controls select,.pit-workbench-service-controls button,
+  .pit-workbench-language-controls select{background:#20394b;color:#eaf4fa;border-color:#547083}
+  .pit-workbench-diagnostic{background:#173b40;color:#e6faff;border-color:#3f8480}
+  .pit-file-workbench{color:#e5f3fa}
+  .pit-workbench-header{background:#172d3e;border-color:#35556a}
+  .pit-workbench-brand h1{color:#eaf4fa}.pit-workbench-brand p{color:#b0c6d1}
+  .pit-workbench-actions a,.pit-workbench-nav a{background:#234257;color:#d9f2ff;border-color:#416579}
+  .pit-workbench-nav{background:#0c1220;border-color:#354b60}
+  .pit-workbench-engine{background:#153a48;color:#daf1f8;border-color:#2e7184}}
+
+/* Free-MT readiness is part of the same popup service selector, not a separate
+   inaccessible settings-only diagnostic. No background fallback is implied. */
+.pit-reader-console .pit-service-actions{display:flex;gap:8px;align-items:stretch;margin:8px 0 10px}
+.pit-reader-console .pit-service-actions>button{flex:1;min-width:0;padding:9px 7px}
+.pit-reader-console .pit-service-readiness{padding:10px 12px;margin:8px 0;
+  border:1px solid #5a8da3;border-radius:10px;background:#17364b}
+.pit-reader-console .pit-service-readiness>p{margin:0 0 9px;
+  color:#cadfec;font-size:11px;line-height:1.55}
+.pit-reader-console .pit-service-readiness>button{width:100%;text-align:center}
+@media(max-width:380px){.pit-reader-console .pit-service-actions{flex-direction:column}}
+
+/* The workbench is an integrated part of PIT V2, not the old dark sample
+   surface. Scope this override to avoid modifying the portal/demo app. */
+.pit-file-workbench .document-lab{background:#fff;color:#172e42;
+  border:1px solid #d1e5eb;border-radius:16px;box-shadow:0 3px 18px #15394b0c}
+.pit-file-workbench .document-lab h2{color:#173d56}
+.pit-file-workbench .document-lab p,
+.pit-file-workbench .document-lab small{color:#546c7c}
+.pit-file-workbench .document-field{color:#284961}
+.pit-file-workbench .document-field input,
+.pit-file-workbench .document-field select,
+.pit-file-workbench .document-field textarea{background:#f8fcff;color:#14283d;border-color:#b5cfdf}
+.pit-file-workbench .document-result{background:#f4f8fc;color:#203748;border-color:#bfd5e4}
+.pit-file-workbench .document-lab button{background:#176d86;color:white;border-color:#176d86}
+.pit-file-workbench .document-lab button:hover{background:#155b73}
+.pit-file-workbench .document-lab button:disabled{opacity:.55}
+.pit-file-workbench .document-lab input:focus-visible,
+.pit-file-workbench .document-lab button:focus-visible,
+.pit-file-workbench .document-lab select:focus-visible{outline:3px solid #408fff;outline-offset:3px}
+@media(prefers-color-scheme:dark){
+ .pit-file-workbench .document-lab{background:#142039;color:#eaf3fa;border-color:#35516b}
+ .pit-file-workbench .document-lab h2{color:#f2f8ff}
+ .pit-file-workbench .document-lab p,.pit-file-workbench .document-lab small{color:#aebfd4}
+ .pit-file-workbench .document-field{color:#c5d7f3}
+ .pit-file-workbench .document-field input,.pit-file-workbench .document-field select,
+ .pit-file-workbench .document-field textarea{background:#111b2d;color:#eaf0fa;border-color:#4b6385}
+ .pit-file-workbench .document-result{background:#0e1829;color:#eaf0fa;border-color:#385577}
+}
+
+
+/* Pre-delivery visual consistency: legible surfaces in both OS themes,
+   predictable four-tab popup navigation and no clipped controls at zoom. */
+.pit-reader-console{width:min(440px,100%)!important;min-width:0!important;
+  overflow-wrap:anywhere;box-sizing:border-box}
+.pit-reader-console .pit-feature-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pit-reader-console .pit-feature-tabs button{min-width:0;min-height:44px;
+  line-height:1.4;overflow-wrap:anywhere;white-space:normal}
+.pit-reader-console .pit-quick-preferences,
+.pit-reader-console .pit-feature-section{min-width:0}
+.pit-reader-console .pit-language-pair{grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr)}
+.pit-reader-console .pit-language-pair select{min-width:0;max-width:100%}
+.pit-reader-console .pit-setting-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pit-reader-console .native-actions button{min-width:0;overflow-wrap:anywhere;
+  white-space:normal;line-height:1.45}
+.pit-reader-console .pit-caption-render-choice{margin-bottom:5px}
+.pit-reader-console .pit-render-explanation{font-size:12px;line-height:1.55;
+  color:var(--pit-muted);margin:0 0 10px}
+.pit-reader-console .pit-inline-warning{font-size:12px;line-height:1.55;
+  padding:10px 12px;margin:8px 0;border:1px solid #c18a37;
+  border-radius:9px;background:#fffaee;color:#724c0c}
+.pit-reader-console .pit-service-readiness{background:var(--pit-surface);
+  border-color:#879bb560}
+.pit-reader-console .pit-service-readiness>p{color:var(--pit-text)}
+.pit-reader-console .pit-service-readiness>button{margin:3px 0}
+.pit-reader-console .pit-quick-links{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pit-reader-console .pit-quick-links button{min-width:0;overflow-wrap:anywhere}
+@media(max-width:385px){
+ .pit-reader-console{padding:12px!important}
+ .pit-reader-console .pit-feature-tabs{gap:3px}
+ .pit-reader-console .pit-feature-tabs button{padding:8px 2px;font-size:10px}
+ .pit-reader-console .pit-quick-preferences{padding:10px}
+}
+@media(prefers-color-scheme:dark){
+ .pit-reader-console .pit-inline-warning{background:#3b2e19;
+   border-color:#997437;color:#ffe4a8}
+ .pit-reader-console .pit-service-readiness{background:var(--pit-surface)}
+}
+
+/* Keep optional deployment-only controls accessible but out of the main
+   translation path. Expand explicitly when Whisper is configured. */
+.pit-reader-console .pit-advanced-tools{border:1px solid #879bb54f;
+  border-radius:10px;margin:12px 0;padding:0 12px;background:var(--pit-surface)}
+.pit-reader-console .pit-advanced-tools>summary{padding:12px 2px;
+  font-size:12px;font-weight:650;line-height:1.5;color:var(--pit-text);
+  cursor:pointer;list-style:revert}
+.pit-reader-console .pit-advanced-tools[open]{padding-bottom:12px}
+.pit-reader-console .pit-advanced-tools>summary:focus-visible{
+  outline:3px solid var(--pit-focus);outline-offset:2px}
+.pit-reader-console .native-hint:empty{display:none}

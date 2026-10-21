@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 test('explicit cloud ASR initializes remote Whisper without local Python',async()=>{
  const state=new Map(),outbound=[],notice=[];
- let listener,open=false,preflight=0,mt=0;
+ let listener,open=false,preflight=0,mt=0,dedicated=false;
  const session={
   async get(keys){return Object.fromEntries((Array.isArray(keys)?keys:[keys])
      .map(k=>[k,state.get(k)]));},
@@ -23,7 +23,10 @@ test('explicit cloud ASR initializes remote Whisper without local Python',async(
     async get(key){
      if(key==='pit_settings_v1')return {pit_settings_v1:{
       source:'auto',target:'zh',standardProvider:'cloud',
-      cloudEndpoint:'https://pit-cloud.example',cloudToken:'temporary-strong-token-12345'}};
+      cloudEndpoint:'https://pit-cloud.example',cloudToken:'temporary-strong-token-12345',
+      ...(dedicated?{
+        cloudAsrEndpoint:'https://pit-asr.example',cloudAsrToken:'separate-asr-token-12345'
+      }:{})}};
      return {};
     }
    },session
@@ -41,13 +44,18 @@ test('explicit cloud ASR initializes remote Whisper without local Python',async(
   }
  };
  globalThis.fetch=async(url,init)=>{
-  if(String(url)==='https://pit-cloud.example/v1/capabilities'){
+  if(String(url)==='https://pit-cloud.example/v1/capabilities'||
+     String(url)==='https://pit-asr.example/v1/capabilities'){
    preflight++;
-   assert.equal(init.headers.Authorization,'Bearer temporary-strong-token-12345');
+   assert.equal(init.headers.Authorization,
+     dedicated?'Bearer separate-asr-token-12345':'Bearer temporary-strong-token-12345');
    return {ok:true,json:async()=>({ready:true,routes:{asr:'ready'}})};
   }
   if(String(url)==='https://pit-cloud.example/v1/translate'){
    mt++;
+   const body=JSON.parse(init.body);
+   assert.equal(body.source,'fr',
+     'explicit Whisper speech language must outrank short-text English fallback');
    return {ok:true,json:async()=>({translations:['实时云端译文']})};
   }
   throw Error('Unexpected network URL '+url);
@@ -72,11 +80,27 @@ test('explicit cloud ASR initializes remote Whisper without local Python',async(
  const site={id:chrome.runtime.id,tab:{id:33,url:'https://example.org/video'},
              url:'https://example.org/video'};
  const translated=await dispatch({type:'TRANSLATE_BATCH',mode:'standard',
-   transient:true,sessionId:started.sessionId,texts:['Lecture']},site);
+   transient:true,sessionId:started.sessionId,texts:['Bonjour'],
+   captionSourceLanguage:'fr'},site);
  assert.equal(translated.ok,true,JSON.stringify(translated));
  assert.deepEqual(translated.translations,['实时云端译文']);
  assert.equal(mt,1);
  const ended=await dispatch({type:'PIT_ASR_STOP'});
  assert.equal(ended.ok,true);
  assert.equal(open,false);
+ // Dedicated Railway ASR must not overwrite the existing MT Worker.
+ dedicated=true;
+ const railway=await dispatch({type:'PIT_ASR_START',tabId:33,
+   asrBackend:'cloud',userInitiated:true});
+ assert.equal(railway.ok,true,JSON.stringify(railway));
+ const next=outbound.filter(x=>x.type==='PIT_OFFSCREEN_START').at(-1);
+ assert.equal(next.cloudEndpoint,'https://pit-asr.example/v1/asr');
+ assert.equal(next.token,'separate-asr-token-12345');
+ assert.equal(preflight,2);
+ const translatedAgain=await dispatch({type:'TRANSLATE_BATCH',mode:'standard',
+   transient:true,sessionId:next.sessionId,texts:['Bonjour'],
+   captionSourceLanguage:'fr'},site);
+ assert.equal(translatedAgain.ok,true,JSON.stringify(translatedAgain));
+ assert.equal(mt,2,'Whisper uses Railway endpoint but MT stays on original Worker');
+ assert.equal((await dispatch({type:'PIT_ASR_STOP'})).ok,true);
 });

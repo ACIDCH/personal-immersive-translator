@@ -9,19 +9,58 @@
   const SKIP = 'script,style,noscript,svg,canvas,pre,code,textarea,input,select,option,button,nav,footer,header,[contenteditable],[translate="no"],[aria-hidden="true"],.pit-translation,.pit-toast,.pit-selection-card';
   const TARGETS = 'main p,article p,p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],[role="slide"] p,article div,main div,[role="main"] div,[role="article"] div';
   let processed = new WeakMap();
-  let scope='smart',display='bilingual',theme='subtle';
+  let scope='full',display='bilingual',theme='subtle';
+  let prefs={},titleRecord=null,initialChars=0;
+  let taskId='web-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+  let candidateChars=0;
+  const visibleOrInitial=(item)=>{
+    if(prefs.translateToBottom!==false)return true;
+    const rect=item.el.getBoundingClientRect();
+    const before=candidateChars+initialChars;candidateChars+=item.original.length;
+    return before<(prefs.initialTranslateCharacters||5000)||(rect.bottom>=0&&rect.top<innerHeight+200);
+  };
+  function applyReadingStyle(node,settings){
+    for(const [key,value] of Object.entries(settings.readingStyle||{}))node.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
+    if(settings.longParagraphLineBreak||settings.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
+    // Product default is an unboxed, contextual bilingual line, not a
+    // tinted full-width callout. Allow explicit highlight theme separately.
+    if(theme==='subtle'||theme==='none'){
+      node.style.setProperty('background-color','transparent','important');
+      node.style.setProperty('color','inherit','important');
+    }
+    // Hero headings often live inside CSS grid/flex columns. The injected
+    // translation must inherit their width, not become another grid item.
+    if(node.classList.contains('pit-inline-translation')){
+      node.style.setProperty('font-size','.9em','important');
+      node.style.setProperty('padding','0','important');
+      node.style.setProperty('margin','0 0 0 .4ch','important');
+      node.style.setProperty('border','0','important');
+    }
+    if(node.classList.contains('pit-flow-translation')){
+      node.style.setProperty('font-size','.78em','important');
+      node.style.setProperty('padding','0','important');
+      node.style.setProperty('border','0','important');
+      node.style.setProperty('margin','.14em 0 0','important');
+    }
+  }
   let hoverEnabled=false,inputEnabled=false;
   let voiceSource='auto',voiceTarget='zh';
   let lastInput=null,inputTaps=0,inputTapAt=0;
   let hovered=null;
   const CONTENT_TARGETS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th,[role="heading"],[role="paragraph"],[role="listitem"],div';
+  // Opt-in complete scope also translates visible navigation/CTA labels
+  // without moving, reparenting or replacing the actual clickable control.
+  const FULL_CONTROLS = 'nav a,header a,[role="navigation"] a,main button,main [role="button"],form button';
+  const targets=()=>scope==='full'?CONTENT_TARGETS+','+FULL_CONTROLS:TARGETS;
 
   let active = false, currentId = 0, mode = 'standard';
   let observer = null, observedRoots = new Set();
-  let busy = false, queued = false, timer = null;
+  let busySession = null, queued = false, timer = null;
   let aiCount = 0, standardSpent = 0, standardBudget = 600;
   let failedBatches=0, lastError='', succeededBatches=0;
   const AI_MAX_PER_ACTION = 30, STANDARD_BATCH = 70, STANDARD_STEP = 600;
+  const MAX_PARAGRAPH_CHARS = 120000; // 38 bounded 3,200-char segments maximum
+  const TRUNCATED_SOURCE_MARKER = '\uFFF0'; // Internal signal, never sent to MT
 
   function roots() {
     const found=[document],pending=[document],seen=new Set(found);
@@ -40,6 +79,13 @@
     return roots().flatMap(root=>Array.from(root.querySelectorAll(selector)));
   }
   function isUnsafe(el) {
+    if(prefs.translateSidebar===false&&el.closest('aside,[role="complementary"]'))return true;
+    if(scope==='full'&&el.matches(FULL_CONTROLS)){
+      // Translate only the visible button or link label, never its form,
+      // inputs, data or validation state. Keep native submit/click behavior.
+      return Boolean(el.closest('[contenteditable],[translate="no"],[aria-hidden="true"]')||
+        el.matches('[contenteditable],[translate="no"],[aria-hidden="true"]'));
+    }
     let part=el;
     while(part) {
       if(part.closest?.(scope==='full'?SKIP.replace(',footer,header',''):SKIP) ||
@@ -52,14 +98,36 @@
     // textContent includes injected <div.pit-translation> for list/table nodes.
     // TreeWalker avoids accumulating the translation into subsequent requests.
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
-    const parts=[];let textNode;
+    const control=scope==='full'&&el.matches(FULL_CONTROLS);
+    // Full-page candidates include site-header headings and labels. The
+    // text collector must not silently re-exclude them as in smart mode.
+    // Only explicit clickable controls and semantic headings opt out of the
+    // header/nav exclusion. Generic header paragraphs are still skipped to
+    // avoid translating navigation groups as article body text.
+    const allowSiteChrome=control||(scope==='full'&&
+      el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]'));
+    const exclusions=allowSiteChrome
+      ?SKIP.replace(',button,nav,footer,header',''):SKIP;
+    const parts=[];let textNode,rawChars=0,truncated=false;
     while((textNode=walker.nextNode())) {
       const parent=textNode.parentElement;
-      if(parent?.closest?.(SKIP))continue;
-      parts.push(textNode.nodeValue || '');
-      if(parts.length>5000)break;
+      if(parent?.closest?.(exclusions))continue;
+      const value=textNode.nodeValue||'';
+      // A 5,000-node stop silently truncated rich articles whose text is
+      // split across many spans. Bound by actual characters, not DOM nodes.
+      const remaining=MAX_PARAGRAPH_CHARS+1-rawChars;
+      if(value.length>=remaining){
+        parts.push(value.slice(0,remaining));
+        truncated=true;
+        break; // Content beyond this point must never count as translated.
+      }
+      parts.push(value);
+      rawChars+=value.length;
     }
-    return parts.join('').replace(/\s+/g,' ').trim();
+    const normalized=parts.join('').replace(/\s+/g,' ').trim();
+    // Whitespace-heavy DOM nodes may shrink below 120k after normalization.
+    // Preserve the raw overflow signal so no incomplete prefix is translated.
+    return normalized+(truncated?TRUNCATED_SOURCE_MARKER:'');
   }
   function toast(message) {
     document.querySelector('.pit-toast')?.remove();
@@ -72,11 +140,15 @@
     // Avoid numeric-only UI counters while retaining short article headings
     // and normal CJK text. The former 12-character minimum discarded a large
     // class of legitimate short paragraphs without reporting any failure.
-    if(original.length>20000||!/[\p{L}]/u.test(original))return false;
-    const threshold=/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4;
+    if(original.includes(TRUNCATED_SOURCE_MARKER)||
+       original.length>MAX_PARAGRAPH_CHARS||!/[\p{L}]/u.test(original))return false;
+    const threshold=prefs.minSegmentCharacters||(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(original)?2:4);
     if(original.length<threshold)return false;
     // Translating nested editable menus or site controls is not article reading.
-    if(el.matches('div')&&el.closest('nav,aside,[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
+    if(el.matches('div')&&el.closest('nav,'+(prefs.translateSidebar?'':'aside,')+'[role="navigation"],[role="menu"],[role="toolbar"],[role="dialog"],[aria-modal="true"]'))return false;
+    // Hero search/filter panels are NOT prose. A catch-all div with several
+    // labels/inputs must never become a translated single paragraph.
+    if(el.matches('div')&&el.querySelector('input,textarea,select,button,form,a[href],[role="search"],[role="button"],[role="combobox"],[role="textbox"]'))return false;
     if(el.matches('div')&&el.children.length>0){
       // A wrapping DIV with its own rich descendants is not a leaf text unit.
       // Only permit literal text runs at leaf DIV level, so a whole article is
@@ -87,7 +159,7 @@
   }
   function candidates() {
     const result=[];
-    for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
+    for(const el of queryDeep(targets())){
       if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
@@ -105,45 +177,79 @@
   // Actual DOM coverage is measured, not inferred from a successful
   // translate-command response. No original text is returned in these stats.
   function coverage() {
-    let eligible=0,translated=0;
-    for(const el of queryDeep(scope==='full'?CONTENT_TARGETS:TARGETS)){
+    let eligible=0,translated=0,skippedOversized=0;
+    for(const el of queryDeep(targets())){
       if(!el.isConnected || isUnsafe(el) || (!el.getClientRects().length && !el.classList.contains('pit-original-concealed')))continue;
       if(el.children.length && [...el.children].some(ch=>ch.matches?.(TARGETS)))continue;
       const original=sourceText(el);
+      if((original.includes(TRUNCATED_SOURCE_MARKER)||
+         original.length>MAX_PARAGRAPH_CHARS) && /[\p{L}]/u.test(original)){
+        // Do not report 100% coverage when giant/possibly generated blocks
+        // were deliberately not sent to a provider.
+        skippedOversized++;
+        continue;
+      }
       if(!translatable(el,original))continue;
       eligible++;
       const done=processed.get(el);
       if(done && done.source===original && done.node?.isConnected)translated++;
     }
     return {
-      active,mode,eligible,translated,remaining:Math.max(0,eligible-translated),
-      coveragePercent:eligible?Math.round(10000*translated/eligible)/100:null,
-      failedBatches,succeededBatches,busy,lastError,
+      active,mode,eligible:eligible+skippedOversized,translated,
+      remaining:Math.max(0,eligible-translated)+skippedOversized,
+      skippedOversized,
+      coveragePercent:(eligible+skippedOversized)
+        ?Math.round(10000*translated/(eligible+skippedOversized))/100:null,
+      failedBatches,succeededBatches,busy:busySession===currentId,lastError,
       budgetRemaining:mode==='standard'?Math.max(0,standardBudget-standardSpent):
         Math.max(0,AI_MAX_PER_ACTION-aiCount)
     };
   }
   function attach(el,source,translation,isAI) {
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
-    const node=document.createElement('div');
-    node.className='pit-translation'+(isAI?' pit-ai':'');
-    node.textContent=translation;
+    const heading=el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]');
+    const inline=scope==='full'&&el.matches(FULL_CONTROLS);
+    // Only direct CSS grid/flex children need in-item rendering to avoid
+    // creating an additional grid/flex item. Normal article paragraphs retain
+    // the proven sibling markup and locator compatibility.
+    const parentDisplay=el.parentElement?getComputedStyle(el.parentElement).display:'';
+    const withinBlock=el.matches('p,blockquote,figcaption,[role="paragraph"]')&&
+      /^(grid|inline-grid|flex|inline-flex)$/.test(parentDisplay);
+    const contained=heading||inline||withinBlock||el.matches('li,td,th');
+    const node=document.createElement(contained?'span':'div');
+    node.className='pit-translation'+(isAI?' pit-ai':'')+
+      (heading?' pit-flow-translation':'')+(inline?' pit-inline-translation':'');
+    node.textContent=prefs.longParagraphLineBreak?translation.replace(/([.!?。！？])\s*/g,'$1\n'):translation;
+    applyReadingStyle(node,prefs);
+    // A paragraph inside a CSS grid must remain ONE grid item. Capture its
+    // original font size before translate-only mode collapses original glyphs.
+    if(withinBlock){
+      node.style.setProperty('font-size',getComputedStyle(el).fontSize,'important');
+    }
+    if(prefs.longParagraphLineBreak||prefs.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
+    if(theme==='none')node.style.setProperty('background-color','transparent','important');
+    if(prefs.sameLanguageHighlight&&['zh','ja','ko'].includes(voiceTarget))node.style.setProperty('background-color',prefs.translationBgColor,'important');
     node.dataset.pit='translation';
     node.dataset.theme=theme;
     el.classList.add('pit-source-block');
     el.classList.toggle('pit-original-concealed',display==='translation-only');
-    if(el.matches('li,td,th'))el.append(node);
-    else el.insertAdjacentElement('afterend',node);
-    processed.set(el,{source,node});
+    if(contained){
+      if(prefs.translationOrder==='translation-first')el.prepend(node);else el.append(node);
+    }else el.insertAdjacentElement(prefs.translationOrder==='translation-first'?'beforebegin':'afterend',node);
+    processed.set(el,{source,node,translation});
     return true;
   }
-  async function request(texts,requestedMode,context) {
+  async function request(texts,requestedMode,context,pinTask=false) {
     const answer=await chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:requestedMode,
+      pageContext:'article',pageLanguage:document.documentElement.lang||'',
+      taskId:pinTask?taskId:'gesture-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)),
       userInitiated:requestedMode==='ai',context
     });
     if(!answer?.ok)throw Error(answer?.error||'翻译服务未响应');
-    if(!Array.isArray(answer.translations)||answer.translations.length!==texts.length)throw Error('翻译结果与原文段落数量不符');
+    if(!Array.isArray(answer.translations)||answer.translations.length!==texts.length||
+       answer.translations.some(t=>typeof t!=='string'||!t.trim()))
+      throw Error('翻译结果与原文段落数量不符或译文为空');
     return answer.translations;
   }
   // The hosted engine enforces 4,000 chars/segment and all adapters
@@ -166,12 +272,29 @@
     }
     return out;
   }
-  async function requestBoundedParagraphs(items,requestedMode,context,sessionId){
+  function joinTranslatedFragments(translated,sourceFragments){
+    let combined='';
+    for(let i=0;i<translated.length;i++){
+      const next=translated[i];
+      const before=sourceFragments[i-1]||'',after=sourceFragments[i]||'';
+      // Some MT engines trim the whitespace at the edge of each request.
+      // Restore Latin word boundaries that appeared in the original source,
+      // but never inject arbitrary spaces between CJK text fragments.
+      const sourceBoundary=/\s$/u.test(before)||/^\s/u.test(after)||
+        /[.!?。！？]$/u.test(before);
+      if(i>0 && sourceBoundary && /[A-Za-z0-9,.;:!?]$/u.test(combined) &&
+         /^[A-Za-z0-9]/u.test(next) && !/\s$/u.test(combined))
+        combined+=' ';
+      combined+=next;
+    }
+    return combined;
+  }
+  async function requestBoundedParagraphs(items,requestedMode,context,sessionId,onComplete){
     const fragments=items.map(item=>splitParagraph(item.original));
     const queued=fragments.flatMap((pieces,owner)=>
       pieces.map((text,index)=>({text,owner,index})));
     const results=fragments.map(parts=>Array(parts.length).fill(''));
-    let requests=0;
+    const completed=new Set();
     for(let i=0;i<queued.length;){
       // Restoring original text or navigating away cancels further queued
       // provider requests, even when a previous browser message is pending.
@@ -182,15 +305,25 @@
         if(batch.length&&characters+item.text.length>9500)break;
         batch.push(item);characters+=item.text.length;i++;
       }
-      const reply=await request(batch.map(x=>x.text),requestedMode,context);
-      requests++;
+      const reply=await request(batch.map(x=>x.text),requestedMode,context,true);
+      if(!active||currentId!==sessionId)return null;
+      succeededBatches++;
+      if(requestedMode==='ai')aiCount+=batch.length;
       for(let k=0;k<batch.length;k++){
         const item=batch[k];
         results[item.owner][item.index]=reply[k];
       }
+      // Commit a paragraph as soon as *all* its fragments are valid. If
+      // batch 2 fails, batch 1 translations stay visible and accounted for;
+      // manual retry only sees genuinely untranslated paragraphs.
+      for(const {owner} of batch){
+        if(!completed.has(owner) && results[owner].every(t=>t.trim())){
+          completed.add(owner);
+          onComplete(owner,joinTranslatedFragments(results[owner],fragments[owner]));
+        }
+      }
     }
-    return {translations:results.map(parts=>parts.join(' ')),
-      segments:queued.length,requests};
+    return {completed:completed.size,segments:queued.length};
   }
   function schedule(id,delay=300) {
     if(!active || currentId!==id)return;
@@ -227,17 +360,21 @@
   }
   async function translateContent(id){
     if(!active || id!==currentId)return;
-    if(busy){queued=true;return;}
-    busy=true;
+    if(busySession===id){queued=true;return;}
+    // A superseded provider request can take many seconds to settle.
+    // Never let that old session block the user's new START after RESTORE.
+    busySession=id;
     try{
       const limit=mode==='ai' ? Math.max(0,AI_MAX_PER_ACTION-aiCount)
         : Math.min(STANDARD_BATCH,Math.max(0,standardBudget-standardSpent));
-      const targets=candidates().slice(0,limit);
+      candidateChars=0;
+      const targets=candidates().filter(visibleOrInitial).slice(0,limit);
       if(!targets.length)return;
       let count=0;
       for(let i=0;i<targets.length;i+=6){
         if(!active || currentId!==id)return;
         const chunk=targets.slice(i,i+6);
+        chunk.forEach(x=>{x.el.dataset.pitLoading=prefs.loadingAnimation||'text';});
         const before=targets[i-1]?.original?.slice(-300)||'';
         const after=targets[i+6]?.original?.slice(0,300)||'';
         const segmentCount=chunk.reduce((n,item)=>n+splitParagraph(item.original).length,0);
@@ -246,15 +383,17 @@
           break;
         }
         const outcome=await requestBoundedParagraphs(chunk,mode,
-          [before,after].filter(Boolean).join('\n'),id);
+          [before,after].filter(Boolean).join('\n'),id,(owner,translation)=>{
+            if(!active||currentId!==id)return;
+            const item=chunk[owner];
+            if(attach(item.el,item.original,translation,mode==='ai')){
+              count++;
+              if(mode==='standard')standardSpent++;
+              initialChars+=item.original.length;
+            }
+          }).finally(()=>chunk.forEach(x=>delete x.el.dataset.pitLoading));
         if(!outcome)return;
-        succeededBatches+=outcome.requests;
         if(!active || currentId!==id)return;
-        for(let j=0;j<chunk.length;j++){
-          if(attach(chunk[j].el,chunk[j].original,outcome.translations[j],mode==='ai'))count++;
-        }
-        if(mode==='ai')aiCount+=outcome.segments;
-        else standardSpent+=chunk.length;
       }
       if(count)toast('已翻译 '+count+' 个新段落 · '+(mode==='ai'?'AI':'标准')+'模式');
       // A long article can exceed the first 70/250 nodes. Process further
@@ -272,15 +411,21 @@
         toast('翻译失败：'+lastError);
       }
     }finally{
-      busy=false;
-      if(queued && active){
-        queued=false;schedule(currentId,200);
+      // A prior session may complete after a new one has started. It must
+      // neither clear the new session's busy state nor schedule its queue.
+      if(busySession===id){
+        busySession=null;
+        if(queued && active && currentId===id){
+          queued=false;schedule(id,200);
+        }
       }
     }
   }
   function restore(){
+    if(titleRecord&&document.title===titleRecord.translated)document.title=titleRecord.original;
+    titleRecord=null;initialChars=0;
     active=false;currentId++;
-    clearTimeout(timer);timer=null;queued=false;
+    clearTimeout(timer);timer=null;queued=false;busySession=null;
     observer?.disconnect();observer=null;observedRoots.clear();
     for(const root of roots()){
       root.querySelectorAll('.pit-translation').forEach(node=>node.remove());
@@ -293,7 +438,7 @@
   }
   function setDisplay(next,style=theme){
     if(!['bilingual','translation-only'].includes(next))return;
-    display=next;theme=['subtle','underline','highlight'].includes(style)?style:'subtle';
+    display=next;theme=['subtle','underline','highlight','none'].includes(style)?style:'subtle';
     for(const root of roots()){
       root.querySelectorAll('.pit-source-block').forEach(el=>
         el.classList.toggle('pit-original-concealed',display==='translation-only'));
@@ -301,10 +446,18 @@
     }
   }
   function start(requestedMode,options={}) {
+    const host=location.hostname.toLowerCase();
+    if(String(prefs.blockedHosts||'').split(/[\s,;]+/).filter(Boolean).some(x=>host===x||host.endsWith('.'+x))){toast('本站已禁止翻译');return;}
+    const lang=(prefs.sourceLanguage!=='auto'?prefs.sourceLanguage:document.documentElement.lang)?.split('-')[0];
+    if(prefs.skipSameLanguage&&lang&&lang===prefs.targetLanguage){toast('明确源语与目标语相同，已跳过；可在高级设置关闭。');return;}
     restore();mode=requestedMode;active=true;
+    taskId='web-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
     scope=options.scope==='full'?'full':'smart';
     setDisplay(options.display||display,options.theme||theme);
+    if(prefs.translationOnlyLanguages?.includes(lang))setDisplay('translation-only',theme);
     const id=++currentId;
+    if(prefs.translateTitle&&document.title){const original=document.title;void request([original],requestedMode,'',true).then(values=>{if(active&&currentId===id&&document.title===original&&values[0]){titleRecord={original,translated:values[0]};document.title=values[0];}}).catch(e=>toast('标题翻译失败：'+e.message));}
+    if(prefs.temporaryAutoTranslateMinutes>0)void chrome.runtime.sendMessage({type:'PIT_TEMPORARY_AUTO'}).catch(()=>{});
     if(requestedMode==='standard'){
       observer=new MutationObserver(mutations=>{
         if(!active || currentId!==id || mutations.every(ownedMutation))return;
@@ -380,6 +533,7 @@
     card.style.top=Math.max(8,Math.min(top,window.innerHeight-180))+'px';
   }
   async function translateSelection(requestedMode) {
+    if(prefs.selectionTranslate===false){toast('划词翻译已关闭');return;}
     const selection=window.getSelection();
     const text=selection?.toString().trim()||'';
     if(!text || text.length>5000){toast('请选中 1–5000 字符的正文');return;}
@@ -467,9 +621,14 @@
   },true);
   // The background only returns a strictly limited preference subset, never
   // vendor keys. Without settings access the extension remains idle.
-  void chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES'}).then(answer=>{
+  function loadPreferences(auto=false){return chrome.runtime.sendMessage({type:'PIT_PUBLIC_PREFERENCES',
+    pageLanguage:document.documentElement.lang||''}).then(answer=>{
     if(!answer?.ok||!answer.preferences)return;
     const p=answer.preferences;
+    prefs=p;
+    const rule=[...(p.siteRules||[])].sort((a,b)=>b.host.length-a.host.length).find(x=>location.hostname===x.host||location.hostname.endsWith('.'+x.host));
+    if(rule?.theme&&rule.theme!=='inherit')p.translationTheme=rule.theme;
+    if(rule?.target&&rule.target!=='inherit')p.targetLanguage=rule.target;
     if(p.floatingControl===true)mountFloatingControl();
     voiceSource=p.sourceLanguage||'auto';voiceTarget=p.targetLanguage||'zh';
     hoverEnabled=p.hoverTranslate===true;
@@ -482,14 +641,32 @@
         const rule=raw.trim().toLowerCase().replace(/^\*\./,'');
         return host===rule||host.endsWith('.'+rule);
       });
-    if(matches(p.autoTranslateHosts)&&!matches(p.blockedHosts)){
+    if(matches(p.blockedHosts)){restore();hoverEnabled=false;inputEnabled=false;document.getElementById('pit-floating-translate')?.remove();return;}
+    for(const source of queryDeep('.pit-source-block')){
+      const record=processed.get(source);if(!record?.node)continue;
+      const node=record.node;
+      applyReadingStyle(node,p);
+      node.textContent=p.longParagraphLineBreak?record.translation.replace(/([.!?。！？])\s*/g,'$1\n'):record.translation;
+      if(p.longParagraphLineBreak||p.lineBreakPolicy==='always')node.style.setProperty('white-space','pre-line','important');
+      if(theme==='none')node.style.setProperty('background-color','transparent','important');
+      if(node.matches('.pit-flow-translation,.pit-inline-translation')||source.matches('li,td,th')){
+        if(p.translationOrder==='translation-first')source.prepend(node);else source.append(node);
+      }else source.insertAdjacentElement(p.translationOrder==='translation-first'?'beforebegin':'afterend',node);
+    }
+    if(!p.floatingControl)document.getElementById('pit-floating-translate')?.remove();
+    if(auto&&(matches(p.autoTranslateHosts)||p.temporaryAutoTranslateUntil?.[host]>Date.now())&&!matches(p.blockedHosts)){
       // A first install must never silently fake translations or send API
       // calls to an unconfigured self-hosted Worker.
       if(p.standardReady===true)start('standard',{scope,display,theme});
-      else toast('该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
+      else toast(p.standardProvider==='browser'
+        ?'本网站已启用自动翻译，但 Chrome 内置模型未准备好或无法确定源语言；请在 PIT 设置检查/下载语言包。'
+        :'该站点已加入自动翻译，但常规翻译服务尚未配置或就绪。请打开 PIT 设置。');
     }
-  }).catch(()=>{});
+  }).catch(()=>{});}
+  void loadPreferences(true);
+  document.addEventListener('scroll',()=>{if(active&&mode==='standard'&&!prefs.translateToBottom)schedule(currentId,150);},{passive:true});
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
+    if(message?.type==='PIT_PREFERENCES_CHANGED'){void loadPreferences().then(()=>reply({ok:true}));return true;}
     if(message?.type==='PIT_GET_PROGRESS'){
       reply({ok:true,progress:coverage()});
     }else if(message?.type==='PIT_START' && ['standard','ai'].includes(message.mode)){

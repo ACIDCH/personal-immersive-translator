@@ -8,8 +8,40 @@ function parseTime(value:string):number{
  const [h,m,s]=parts.length===3?parts:[0,...parts];
  return h*3600+m*60+s;
 }
+function parseAssSubtitle(raw:string):TimedCue[]{
+ const cues:TimedCue[]=[];
+ let inEvents=false,fields:string[]=[];
+ for(const line of raw.replace(/\r/g,'').split('\n')){
+   const value=line.trim();
+   if(/^\[[^\]]+\]$/.test(value)){
+     inEvents=/^\[events\]$/i.test(value);continue;
+   }
+   if(!inEvents)continue;
+   if(/^Format\s*:/i.test(value)){
+     fields=value.slice(value.indexOf(':')+1).split(',').map(s=>s.trim().toLowerCase());
+     continue;
+   }
+   if(!/^Dialogue\s*:/i.test(value))continue;
+   const start=fields.indexOf('start'),end=fields.indexOf('end'),text=fields.indexOf('text');
+   if(start<0||end<0||text!==fields.length-1||fields.length<3)continue;
+   const parts=value.slice(value.indexOf(':')+1).split(',');
+   if(parts.length<fields.length)continue;
+   const begin=parseTime(parts[start]),finish=parseTime(parts[end]);
+   const plain=parts.slice(text).join(',').replace(/\{[^}]*\}/g,'')
+     .replace(/\\[Nn]/g,'\n').replace(/\\h/g,' ').trim();
+   if(!Number.isFinite(begin)||!Number.isFinite(finish)||begin<0||
+      finish<=begin||finish-begin>360||!plain)continue;
+   if(plain.length>4500)throw Error('单条字幕超过 4500 字符');
+   if(cues.length>=3000)throw Error('当前最多可翻译 3000 条字幕');
+   cues.push({start:begin,end:finish,text:plain});
+ }
+ if(!cues.length)throw Error('ASS 没有有效的事件时间轴');
+ return cues;
+}
 export function parseSubtitleFile(raw:string):TimedCue[]{
  if(raw.length>2_000_000)throw Error('字幕文件不得超过 2MB');
+ if(/^\s*\[Script Info\]|^\s*\[Events\]/im.test(raw))
+   return parseAssSubtitle(raw);
  const normalized=raw.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
  const value=normalized.replace(/^WEBVTT[^\n]*(?:\n|$)/,'');
  const cues:TimedCue[]=[];

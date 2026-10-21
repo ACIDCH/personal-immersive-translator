@@ -1,0 +1,66 @@
+name: P0 real public video caption integrity (non-gating observation)
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/public_video_real_probe.py'
+      - '.github/workflows/pit-public-video.yml'
+  workflow_dispatch:
+    inputs:
+      probe_bilibili:
+        description: 'Explicitly retry public Bilibili after previous HTTP 412 (no bypass)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pit-public-video-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actual-public-cc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build real packaged WXT plugin
+        working-directory: apps
+        run: |
+          npm install --no-audit --no-fund
+          npm run build --workspace wxt-ui
+          node wxt-ui/scripts/check-native-bundle.mjs
+      - name: Install real Chromium browser and dependencies
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Observe actual authorized public-player visible captions with real Google-free MT
+        id: live
+        continue-on-error: true
+        env:
+          PIT_PUBLIC_BILIBILI_PROBE: ${{ inputs.probe_bilibili && '1' || '0' }}
+        run: python benchmarks/public_video_real_probe.py
+      - name: Distinguish genuine proof from public-site blockers
+        if: always()
+        run: |
+          if test -f pit-public-video-observation.json; then
+            python -c "import json; x=json.load(open('pit-public-video-observation.json')); print('ACTUAL PUBLIC PLAYER VERDICT:',x['status']); open(__import__('os').environ['GITHUB_STEP_SUMMARY'],'a').write('## PIT actual public player captions\\n\\n'+x['status']+' — non-gating L2 observation, never Windows/DRM account certification.\\n')"
+          else
+            echo 'No public-player observation exists; do not claim PASS.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Archive non-sensitive player outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pit-public-video-observation
+          path: pit-public-video-observation.json
+          if-no-files-found: ignore
+          retention-days: 10

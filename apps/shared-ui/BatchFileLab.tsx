@@ -6,7 +6,7 @@ import {bilingualImagePng,splitOcrLines} from './imageTranslate';
 type Mode='standard'|'ai';
 type Lang='auto'|'eng'|'fra'|'chi_sim'|'jpn'|'kor';
 const MAX_FILES=20,MAX_FILE=48*1024*1024,MAX_BATCH=160*1024*1024;
-const accepted=/\.(docx|pptx|xlsx|epub|txt|md|html?|pdf|png|jpe?g|webp|bmp)$/i;
+const accepted=/\.(docx|pptx|xlsx|epub|txt|md|html?|pdf|srt|vtt|ass|png|jpe?g|webp|bmp)$/i;
 type ChromeRuntime={
  id?:string;
  getURL?:(name:string)=>string;
@@ -69,7 +69,7 @@ export function BatchFileLab(){
           response.translations.some(s=>typeof s!=='string'||!s.trim()))
          throw Error(response?.error||'翻译服务返回了无效的分段数据');
        return response.translations;
-     },{signal:controller.signal,onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
+     },{signal:controller.signal,maxRetries:mode==='ai'?0:2,onRetry:info=>setProgress('批量翻译暂时受限，重试 '+info.attempt+' 次')});
      for(const [i,file] of items.entries()){
        if(controller.signal.aborted)throw Error('用户已取消翻译');
        const type=file.name.split('.').at(-1)!.toLowerCase();
@@ -93,6 +93,25 @@ export function BatchFileLab(){
          result=output.archive||output.pdf||new Uint8Array();
          if(!result.byteLength)throw Error('PDF 输出为空');
          ext=output.archive?'zip':'pdf';
+       }else if(['srt','vtt','ass'].includes(type)){
+         // Reuse the same tested ASS/SRT/VTT parsing and bilingual SRT
+         // serializer as the standalone subtitle file lab.
+         const {parseSubtitleFile,formatBilingualSrt}=await import('./subtitleExport');
+         const cues=parseSubtitleFile(await file.text());
+         const translated:string[]=[];
+         for(let j=0;j<cues.length;){
+           if(controller.signal.aborted)throw Error('用户已取消字幕翻译');
+           const chunk:typeof cues=[];let chars=0;
+           for(let k=j;k<cues.length&&chunk.length<8;k++){
+             if(chunk.length&&chars+cues[k].text.length>10500)break;
+             chunk.push(cues[k]);chars+=cues[k].text.length;
+           }
+           translated.push(...await translate(chunk.map(c=>c.text)));
+           j+=chunk.length;
+           setProgress('文件 '+(i+1)+'/'+items.length+'：字幕 '+j+'/'+cues.length+' 条');
+         }
+         result=new TextEncoder().encode(formatBilingualSrt(cues,translated));
+         ext='srt';
        }else if(['epub','txt','md','html','htm'].includes(type)){
          const {translatePortable}=await import('./portableDocumentTranslate');
          result=await translatePortable(await file.arrayBuffer(),type as 'epub'|'txt'|'md'|'html'|'htm',translate,(done,total)=>
@@ -135,11 +154,11 @@ export function BatchFileLab(){
  }
  return <section className="document-lab batch-file-lab">
    <h2>批量多格式翻译</h2>
-   <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML、图片及PDF 批量输入和 ZIP 下载。PDF 最高 300 页、48 MiB，超过 12 页分卷输出；自动多语言 OCR；复杂 PDF 高保真云端引擎尚未上线。</p>
+   <p>支持 DOCX、PPTX、XLSX、EPUB、TXT、Markdown、HTML、SRT/VTT/ASS 字幕、图片及 PDF 批量输入和 ZIP 下载。PDF 最高 300 页、48 MiB，超过 12 页分卷输出；自动多语言 OCR；复杂 PDF 高保真云端引擎尚未上线。</p>
    <div className="document-drop" role="group" aria-label="选择或拖入批量文件"
         onDragOver={event=>event.preventDefault()} onDrop={onDrop}>
      <label className="document-field">选择文件（最多 20 个），或把文件拖入此区域
-       <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,.pdf,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
+       <input type="file" multiple accept=".docx,.pptx,.xlsx,.epub,.txt,.md,.html,.htm,.pdf,.srt,.vtt,.ass,image/png,image/jpeg,image/webp,image/bmp" onChange={handle}/>
      </label>
    </div>
    <div className="native-modes" role="group" aria-label="批量翻译服务">

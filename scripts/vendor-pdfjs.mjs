@@ -5,6 +5,8 @@
  */
 import {copyFileSync,existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {vendorSupabase} from './vendor-supabase.mjs';
+vendorSupabase(join(process.cwd(),'node_modules','@supabase','supabase-js'),join(process.cwd(),'src','vendor'));
 const upstream=join(process.cwd(),'node_modules','pdfjs-dist');
 const packageJson=JSON.parse(readFileSync(join(upstream,'package.json'),'utf8'));
 if(packageJson.version!=='6.4.299' || packageJson.license!=='Apache-2.0') {

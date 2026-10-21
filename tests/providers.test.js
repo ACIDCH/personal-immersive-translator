@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {translateBatch,parseAIResponse,decodeEntities,TranslationError} from '../src/lib/providers.js';
 import {normalizeSettings,hostIsBlocked,portablePreferences,applyPortablePreferences,isStandardServiceConfigured} from '../src/lib/settings.js';
+import {probeStatus} from '../src/lib/provider-catalog.js';
 
+test('Chrome downloaded-model absence is diagnosed as missing-pack',()=>{
+ assert.equal(probeStatus(Error('Chrome 未下载离线包。请在 PIT 设置中主动下载')),'missing-pack');
+ assert.equal(probeStatus(Error('Chrome 语言包不可用')),'missing-pack');
+ assert.equal(probeStatus(Error('网络中断')),'network-error');
+});
 function mockResponse(output,check) {return async (url,init) => {check?.(url,init);return {ok:true,status:200,json:async()=>output};};}
 const config = {target:'zh', source:'en'};
 test('Microsoft request maps strings in correct order and uses region header',async()=>{
@@ -65,7 +71,7 @@ test('remote HTTP errors are sanitized to avoid leaking server data',async()=>{
   await assert.rejects(translateBatch(['x'],{...config,provider:'microsoft',microsoftKey:'secret'},async()=>({ok:false,status:429})),e=>e.status===429 && !e.message.includes('secret'));
 });
 test('sanitize settings and block nested sensitive hosts',()=>{
-  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'cloud');
+  assert.equal(normalizeSettings({standardProvider:'other',autoAI:true}).standardProvider,'google-free');
   assert.equal(normalizeSettings({autoAI:true}).autoAI,false);
   assert.equal(hostIsBlocked('payments.example.com','example.com'),true);
   assert.equal(hostIsBlocked('notexample.com','example.com'),false);
@@ -76,7 +82,7 @@ test('Corrupted settings reset safely without enabling AI',()=>{
   for(const input of [null,42,'broken',[]]){
     const settings=normalizeSettings(input);
     assert.equal(settings.autoAI,false);
-    assert.equal(settings.standardProvider,'cloud');
+    assert.equal(settings.standardProvider,'google-free');
     assert.equal(settings.target,'zh');
   }
 });
@@ -118,7 +124,7 @@ test('immersive reading settings keep validated controls and never opt in to AI'
    inputTarget:'unknown'
  });
  assert.equal(invalid.webDisplay,'bilingual');
- assert.equal(invalid.webScope,'smart');
+ assert.equal(invalid.webScope,'full');
  assert.equal(invalid.translationTheme,'subtle');
  assert.equal(invalid.inputTarget,'en');
 });
@@ -162,15 +168,55 @@ test('portable preference import is allowlisted and version checked',()=>{
  assert.equal(restored.target,'ko');
  assert.equal(restored.cloudToken,'keep-secret');
  assert.deepEqual(restored.aiProfiles,[]);
- assert.equal(restored.standardProvider,'cloud');
+ assert.equal(restored.standardProvider,'google-free');
 });
 
 test('site auto-translate only activates with a configured standard MT engine',()=>{
- assert.equal(isStandardServiceConfigured({}),false);
+ assert.equal(isStandardServiceConfigured({}),true);
  assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'123'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'http://pit.example',cloudToken:'long-fake-token-12345'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'cloud',cloudEndpoint:'https://pit.example',cloudToken:'long-fake-token-12345'}),true);
  assert.equal(isStandardServiceConfigured({standardProvider:'google',googleKey:'abcdef'}),true);
  assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'http://localhost:5000'}),false);
  assert.equal(isStandardServiceConfigured({standardProvider:'libre',libreUrl:'https://mt.example'}),true);
+});
+// Product probes must use the real adapter boundary without changing defaults.
+test('V2 independent probes distinguish missing credentials, consent and unchanged output',async()=>{
+ const {probeProvider}=await import('../src/lib/provider-catalog.js');
+ const {normalizeSettings}=await import('../src/lib/settings.js');
+ const s=normalizeSettings({standardProvider:'browser',googleKey:'private-fixture'});
+ let calls=[];
+ const run=async(texts,opts)=>{calls.push(opts.provider);return ['欢迎来到课堂。'];};
+ assert.equal((await probeProvider(s,{providerId:'microsoft'},run)).status,'not-configured');
+ assert.equal((await probeProvider(s,{providerId:'google'},run)).status,'confirmation-required');
+ assert.deepEqual(calls,[]);
+ assert.equal((await probeProvider(s,{providerId:'google',costConfirmed:true},run)).confirmedLive,true);
+ assert.equal((await probeProvider(s,{providerId:'mymemory'},run)).ok,true);
+ assert.deepEqual(calls,['google','mymemory']);assert.equal(s.standardProvider,'browser');
+ const invalid=await probeProvider(s,{providerId:'browser'},async t=>t);
+ assert.equal(invalid.status,'invalid-response');assert.equal(invalid.confirmedLive,false);
+ const quota=await probeProvider(s,{providerId:'mymemory'},async()=>{throw Object.assign(Error('quota'),{status:429});});
+ assert.equal(quota.status,'rate-limited');
+});
+test('V2 migration preserves keys and caps settings; vault authenticates account and password',async()=>{
+ const {normalizeSettings,portablePreferences}=await import('../src/lib/settings.js');
+ const {deriveVault,encryptVault,decryptVault,secretPayload}=await import('../src/lib/vault.js');
+ const s=normalizeSettings({googleKey:'secret-a',cloudToken:'secret-b',aiProfiles:[{id:'test',apiKey:'secret-c'}],minSegmentCharacters:1000,videoSettings:{enabled:false,aiSentenceSegmentation:true},providerPreferences:{google:{visible:false,enabled:true,key:'should-not-copy'}}});
+ assert.equal(s.googleKey,'secret-a');assert.equal(s.minSegmentCharacters,100);assert.equal(s.videoSettings.enabled,false);assert.equal(s.videoSettings.aiSentenceSegmentation,false);
+ assert.equal(s.providerPreferences.google.enabled,true);assert.equal(s.providerPreferences.google.visible,false);
+ assert.doesNotMatch(JSON.stringify(portablePreferences(s)),/secret-[abc]|should-not-copy/);
+ const {key,salt}=await deriveVault('test-only-long-vault-password');
+ const one=await encryptVault(s,key,salt,'account-A'),two=await encryptVault(s,key,salt,'account-A');
+ assert.notEqual(one.nonce,two.nonce);assert.doesNotMatch(JSON.stringify(one),/secret-[abc]/);
+ assert.deepEqual(await decryptVault(one,key,'account-A'),secretPayload(s));
+ await assert.rejects(decryptVault(one,key,'account-B'),/密码|密文/);
+ const wrong=await deriveVault('incorrect-long-password',salt);
+ await assert.rejects(decryptVault(one,wrong.key,'account-A'),/密码|密文/);
+});
+
+test('blank returned vendor text is never accepted as successfully translated content',async()=>{
+ const bad=async()=>({ok:true,status:200,json:async()=>({translations:[{text:'   '}]})});
+ await assert.rejects(translateBatch(['Hello'],{
+  provider:'deepl',source:'en',target:'zh',deeplKey:'key',deeplPlan:'free'
+ },bad),/响应格式无效/);
 });

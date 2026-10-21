@@ -21,7 +21,13 @@ async def main():
           onMessage:{addListener:cb=>window.callbacks.push(cb)},
           sendMessage:async msg=>{
             window.requests.push(msg);
-            await new Promise(r=>setTimeout(r,msg.texts?.[0]==='Slow previous session'?2200:600));
+            if(msg.texts?.[0]==='Old AI pending caption'){
+              window.oldAIEntered=true;
+              await new Promise(resolve=>{window.releaseOldAI=resolve;});
+              window.oldAICompleted=true;
+            }else{
+              await new Promise(r=>setTimeout(r,msg.texts?.[0]==='Slow previous session'?2200:600));
+            }
             return {ok:true,translations:msg.texts.map(t=>'译文:'+t)};
           }
         }};
@@ -55,6 +61,28 @@ async def main():
       await page.locator(".pit-caption-translated").get_by_text("译文:Final sentence").wait_for(timeout=5000)
       footer=await page.locator(".pit-live-meta").inner_text()
       assert "p95" in footer and "丢弃 4" in footer and "识别错误 1" in footer,footer
+      # A short ASR fragment cannot reliably be distinguished as French by
+      # CLD. The spoken-language metadata supplied by Whisper must reach MT.
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        text:'Bonjour',language:'fr',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Bonjour").wait_for(timeout=5000)
+      assert await page.evaluate("""()=>
+        window.requests.at(-1).captionSourceLanguage==='fr'
+      """),"Whisper spoken-language tag was not sent to transient MT"
+      label=await page.locator('.pit-live-meta').inner_text()
+      assert '识别语种 fr' in label,label
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        text:'Unknown text',language:'xx',capturedAt:Date.now(),segmentMs:3000
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Unknown text").wait_for(timeout=5000)
+      assert await page.evaluate("""()=>
+        window.requests.at(-1).captionSourceLanguage===''
+      """),"unsupported spoken-language claims must be discarded"
       # Old response must never hold the new session's translation queue.
       await page.evaluate("""()=>window.simulate({
         type:'PIT_ASR_TEXT_VIEW',sessionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -115,6 +143,41 @@ async def main():
       await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_c)
       assert await page.locator(".pit-asr-overlay").count()==0
       print("PASS: opt-in live Whisper AI receives bounded historical subtitle context")
+
+      # Old AI translations can resolve after STOP and a new START. Their
+      # source text must never enter the new AI session's dialogue history.
+      # Use a controllable promise, not arbitrary timeout guesses.
+      sid_old="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+      sid_new="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_START',sessionId:sid,mode:'ai'})",sid_old)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        text:'Old AI pending caption',capturedAt:Date.now(),segmentMs:2500
+      })""")
+      await page.wait_for_function("()=>window.oldAIEntered===true",timeout=4000)
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_old)
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_START',sessionId:sid,mode:'ai'})",sid_new)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        text:'Clean context begins',capturedAt:Date.now(),segmentMs:2500
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Clean context begins").wait_for(timeout=5000)
+      await page.evaluate("()=>window.releaseOldAI()")
+      await page.wait_for_function("()=>window.oldAICompleted===true",timeout=2000)
+      await page.evaluate("""()=>window.simulate({
+        type:'PIT_ASR_TEXT_VIEW',sessionId:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        text:'Clean context continues',capturedAt:Date.now(),segmentMs:2500
+      })""")
+      await page.locator(".pit-caption-translated").get_by_text(
+        "译文:Clean context continues").wait_for(timeout=5000)
+      history=await page.evaluate("""()=>window.requests.find(r=>
+        r.mode==='ai'&&r.sessionId==='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' &&
+        r.texts?.[0]==='Clean context continues')?.context""")
+      assert 'Clean context begins' in history and 'Old AI pending caption' not in history,history
+      await page.evaluate("(sid)=>window.simulate({type:'PIT_ASR_VIEW_STOP',sessionId:sid})",sid_new)
+      assert not errors,errors
+      print("PASS: old Whisper AI response cannot pollute a newly started dialogue")
 
       print("PASS: unexpected track-end notification without stale recording overlay")
       assert not errors,errors

@@ -76,6 +76,32 @@ async def run():
         print("PASS",provider,"visible captions, update, hidden state, stop, bounded calls")
         await page.close()
 
+      # Paid AI calls are never automatically repeated after provider
+      # refusal. Standard MT retains bounded manual/automatic recovery.
+      ai_failed=await browser.new_page()
+      await setup(ai_failed,"https://www.youtube.com/watch?v=ai-failure",
+        '<video style="width:640px;height:360px"></video>'
+        '<div class="ytp-caption-window-container">'
+        '<span class="ytp-caption-segment">AI provider is down</span></div>')
+      await ai_failed.evaluate("""()=>{
+        window.pitRequests=[];
+        chrome.runtime.sendMessage=async msg=>{
+          window.pitRequests.push(msg);
+          throw Error('AI quota exceeded');
+        };
+      }""")
+      ai_start=await ai_failed.evaluate(
+        "()=>window.pitAction('PIT_CAPTIONS_START',[],'ai')")
+      assert ai_start['ok'],ai_start
+      await ai_failed.locator('.pit-caption-translated').get_by_text(
+        '已停止自动重试',exact=False).wait_for(timeout=5000)
+      await ai_failed.wait_for_timeout(1400)
+      assert await ai_failed.evaluate('window.pitRequests.length')==1, (
+        'A failed opt-in AI caption provider must not re-bill automatically')
+      await ai_failed.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await ai_failed.locator('.pit-caption-overlay').count()==0
+      await ai_failed.close()
+
       # If PIT activates a disabled native subtitle TextTrack, the original
       # is otherwise invisible. The original and translation must both appear
       # in the overlay without introducing an additional original DOM copy
@@ -99,6 +125,100 @@ async def run():
       assert await bilingual.locator('.pit-caption-overlay').count()==0
       await bilingual.close()
       print('PASS bilingual native text-track original and translated overlay')
+
+      # Previously hidden caption tracks are read via hidden mode. In
+      # replacement mode they should become visible only AFTER translated
+      # cues are ready, then return to their pre-PIT visibility.
+      hidden_inline=await browser.new_page()
+      await setup(hidden_inline,"https://www.youtube.com/watch?v=hidden-inline",
+        '<video style="width:640px;height:360px"></video>')
+      await hidden_inline.evaluate("""()=>{
+        const track=document.querySelector('video').addTextTrack('subtitles','English','en');
+        track.mode='hidden';
+        track.addCue(new VTTCue(0,12,'Initially hidden caption'));
+        window.hiddenTrack=track;
+        const send=chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage=async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+          ?{preferences:{videoSettings:{enabled:true,
+            subtitleRenderMode:'replace-track',
+            preferPitTranslationOverPlatformMT:true}}}:send(msg);
+        window.pitAction('PIT_PREFERENCES_CHANGED');
+      }""")
+      await hidden_inline.wait_for_timeout(150)
+      reply=await hidden_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert reply['ok'],reply
+      await hidden_inline.wait_for_function("""()=>window.hiddenTrack.mode==='showing'
+        && window.hiddenTrack.cues[0].text==='译文:Initially hidden caption'""",
+        timeout=6000)
+      assert await hidden_inline.locator('.pit-caption-overlay').evaluate(
+        "e=>e.style.display")=='none'
+      await hidden_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await hidden_inline.evaluate("window.hiddenTrack.mode")=='hidden'
+      assert await hidden_inline.evaluate(
+        "window.hiddenTrack.cues[0].text")=='Initially hidden caption'
+      await hidden_inline.close()
+      print('PASS initially hidden native TextTrack swaps in-place and restores visibility')
+
+      # Native WebVTT replacement edits the actual browser-rendered cue,
+      # not a floating page caption, and restores it on STOP.
+      native_inline=await browser.new_page()
+      await setup(native_inline,"https://www.youtube.com/watch?v=inline-native",
+        '<video style="width:640px;height:360px"></video>')
+      await native_inline.evaluate("""()=>{
+        const video=document.querySelector('video');
+        const track=video.addTextTrack('subtitles','English','en');
+        track.mode='showing';
+        track.addCue(new VTTCue(0,12,'Editable original cue'));
+        window.inlineTrack=track;
+        const send=chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage=async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+          ?{preferences:{videoSettings:{enabled:true,
+            subtitleRenderMode:'replace-track',
+            preferPitTranslationOverPlatformMT:true}}}:send(msg);
+        window.pitAction('PIT_PREFERENCES_CHANGED');
+      }""")
+      await native_inline.wait_for_timeout(150)
+      reply=await native_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert reply['ok'],reply
+      await native_inline.wait_for_function("""()=>window.inlineTrack.cues[0].text==='译文:Editable original cue'""",
+        timeout=6000)
+      assert await native_inline.locator('.pit-caption-overlay').evaluate(
+        "e=>e.style.display")=='none'
+      await native_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await native_inline.evaluate(
+        "()=>window.inlineTrack.cues[0].text")=='Editable original cue'
+      assert await native_inline.locator('.pit-caption-overlay').count()==0
+      await native_inline.close()
+      print("PASS native TextTrack cue translated in player and reversed on stop")
+
+      # For public one-node visible CC, optional in-place replacement also
+      # avoids modifying playback transport or scraping private APIs.
+      dom_inline=await browser.new_page()
+      await setup(dom_inline,"https://www.youtube.com/watch?v=inline-dom",
+        '<video style="width:640px;height:360px"></video>'
+        '<div class="ytp-caption-window-container">'
+        '<span class="ytp-caption-segment">Editable visible CC</span></div>')
+      await dom_inline.evaluate("""()=>{
+        const send=chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage=async msg=>msg.type==='PIT_PUBLIC_PREFERENCES'
+          ?{preferences:{videoSettings:{enabled:true,
+            subtitleRenderMode:'replace-track',
+            preferPitTranslationOverPlatformMT:true}}}:send(msg);
+        window.pitAction('PIT_PREFERENCES_CHANGED');
+      }""")
+      await dom_inline.wait_for_timeout(150)
+      reply=await dom_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert reply['ok'],reply
+      await dom_inline.locator('.ytp-caption-segment').get_by_text(
+        '译文:Editable visible CC').wait_for(timeout=6000)
+      await dom_inline.locator('.ytp-caption-segment').evaluate(
+        "e=>e.textContent='Another live CC'")
+      await dom_inline.locator('.ytp-caption-segment').get_by_text(
+        '译文:Another live CC').wait_for(timeout=6000)
+      await dom_inline.evaluate("()=>window.pitAction('PIT_CAPTIONS_STOP')")
+      assert await dom_inline.locator('.ytp-caption-segment').inner_text()=='Another live CC'
+      await dom_inline.close()
+      print("PASS visible CC replaced inline without translating our own output; original restored")
 
       # AI captions must actually supply bounded cross-sentence
       # context; v0.4.4 had hardcoded context:'' even with AI enabled.
@@ -244,6 +364,45 @@ async def run():
       await recycled.locator('.pit-caption-overlay').wait_for(state="detached",timeout=2000)
       print("PASS detached media element stops subtitles without leaking old overlay")
       await recycled.close()
+
+      # Sites pre-create hidden advertisements before the visible lecture
+      # player; a bigger hidden <video> must not steal caption selection.
+      # They may also arm the actual video before assigning any media src.
+      late_media=await browser.new_page()
+      await setup(late_media,"https://www.youtube.com/watch?v=late-src-fixture",
+        '<video id="hidden-ad" style="width:1280px;height:720px;display:none"></video>'
+        '<video id="lecture" style="width:640px;height:360px"></video>')
+      await late_media.evaluate("""()=>{
+        const lecture=document.querySelector('#lecture');
+        const tr=lecture.addTextTrack('subtitles','English','en');
+        tr.mode='showing';tr.addCue(new VTTCue(0,15,'Visible lesson caption'));
+        const ad=document.querySelector('#hidden-ad');
+        const adTrack=ad.addTextTrack('subtitles','Ad','en');
+        adTrack.mode='showing';adTrack.addCue(new VTTCue(0,15,'Wrong ad caption'));
+      }""")
+      started=await late_media.evaluate("()=>window.pitAction('PIT_CAPTIONS_START')")
+      assert started['ok'],started
+      await late_media.locator('.pit-caption-translated').get_by_text(
+        '译文:Visible lesson caption').wait_for(timeout=6000)
+      assert not await late_media.locator('.pit-caption-overlay').get_by_text(
+        'Wrong ad caption').count()
+      await late_media.evaluate("""()=>{
+        document.querySelector('#lecture').src=
+          'https://media.example.org/videos/lecture-1.mp4';
+      }""")
+      await late_media.wait_for_timeout(700)
+      assert await late_media.locator('.pit-caption-overlay').count()==1, (
+        'the first delayed media URL must not terminate translation')
+      await late_media.evaluate("""()=>{
+        document.querySelector('#lecture').src=
+          'https://media.example.org/videos/lecture-2.mp4';
+      }""")
+      await late_media.locator('.pit-caption-overlay').wait_for(
+        state="detached",timeout=2300)
+      assert not await late_media.evaluate("""()=>window.pitRequests.some(
+        r=>r.texts?.includes('Wrong ad caption'))""")
+      print("PASS visible player priority and late source binding stop cross-video reuse")
+      await late_media.close()
 
       # Even if an SPA keeps the original video element, a new recording URL
       # must not inherit a previous caption translation session.

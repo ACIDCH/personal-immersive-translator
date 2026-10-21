@@ -11,6 +11,17 @@ function request(path,method='GET',body=null,token=secret){
    method,headers,...(body!==null?{body:JSON.stringify(body)}:{})
  });
 }
+function pcmWav(sampleCount=16000){
+ const wav=new Uint8Array(44+sampleCount*2),data=new DataView(wav.buffer);
+ const ascii=(at,text)=>{for(let i=0;i<text.length;i++)wav[at+i]=text.charCodeAt(i);};
+ ascii(0,'RIFF');data.setUint32(4,wav.length-8,true);ascii(8,'WAVE');
+ ascii(12,'fmt ');data.setUint32(16,16,true);
+ data.setUint16(20,1,true);data.setUint16(22,1,true);
+ data.setUint32(24,16000,true);data.setUint32(28,32000,true);
+ data.setUint16(32,2,true);data.setUint16(34,16,true);
+ ascii(36,'data');data.setUint32(40,sampleCount*2,true);
+ return wav;
+}
 let calls=[];
 const env={PIT_ACCESS_TOKEN:secret,AI:{async run(name,params){
  calls.push({name,params});
@@ -66,11 +77,11 @@ test('rejects unsupported language, oversize batch and malformed model output',a
 });
 
 test('hosted Whisper uses real Workers AI binding with actual PCM WAV bytes',async()=>{
- const wav=new Uint8Array(32044);
- wav.set([82,73,70,70],0);wav.set([87,65,86,69],8);
+ const wav=pcmWav();
  const calls=[];
  const config={PIT_ACCESS_TOKEN:secret,AI:{run:async(name,params)=>{
-  calls.push({name,params});return {text:'This is a transcribed lecture'};
+  calls.push({name,params});return {text:'Bonjour, bienvenue au cours',
+   transcription_info:{language:'fr',language_probability:0.97}};
  }}};
  const req=new Request('https://demo.workers.dev/v1/asr',{
   method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'audio/wav'},
@@ -78,7 +89,10 @@ test('hosted Whisper uses real Workers AI binding with actual PCM WAV bytes',asy
  });
  const response=await api.fetch(req,config);
  assert.equal(response.status,200);
- assert.equal((await response.json()).text,'This is a transcribed lecture');
+ const transcript=await response.json();
+ assert.equal(transcript.text,'Bonjour, bienvenue au cours');
+ assert.equal(transcript.language,'fr');
+ assert.equal(transcript.languageConfidence,0.97);
  assert.equal(calls[0].name,'@cf/openai/whisper-large-v3-turbo');
  assert.equal(calls[0].params.task,'transcribe');
  assert.equal(typeof calls[0].params.audio,'string');
@@ -102,6 +116,57 @@ test('hosted Whisper rejects oversized and invalid audio without inference',asyn
  assert.equal(calls,0);
 });
 
+test('Workers ASR validates actual PCM structure before invoking a model',async()=>{
+ const {validAsrWav}=await import('../src/index.mjs');
+ let count=0;
+ const bound={PIT_ACCESS_TOKEN:secret,AI:{run:async()=>{count++;return {text:'bad'};}}};
+ const fromBytes=async(wav)=>api.fetch(new Request('https://demo.workers.dev/v1/asr',{
+  method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'audio/wav'},
+  body:wav
+ }),bound);
+ const valid=pcmWav();
+ assert.equal(validAsrWav(valid),true);
+ const changes=[
+  wav=>{new DataView(wav.buffer).setUint32(24,48000,true);},
+  wav=>{new DataView(wav.buffer).setUint16(22,2,true);},
+  wav=>{new DataView(wav.buffer).setUint32(40,8,true);},
+  wav=>{new DataView(wav.buffer).setUint32(4,40,true);},
+  wav=>{wav[36]=88;},
+  wav=>{new DataView(wav.buffer).setUint16(34,8,true);}
+ ];
+ for(const change of changes){
+  const wav=valid.slice();change(wav);
+  assert.equal(validAsrWav(wav),false);
+  assert.equal((await fromBytes(wav)).status,400);
+ }
+ assert.equal(count,0,'malformed WAV never consumes Workers AI inference');
+});
+test('Whisper omits unsupported and low-confidence source languages',async()=>{
+ const wav=pcmWav(1600);
+ const wire=()=>new Request('https://demo.workers.dev/v1/asr',{
+  method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'audio/wav'},
+  body:wav
+ });
+ for(const info of [
+  {language:'fr',language_probability:0.32},
+  {language:'ru',language_probability:0.99},
+  {language:'en',language_probability:NaN}
+ ]){
+  const bound={PIT_ACCESS_TOKEN:secret,AI:{run:async()=>({
+   text:'Bonjour',transcription_info:info
+  })}};
+  const response=await api.fetch(wire(),bound);
+  assert.equal(response.status,200);
+  const body=await response.json();
+  assert.equal(body.language,null);
+  assert.equal(body.languageConfidence,null);
+ }
+ const bound={PIT_ACCESS_TOKEN:secret,AI:{run:async()=>({
+   text:'短句',transcription_info:{language:'zh-CN',language_probability:0.96}
+ })}};
+ const response=await api.fetch(wire(),bound);
+ assert.equal((await response.json()).language,'zh');
+});
 test('real extension cross-origin CORS preflight permits bearer and JSON',async()=>{
  const preflight=await api.fetch(new Request('https://demo.workers.dev/v1/translate',{
   method:'OPTIONS',

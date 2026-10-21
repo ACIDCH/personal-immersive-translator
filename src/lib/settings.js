@@ -1,10 +1,16 @@
+import {PRODUCT_DEFAULTS,normalizeProduct} from './product-settings.js';
 export const SETTINGS_KEY = 'pit_settings_v1';
 export const DEFAULT_SETTINGS = Object.freeze({
+  ...PRODUCT_DEFAULTS,
   target: 'zh',
   source: 'auto',
-  standardProvider: 'cloud',
+  // Free remote MT is functional on fresh installs without a local model.
+  // Chrome native remains selectable for offline/privacy-conscious users.
+  standardProvider: 'google-free',
   cloudEndpoint: '',
   cloudToken: '',
+  cloudAsrEndpoint: '',
+  cloudAsrToken: '',
   cloudPdfEndpoint: '',
   cloudPdfToken: '',
   aiProvider: 'gemini',
@@ -26,7 +32,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   glossary: '',
   blockedHosts: '',
   webDisplay: 'bilingual',
-  webScope: 'smart',
+  webScope: 'full',
   hoverTranslate: false,
   floatingControl: false,
   inputTranslate: false,
@@ -34,7 +40,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autoTranslateHosts: '',
   translationTheme: 'subtle'
 });
-export const STANDARD_PROVIDERS = ['cloud', 'microsoft', 'google', 'deepl', 'libre'];
+export const STANDARD_PROVIDERS = ['google-free', 'browser', 'mymemory', 'cloud', 'microsoft', 'google', 'deepl', 'libre'];
 export const AI_PROVIDERS = ['gemini', 'deepseek', 'custom'];
 export const LANGUAGES = ['zh', 'en', 'fr', 'ja', 'ko', 'de', 'es'];
 
@@ -48,12 +54,12 @@ export function normalizeSettings(value = {}) {
   }
   if (!LANGUAGES.includes(clean.target)) clean.target = 'zh';
   if (!['auto', ...LANGUAGES].includes(clean.source)) clean.source = 'auto';
-  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'cloud';
+  if (!STANDARD_PROVIDERS.includes(clean.standardProvider)) clean.standardProvider = 'google-free';
   if (!AI_PROVIDERS.includes(clean.aiProvider)) clean.aiProvider = 'gemini';
   clean.aiProfiles = Array.isArray(clean.aiProfiles) ? clean.aiProfiles.slice(0,20) : [];
   clean.activeAIProfileId = typeof clean.activeAIProfileId==='string' ? clean.activeAIProfileId : '';
   if (!['bilingual','translation-only'].includes(clean.webDisplay)) clean.webDisplay='bilingual';
-  if (!['smart','full'].includes(clean.webScope)) clean.webScope='smart';
+  if (!['smart','full'].includes(clean.webScope)) clean.webScope='full';
   if (!['subtle','underline','highlight'].includes(clean.translationTheme)) clean.translationTheme='subtle';
   if (!LANGUAGES.includes(clean.inputTarget)) clean.inputTarget='en';
   clean.hoverTranslate=Boolean(clean.hoverTranslate);
@@ -62,7 +68,7 @@ export function normalizeSettings(value = {}) {
   clean.autoTranslateHosts=typeof clean.autoTranslateHosts==='string'?clean.autoTranslateHosts.slice(0,4000):'';
   clean.autoAI = false;
   clean.contextAI = Boolean(clean.contextAI);
-  return clean;
+  return normalizeProduct(clean);
 }
 export function hostIsBlocked(hostname, blockedHosts = '') {
   const host = String(hostname ?? '').toLowerCase();
@@ -77,6 +83,7 @@ export function hostIsBlocked(hostname, blockedHosts = '') {
  * Import only enumerated preferences and require a normal Save action.
  */
 export const PORTABLE_PREF_KEYS=Object.freeze([
+ ...Object.keys(PRODUCT_DEFAULTS).filter(k=>!['customExperts','installedExperts','activeExpertId'].includes(k)),
  'target','source','standardProvider','aiProvider','contextAI',
  'webDisplay','webScope','translationTheme','hoverTranslate','inputTranslate',
  'floatingControl','inputTarget','autoTranslateHosts','blockedHosts','glossary'
@@ -102,6 +109,9 @@ export function applyPortablePreferences(current,data){
 export function isStandardServiceConfigured(value){
  const s=normalizeSettings(value);
  switch(s.standardProvider){
+ case 'google-free':return true; // Public external endpoint; live probe is authoritative.
+ case 'browser':return true; // Free on-device Chrome API; pack readiness is checked at runtime.
+ case 'mymemory':return true; // Owner explicitly opts in to public MT.
  case 'cloud':
   try{
    const u=new URL(s.cloudEndpoint);

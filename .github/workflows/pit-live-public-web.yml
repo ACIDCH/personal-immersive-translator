@@ -1,0 +1,58 @@
+name: P0 real public webpage translation (non-gating observation)
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/pit_live_public_web_e2e.py'
+      - '.github/workflows/pit-live-public-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pit-live-public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-public-site-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build installed WXT translation runtime
+        working-directory: apps
+        run: |
+          npm install --no-audit --no-fund
+          npm run build --workspace wxt-ui
+          node wxt-ui/scripts/check-native-bundle.mjs
+      - name: Install Chromium with extension support
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Live Philips/IANA page and real Google public MT acceptance
+        id: live
+        continue-on-error: true
+        run: python benchmarks/pit_live_public_web_e2e.py
+      - name: Publish precise non-gating outcome
+        if: always()
+        run: |
+          if test -f pit-live-public-web-report.json; then
+            python -c "import json; j=json.load(open('pit-live-public-web-report.json')); print('ACTUAL PUBLIC WEB AND MT:',j['status']); open(__import__('os').environ['GITHUB_STEP_SUMMARY'],'a').write('## PIT actual public web + Google free MT\\n\\n'+j['status']+' — NON-GATING L2 observation; real Windows L3 remains pending.\\n')"
+          else
+            echo 'Actual public web test did not produce an observation. No PASS established.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Archive site-independent measurements (no page content)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pit-real-public-web-verdict
+          path: pit-live-public-web-report.json
+          if-no-files-found: ignore
+          retention-days: 10

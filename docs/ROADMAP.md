@@ -1,5 +1,7 @@
 # Roadmap
 
+> **历史版本材料（2026-10-16）**：保留当时的设计、术语和验收结论，用于追溯；此处的默认引擎、版本号及“已实现/计划”标签已不代表当前 PIT 0.4.6。现行模块状态、统一入口和真实验收依据请阅读 [2026-10-21 内容体系审计](CONTENT_SYSTEM_AUDIT_2026-10-21.md)。
+
 | Step | Module | State | Acceptance |
 | --- | --- | --- | --- |
 | M0 | Independent GitHub, Supabase, YUNPAN | Done | Three dedicated resources; no existing site repository changes |

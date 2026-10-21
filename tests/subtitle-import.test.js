@@ -17,3 +17,13 @@ test('parses WEBVTT with cue IDs',()=>{
 test('rejects maliciously large subtitle content',()=>{
  assert.throws(()=>parseSubtitles('a'.repeat(2000001)),/2MB/);
 });
+
+test('ASS file extracts visible dialogue using declared field order and keeps commas',()=>{
+ const ass='[Script Info]\nTitle: Personal fixture\n\n[Events]\n'+
+  'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'+
+  'Dialogue: 0,0:00:01.25,0:00:03.50,Default,,0,0,0,,{\\i1}Bonjour, world\\Nnext line\n'+
+  'Comment: 0,0:00:03.60,0:00:04.00,Default,,0,0,0,,Do not translate\n';
+ assert.deepEqual(parseSubtitles(ass),[
+   {startTime:1.25,endTime:3.5,text:'Bonjour, world next line'}
+ ]);
+});

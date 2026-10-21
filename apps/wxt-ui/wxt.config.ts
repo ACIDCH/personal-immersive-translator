@@ -9,15 +9,16 @@ export default defineConfig({
   // WXT auto-imports prevents an erroneous wxt/utils/storage import.
   imports:false,
   manifest:{
-    name:'多模态翻译 — 核心集成测试版',
-    short_name:'多模态翻译',
-    description:'Bilingual web translation, visible captions, local OCR, Office translation and optional local PDF/ASR services.',
+    name:'PIT · 沉浸式翻译',
+    short_name:'PIT 翻译',
+    description:'Personal Immersive Translator (PIT): bilingual webpages, in-player subtitles, file and image translation.',
     minimum_chrome_version:'125',
+    version:'0.4.6',
     // MV3 permits packaged WASM evaluation, not remote executable code.
     content_security_policy:{
       extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     },
-    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture','contextMenus'],
+    permissions:['activeTab','scripting','storage','tabs','webNavigation','offscreen','tabCapture','contextMenus','identity','alarms'],
     // A translator must work on arbitrary normal sites, not just API
     // provider domains. One install-time permission avoids per-site prompts.
     // Browser internal pages remain restricted.
@@ -31,7 +32,7 @@ export default defineConfig({
       // It only reads the safe, non-credential preference subset.
       manifest.content_scripts=[{
         matches:['https://*/*','http://*/*'],
-        js:['pit-native.js'],css:['pit-native.css'],run_at:'document_idle'
+        js:['pit-native.js','pit-caption-core.js','pit-platform-captions.js','pit-subtitles.js'],css:['pit-native.css'],run_at:'document_idle'
       }];
       manifest.commands={
         'pit-toggle-translation':{

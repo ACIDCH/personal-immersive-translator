@@ -1,5 +1,23 @@
-.pit-translation { display:block !important; font: inherit !important; font-size:.94em !important; line-height:1.6 !important; opacity:.9; color:#1965a8 !important; padding:6px 10px !important; margin:5px 0 12px !important; border-left:3px solid #3a88ce !important; background:rgba(65,125,190,.07) !important; white-space:pre-wrap !important; text-align:left !important; overflow-wrap:anywhere !important; }
-.pit-translation.pit-ai { color:#8156b2 !important; border-color:#a475da !important; background:rgba(125,80,185,.07) !important; }
+/* Default immersive rendering should track the site's text width, not
+   draw full-width blue callouts across responsive landing page layouts. */
+.pit-translation { display:block !important; box-sizing:border-box !important; max-width:100% !important;
+ font:inherit !important; font-size:.94em !important; line-height:1.45 !important;
+ opacity:.92; color:inherit !important; padding:0 !important;
+ margin:.28em 0 .58em !important; border:0 !important; background:transparent !important;
+ white-space:pre-wrap !important; text-align:inherit !important; overflow-wrap:break-word !important; }
+.pit-translation.pit-ai { color:inherit !important; border:0 !important; background:transparent !important; }
+.pit-translation.pit-flow-translation {display:block !important;box-sizing:border-box !important;
+ font-size:.78em !important;line-height:1.35 !important;font-weight:400 !important;
+ letter-spacing:normal !important;max-width:100% !important;white-space:normal !important;
+ margin:.14em 0 0 !important;padding:0 !important;border:0 !important;
+ background:transparent !important;color:inherit !important;text-align:inherit !important;}
+/* Keeping the translated span inside headings preserves CSS grid/flex width.
+   Translation-only mode hides the source glyphs, not the heading container. */
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"]){display:block !important;font-size:0 !important;}
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])>.pit-flow-translation{
+ display:block !important;font-size:clamp(18px,2vw,30px) !important;}
+/* AI and standard MT share the unboxed reading layout; owners can opt into the
+   separate [data-theme="highlight"] decoration explicitly. */
 .pit-toast { position:fixed !important; bottom:24px !important; right:24px !important; z-index:2147483647 !important; max-width:380px !important; border-radius:9px !important; background:#1c283b !important; color:white !important; padding:10px 15px !important; font:14px/1.5 system-ui,sans-serif !important; box-shadow:0 6px 22px rgba(0,0,0,.22) !important; }
 
 .pit-caption-overlay { position:fixed !important; left:50% !important; transform:translateX(-50%) !important; bottom:12% !important; z-index:2147483646 !important; width:min(85vw,1100px) !important; pointer-events:none !important; text-align:center !important; box-sizing:border-box !important; }
@@ -78,3 +96,50 @@
 }
 .pit-selection-card button:focus-visible{outline:2px solid #f4c556 !important}
 @media print {.pit-selection-card{display:none !important}}
+/* V2 waiting feedback is scoped to PIT-owned attributes. */
+[data-pit-loading]::after{content:' · 翻译中…';font:12px system-ui;color:#5183a5}
+[data-pit-loading=spinner]::after{content:' ◌';display:inline-block;animation:pit-wait 1s linear infinite}
+@keyframes pit-wait{to{transform:rotate(360deg)}}
+.pit-player-toggle{position:fixed;z-index:2147483646;border:1px solid #7bb7c4;border-radius:9px;background:#152a3eee;color:#e6f5fa;padding:7px 12px;font:13px system-ui;cursor:pointer}
+@media(prefers-reduced-motion:reduce){[data-pit-loading]::after{animation:none!important}}
+
+/* Outrank the generic translate-only hide rule for headings whose translated
+   line now lives inside the same semantic h1–h6. Nested publisher spans are
+   hidden while PIT's translated span stays readable. */
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"]):not(li):not(td):not(th){
+ display:block !important;font-size:0 !important;
+}
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])> :not(.pit-flow-translation){
+ display:none !important;
+}
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])>.pit-flow-translation{
+ display:block !important;font-size:clamp(18px,2vw,30px) !important;
+}
+
+/* In-paragraph translation stays inside the original grid/flex item, including
+   translation-only mode where the source is visually collapsed, not removed. */
+.pit-original-concealed:is(p,blockquote,figcaption,[role="paragraph"]):not(li):not(td):not(th){
+ display:block !important;font-size:0 !important;
+}
+.pit-original-concealed:is(p,blockquote,figcaption,[role="paragraph"])> :not(.pit-translation){
+ display:none !important;
+}
+.pit-original-concealed:is(p,blockquote,figcaption,[role="paragraph"])>.pit-translation{
+ display:block !important;visibility:visible !important;
+}
+/* Explicit full-page reading translates controls as inline bilingual labels;
+   the host control keeps its original DOM identity and event handlers. */
+.pit-translation.pit-inline-translation{
+ display:inline !important;box-sizing:border-box !important;width:auto !important;
+ min-width:0 !important;max-width:100% !important;white-space:normal !important;
+ background:transparent !important;border:0 !important;
+ padding:0 !important;margin:0 0 0 .4ch !important;
+ font-size:.9em !important;line-height:inherit !important;font-weight:400 !important;
+ color:inherit !important;opacity:.85;
+}
+.pit-original-concealed:is(a,button,[role="button"]):not(li):not(td):not(th){
+ display:inline !important;font-size:0 !important;
+}
+.pit-original-concealed:is(a,button,[role="button"])>.pit-inline-translation{
+ display:inline !important;font-size:14px !important;
+}

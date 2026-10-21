@@ -1,0 +1,165 @@
+"""Installed Chromium MV3 PDF cloud preflight contract, using mocked HTTPS
+container transport. It does NOT claim a deployed BabelDOC quality pass.
+"""
+import asyncio
+import tempfile
+from pathlib import Path
+from playwright.async_api import async_playwright
+from wxt_video_image_pdf_e2e import pdf_fixture
+
+PACKAGE=Path(__file__).resolve().parents[1]/'apps/wxt-ui/.output/chrome-mv3'
+
+async def main():
+    assert (PACKAGE/'manifest.json').exists(), 'Build WXT before PDF test'
+    with tempfile.TemporaryDirectory(prefix='pit-cloud-pdf-preflight-') as profile:
+        async with async_playwright() as p:
+            ctx=await p.chromium.launch_persistent_context(
+                profile,channel='chromium',headless=True,accept_downloads=True,
+                args=[f'--disable-extensions-except={PACKAGE}',
+                      f'--load-extension={PACKAGE}','--no-sandbox',
+                      '--disable-dev-shm-usage'])
+            try:
+                sw=ctx.service_workers[0] if ctx.service_workers else await ctx.wait_for_event(
+                    'serviceworker',timeout=30000)
+                eid=sw.url.split('/')[2]
+                page=await ctx.new_page()
+                problems=[]
+                page.on('pageerror',lambda e:problems.append(str(e)))
+                await page.goto(f'chrome-extension://{eid}/file-lab.html')
+                await page.locator('.pit-workbench-nav a[href="#pdf-bilingual-lab"]').click()
+                pdf=page.locator('.pdf-bilingual-lab')
+                await pdf.get_by_role('heading',name='浏览器内 PDF / 扫描件双语翻译').wait_for(timeout=18000)
+                await page.evaluate("""async()=>{
+                  const item=await chrome.storage.local.get('pit_settings_v1');
+                  await chrome.storage.local.set({pit_settings_v1:{
+                    ...(item.pit_settings_v1||{}),
+                    cloudPdfEndpoint:'https://pit-docs.example.test',
+                    cloudPdfToken:'test-only-cloud-token-12345678',
+                    target:'zh'
+                  }});
+                  window.confirm=()=>true;
+                }""")
+                await pdf.locator('input[type=file]').set_input_files({
+                    'name':'real-pdf-fixture.pdf','mimeType':'application/pdf',
+                    'buffer':pdf_fixture()
+                })
+                await pdf.get_by_label('云端 PDF 原文语言').select_option('fr')
+                calls={'health':0,'upload':0,'ready':False,'valid_pdf':False,
+                       'sources':[],'status':0,'download':0,'legacy':0,
+                       'async_enabled':True,'hold_status':False}
+                job_id='pit-test-pdf-job-1234567890'
+                async def fake_service(route):
+                    method=route.request.method
+                    if method=='OPTIONS':
+                        await route.fulfill(status=204,headers={
+                          'Access-Control-Allow-Origin':'*',
+                          'Access-Control-Allow-Methods':'GET,POST,OPTIONS',
+                          'Access-Control-Allow-Headers':'authorization,content-type'
+                        })
+                    elif route.request.url.endswith('/health'):
+                        assert method=='GET'
+                        assert route.request.headers.get('authorization')=='Bearer test-only-cloud-token-12345678'
+                        calls['health']+=1
+                        await route.fulfill(status=200,content_type='application/json',
+                            body='{"ready":'+('true' if calls['ready'] else 'false')+
+                                ',"async_jobs":'+('true' if calls['async_enabled'] else 'false')+
+                                ',"max_file_bytes":26214400}',
+                            headers={'Access-Control-Allow-Origin':'*'})
+                    elif route.request.url.endswith('/v1/pdf/jobs') and method=='POST':
+                        calls['upload']+=1
+                        payload=route.request.post_data_buffer or b''
+                        assert b'name="source"' in payload and b'\r\n\r\nfr\r\n' in payload, (
+                            'cloud job ignored the explicitly selected source language')
+                        calls['sources'].append('fr')
+                        await route.fulfill(status=202,content_type='application/json',
+                            body='{"jobId":"'+job_id+'","status":"queued"}',
+                            headers={'Access-Control-Allow-Origin':'*'})
+                    elif route.request.url.endswith('/v1/pdf/jobs/'+job_id):
+                        assert method=='GET'
+                        calls['status']+=1
+                        status='running' if calls['hold_status'] else 'completed'
+                        await route.fulfill(status=200,content_type='application/json',
+                            body='{"jobId":"'+job_id+'","status":"'+status+'",'
+                                 '"detectedSource":"fr","detectionConfidence":"explicit"}',
+                            headers={'Access-Control-Allow-Origin':'*'})
+                    elif route.request.url.endswith('/v1/pdf/jobs/'+job_id+'/result'):
+                        assert method=='GET'
+                        calls['download']+=1
+                        await route.fulfill(status=200,content_type='application/pdf',
+                            body=pdf_fixture() if calls['valid_pdf'] else b'INVALID_PDF_CONTENT'+b'X'*200,
+                            headers={'Access-Control-Allow-Origin':'*',
+                                     'Access-Control-Expose-Headers':'X-PIT-Detected-Source,X-PIT-Detection-Confidence',
+                                     'X-PIT-Detected-Source':'fr',
+                                     'X-PIT-Detection-Confidence':'explicit'})
+                    elif route.request.url.endswith('/v1/pdf/translate'):
+                        calls['legacy']+=1
+                        assert method=='POST'
+                        payload=route.request.post_data_buffer or b''
+                        assert b'\r\n\r\nfr\r\n' in payload
+                        await route.fulfill(status=200,content_type='application/pdf',
+                            body=pdf_fixture(),headers={
+                              'Access-Control-Allow-Origin':'*',
+                              'X-PIT-Detected-Source':'fr',
+                              'X-PIT-Detection-Confidence':'explicit'})
+                    else:
+                        await route.fulfill(status=404)
+                await ctx.route('https://pit-docs.example.test/**',fake_service)
+                button=pdf.get_by_role('button',name='云端高保真 BabelDOC（需部署并配置）')
+                await button.click()
+                await pdf.get_by_text('服务尚未就绪',exact=False).wait_for(timeout=11000)
+                assert calls['health']==1 and calls['upload']==0,calls
+                calls['ready']=True
+                await button.click()
+                await pdf.get_by_text('没有返回有效的 PDF 文件',exact=False).wait_for(timeout=10000)
+                assert calls['health']==2 and calls['upload']==1,calls
+                calls['valid_pdf']=True
+                async with page.expect_download(timeout=20000) as info:
+                    await button.click()
+                download=await info.value
+                assert download.suggested_filename.endswith('-babeldoc.pdf')
+                downloaded=Path(await download.path()).read_bytes()
+                assert downloaded.startswith(b'%PDF-') and len(downloaded)>100
+                assert calls['health']==3 and calls['upload']==2,calls
+                assert calls['status']==2 and calls['download']==2,calls
+                assert calls['sources']==['fr','fr'],calls
+                await pdf.get_by_text('原文语言：fr（依据：explicit）',
+                    exact=False).wait_for(timeout=10000)
+                # Older privately deployed containers still provide only
+                # the synchronous route. Their supported path must not break.
+                calls['async_enabled']=False
+                async with page.expect_download(timeout=20000) as old_info:
+                    await button.click()
+                assert (await old_info.value).suggested_filename.endswith('-babeldoc.pdf')
+                assert calls['legacy']==1 and calls['upload']==2,calls
+                # Real user action: submit a long PDF, refresh the lab while
+                # it is still processing, and retrieve it WITHOUT uploading
+                # or charging for a second job.
+                calls['async_enabled']=True
+                calls['hold_status']=True
+                await button.click()
+                await pdf.get_by_text('云端文档任务正在排版翻译',
+                    exact=False).wait_for(timeout=10000)
+                assert calls['upload']==3,calls
+                saved=await page.evaluate("""()=>JSON.parse(
+                  localStorage.getItem('pit_cloud_pdf_pending_v1'))""")
+                assert saved['jobId']==job_id,saved
+                await page.reload()
+                pdf=page.locator('.pdf-bilingual-lab')
+                recover=pdf.get_by_role('button',name='取回上次云端 PDF 任务（无需重新上传）')
+                await recover.wait_for(timeout=10000)
+                calls['hold_status']=False
+                async with page.expect_download(timeout=20000) as recovered:
+                    await recover.click()
+                assert (await recovered.value).suggested_filename.endswith('-babeldoc.pdf')
+                assert calls['upload']==3,'recover re-uploaded the PDF'
+                assert await page.evaluate("""()=>localStorage.getItem(
+                  'pit_cloud_pdf_pending_v1')""") is None
+                assert not problems,problems
+                print('PASS: installed WXT blocks PDF upload when cloud health not ready')
+                print('PASS: installed WXT uploads only after explicit ready preflight')
+                print('NOTE: container and returned PDF are simulated; NOT a live BabelDOC L3 acceptance')
+            finally:
+                await ctx.close()
+
+if __name__=='__main__':
+    asyncio.run(main())

@@ -4,6 +4,8 @@
  */
 import {encodeMonoPcm16,averageEnergy,resampleChunks,ASR_SAMPLE_RATE} from './lib/wav.js';
 import {LiveStats,BoundedAudioQueue,makeAudioContext,MAX_ASR_REQUESTS,asrLimitReached} from './lib/live-pipeline.js';
+import {normalizeAsrResult} from './lib/asr-response.js';
+import {translateWithNative,checkNativeTranslator} from './lib/browser-native.js';
 const SEGMENT_MS=3000;
 let current=null;
 let epoch=0;
@@ -76,13 +78,22 @@ async function flush(c){
     const asrMs=Math.round(performance.now()-started);
     c.failures=0;c.retryAt=0;
     c.stats.record(asrMs);
-    const text=String(result.text||'').trim().slice(0,5000);
+    const normalized=normalizeAsrResult(result);
+    const text=normalized.text;
     if(asrMs>12000){
       c.stats.drop(1);
       await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
-        message:'本机识别延迟超过 12 秒，已跳过过期字幕。请使用较小的 Whisper 模型。'});
+        message:(hosted?'云端':'本机')+' Whisper 识别延迟超过 12 秒，已跳过过期字幕；请检查网络或模型响应。'});
     }else if(text){
-      await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,text,capturedAt,segmentMs:SEGMENT_MS,asrMs});
+      // Whisper can identify the spoken language even for a one-word
+      // fragment. Carry only supported, sufficiently confident metadata
+      // through to MT; never infer audio language from the webpage UI.
+      const audioLanguage=normalized.language;
+      const conf=normalized.languageConfidence;
+      await notify('PIT_ASR_RESULT',{tabId:c.tabId,sessionId:c.sessionId,
+        text,capturedAt,segmentMs:SEGMENT_MS,asrMs,
+        ...(audioLanguage?{language:audioLanguage,
+          ...(typeof conf==='number'?{languageConfidence:conf}:{})}:{})});
     }
   }catch(e){
     if(current===c){
@@ -91,11 +102,11 @@ async function flush(c){
       c.retryAt=Date.now()+Math.min(30000,3000*Math.pow(2,Math.min(c.failures-1,4)));
       if(c.failures>=4 || /Whisper HTTP (401|403|503)/.test(String(e?.message||e))){
         await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
-          message:'本机识别连续失败，音频已自动停止，请核查模型、令牌和服务配置。'});
+          message:(c.asrBackend==='cloud'?'云端':'本机')+' Whisper 识别连续失败，音频已自动停止；请检查服务和令牌。'});
         await stop();
         await notify('PIT_ASR_STREAM_ENDED',{tabId:c.tabId,sessionId:c.sessionId});
       }else await notify('PIT_ASR_ERROR',{tabId:c.tabId,sessionId:c.sessionId,
-        message:'本机识别失败，将在稍后重试，不会累积过期音频。'});
+        message:(c.asrBackend==='cloud'?'云端':'本机')+' Whisper 识别失败，稍后重试（不累积过期音频）。'});
     }
   }finally{
     if(current===c){
@@ -194,6 +205,48 @@ async function start({streamId,tabId,token,sessionId,asrBackend='local',cloudEnd
 }
 chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
   if(msg?.target!=='offscreen')return false;
+  if(msg.type==='PIT_OFFSCREEN_PING'){
+    respond({ok:true,ready:true,translatorApi:typeof globalThis.Translator});
+    return false;
+  }
+  if(msg.type==='PIT_OFFSCREEN_BROWSER_STATUS'){
+    checkNativeTranslator(msg.source,msg.targetLanguage)
+      .then(status=>respond({ok:true,status}))
+      .catch(error=>respond({ok:false,error:String(error.message||error),
+        code:String(error.code||'native_unavailable')}));
+    return true;
+  }
+  if(msg.type==='PIT_OFFSCREEN_BROWSER_PROBE'){
+    // The probe uses only static public samples, never webpage/private text.
+    const samples={
+      en:'The financial report is ready.',
+      fr:'Le rapport financier est prêt.',
+      de:'Der Finanzbericht ist fertig.',
+      es:'El informe financiero está listo.',
+      zh:'财务报告已经准备好了。',
+      ja:'財務報告の準備ができました。',
+      ko:'재무 보고서가 준비되었습니다.'
+    };
+    const sample=samples[msg.source];
+    if(!sample){
+      respond({ok:false,code:'invalid_language',error:'未知测试语言'});
+      return false;
+    }
+    const started=performance.now();
+    translateWithNative([sample],{source:msg.source,target:msg.targetLanguage})
+      .then(translations=>respond({ok:true,translation:translations[0],
+        elapsedMs:Math.round(performance.now()-started)}))
+      .catch(error=>respond({ok:false,error:String(error.message||error),
+        code:String(error.code||'native_probe_failed')}));
+    return true;
+  }
+  if(msg.type==='PIT_OFFSCREEN_BROWSER_TRANSLATE'){
+    translateWithNative(msg.texts,{source:msg.source,target:msg.targetLanguage})
+      .then(translations=>respond({ok:true,translations}))
+      .catch(error=>respond({ok:false,error:String(error.message||error),
+        code:String(error.code||'native_failed')}));
+    return true;
+  }
   if(msg.type==='PIT_OFFSCREEN_START'){
     start(msg).then(respond).catch(e=>respond({ok:false,error:String(e.message||e)}));
     return true;

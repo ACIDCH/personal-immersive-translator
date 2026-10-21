@@ -5,7 +5,7 @@
   if(window.__PIT_LIVE_CAPTIONS__)return;
   window.__PIT_LIVE_CAPTIONS__=true;
   let enabled=false,seq=0,overlay=null,queued=null;
-  let translationMode='standard',sourceHistory=[];
+  let translationMode='standard',sourceHistory=[],spokenLanguage='';
   let activeSession=null,lastStoppedSession=null,epoch=0,busyEpoch=null;
   let stats={requests:0,dropped:0,errors:0,p50Ms:0,p95Ms:0};
   const observed=[]; // timing only, no transcript retention.
@@ -29,7 +29,7 @@
     const meta=document.createElement('div');meta.className='pit-live-meta';
     const latency=delay===null?'等待识别':('处理延迟约 '+(delay/1000).toFixed(1)+'s');
     const p95=percentile(.95);
-    meta.textContent=latency+
+    meta.textContent=latency+(spokenLanguage?' · 识别语种 '+spokenLanguage:'')+
       (p95===null?'':' · p95约 '+(p95/1000).toFixed(1)+'s')+
       ' · 丢弃 '+stats.dropped+' 段 · 识别错误 '+stats.errors+
       (stats.p95Ms>8000?' · 识别延迟偏高，建议使用小模型':'');
@@ -47,10 +47,18 @@
           const result=await chrome.runtime.sendMessage({
             type:'TRANSLATE_BATCH',texts:[item.text],mode:translationMode,transient:true,
             userInitiated:translationMode==='ai',sessionId:item.sessionId,
+            captionSourceLanguage:item.language||'',
             context:translationMode==='ai'?sourceHistory.slice(-2).join('\n').slice(0,1600):''
           });
-          if(result?.ok && translationMode==='ai')sourceHistory=[...sourceHistory.slice(-2),item.text];
           translation=result?.ok ? String(result.translations?.[0]||''):'翻译服务不可用';
+          // Translation history belongs to the CURRENT recognized utterance,
+          // not an old request that resolved after STOP/START or after newer
+          // Whisper audio arrived. Otherwise a new AI session inherits stale
+          // dialogue and silently mistranslates later subtitles.
+          if(result?.ok && translationMode==='ai' && enabled &&
+             epoch===generation && activeSession===item.sessionId &&
+             item.sequence===seq)
+            sourceHistory=[...sourceHistory.slice(-2),item.text];
         }catch{translation='翻译连接失败';}
         if(!enabled || epoch!==generation || activeSession!==item.sessionId)break;
         // Do not display a completed old translation after a newer cue arrived.
@@ -77,7 +85,7 @@
         respond({ok:false});return;
       }
       enabled=true;activeSession=msg.sessionId;lastStoppedSession=null;
-      translationMode=msg.mode==='ai'?'ai':'standard';sourceHistory=[];
+      translationMode=msg.mode==='ai'?'ai':'standard';sourceHistory=[];spokenLanguage='';
       epoch++;seq++;queued=null;observed.length=0;
       stats={requests:0,dropped:0,errors:0,p50Ms:0,p95Ms:0};
       draw('本机正在识别当前标签页音频…','');
@@ -102,7 +110,7 @@
       }
       lastStoppedSession=activeSession;activeSession=null;
       enabled=false;epoch++;seq++;queued=null;observed.length=0;
-      translationMode='standard';sourceHistory=[];
+      translationMode='standard';sourceHistory=[];spokenLanguage='';
       overlay?.remove();overlay=null;respond({ok:true});return;
     }
     if(!enabled || msg?.sessionId!==activeSession)return;
@@ -119,8 +127,13 @@
     if(msg?.type!=='PIT_ASR_TEXT_VIEW')return;
     const text=String(msg.text||'').trim().slice(0,5000);
     if(!text)return;
+    spokenLanguage=['en','zh','fr','de','es','ja','ko'].includes(msg.language)
+      ?msg.language:'';
     seq++;
     queued={text,sequence:seq,capturedAt:msg.capturedAt,segmentMs:msg.segmentMs,
+      // Leave source empty when Whisper gave no reliable language evidence.
+      // Backend settings.source is authoritative if manually configured.
+      language:['en','zh','fr','de','es','ja','ko'].includes(msg.language)?msg.language:'',
       sessionId:activeSession};
     draw(text,'正在翻译…');
     void drain();

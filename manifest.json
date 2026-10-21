@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "多模态翻译 | Multimodal Translate",
-  "short_name": "多模态翻译",
+  "name": "PIT · 沉浸式翻译",
+  "short_name": "PIT 翻译",
   "description": "Multimodal bilingual translation for webpages, subtitles, images and documents; BYOK AI models.",
-  "version": "0.4.4",
+  "version": "0.4.6",
   "minimum_chrome_version": "125",
   "permissions": [
     "activeTab",
@@ -11,7 +11,10 @@
     "storage",
     "offscreen",
     "tabCapture",
-    "webNavigation"
+    "webNavigation",
+    "identity",
+    "alarms",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://api.cognitive.microsofttranslator.com/*",
@@ -19,7 +22,9 @@
     "https://api-free.deepl.com/*",
     "https://api.deepl.com/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://api.deepseek.com/*"
+    "https://api.deepseek.com/*",
+    "https://ligamejpnracymxfbbff.supabase.co/*",
+    "https://api.mymemory.translated.net/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

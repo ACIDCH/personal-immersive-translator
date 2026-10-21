@@ -61,7 +61,7 @@ def _get_model(factory=None):
     _model_path=path
     return loaded
 
-def transcribe_local(wav_bytes: bytes, factory=None):
+def transcribe_local(wav_bytes: bytes, factory=None, return_metadata=False):
     """Called in worker thread; serialize actual native CPU inference.
 
     FastAPI validates 16 kHz mono PCM16 before reaching this module.
@@ -77,10 +77,35 @@ def transcribe_local(wav_bytes: bytes, factory=None):
             raw=source.readframes(source.getnframes())
         samples=np.frombuffer(raw,dtype="<i2").astype(np.float32)/32768.0
         if samples.size==0:
-            return ""
-        segments,_info=model.transcribe(
+            return {"text":"","segments":[]} if return_metadata else ""
+        segments,info=model.transcribe(
             samples,beam_size=1,best_of=1,language=None,
             vad_filter=False,without_timestamps=True,
             condition_on_previous_text=False)
-        text=" ".join(str(segment.text).strip() for segment in segments)
-        return text.strip()[:5000]
+        # Upstream segment generator runs inference only when iterated.
+        # Never fabricate language from the webpage UI or filename.
+        parsed=[]
+        for segment in segments:
+            chunk=str(getattr(segment,"text","")).strip()
+            if not chunk:continue
+            entry={"text":chunk[:1200]}
+            start=getattr(segment,"start",None)
+            end=getattr(segment,"end",None)
+            if isinstance(start,(int,float)) and isinstance(end,(int,float)) and (
+                0<=start<=end<=30):
+                entry.update(start=float(start),end=float(end))
+            parsed.append(entry)
+            if len(parsed)>=100:break
+        text=" ".join(segment["text"] for segment in parsed).strip()[:5000]
+        if not return_metadata:return text
+        response={"text":text,"segments":parsed}
+        raw_lang=getattr(info,"language",None)
+        if isinstance(info,dict):raw_lang=info.get("language")
+        if isinstance(raw_lang,str) and raw_lang.lower() in (
+            "en","fr","zh","de","es","ja","ko"):
+            response["language"]=raw_lang.lower()
+            confidence=getattr(info,"language_probability",None)
+            if isinstance(info,dict):confidence=info.get("language_probability")
+            if isinstance(confidence,(int,float)) and 0<=confidence<=1:
+                response["languageConfidence"]=float(confidence)
+        return response

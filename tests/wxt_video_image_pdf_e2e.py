@@ -88,7 +88,9 @@ async def main():
         options=await ctx.new_page()
         await options.goto(f'chrome-extension://{eid}/pit-options.html')
         await options.locator('form[data-ready="1"]').wait_for(timeout=15000)
+        await options.locator('.options-nav a[href="#baseSettings"]').click()
         await options.locator('[name="standardProvider"]').select_option('microsoft')
+        await options.locator('.options-nav a[href="#standardKeys"]').click()
         await options.locator('[name="microsoftKey"]').fill('fixture-test-token')
         await options.get_by_role('button',name='保存设置').click()
         await options.get_by_text('设置已保存。').wait_for(timeout=8000)
@@ -104,6 +106,7 @@ async def main():
           const track=v.addTextTrack('subtitles','English','en');
           track.mode='showing';
           track.addCue(new VTTCue(0,30,'Hello world from the lecture video'));
+          track.addCue(new VTTCue(0,30,'A second overlapping lecture subtitle'));
         }""")
         popup=await ctx.new_page()
         await popup.goto(f'chrome-extension://{eid}/popup.html')
@@ -111,10 +114,53 @@ async def main():
         await popup.get_by_role('button',name='翻译视频字幕').wait_for(timeout=10000)
         await video.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
-        await video.locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=22000)
+        # PIT's default mode changes native VTTCue.text inside the player.
+        # An external overlay is deliberately hidden after both native cues
+        # are translated; checking .pit-caption-translated was a V1 false
+        # negative and did not prove the required in-player replacement.
+        expected=[
+          '译文:Hello world from the lecture video',
+          '译文:A second overlapping lecture subtitle'
+        ]
+        await video.wait_for_function("""expected=>{
+          const track=document.getElementById('lecture')?.textTracks?.[0];
+          const cues=track?.cues?[...track.cues]:[];
+          return cues.length===expected.length &&
+            cues.every((cue,i)=>cue.text===expected[i]);
+        }""",arg=expected,timeout=22000)
+        native=await video.evaluate("""()=>{
+          const video=document.getElementById('lecture');
+          const overlay=document.querySelector('.pit-caption-overlay');
+          return {
+            mode:video.textTracks[0].mode,
+            lines:[...video.textTracks[0].cues].map(c=>c.text),
+            overlayVisible:Boolean(overlay && getComputedStyle(overlay).display!=='none')
+          };
+        }""")
+        assert native['lines']==expected,native
+        assert native['mode']=='showing',native
+        assert native['overlayVisible'] is False,(
+          'Native replacement must not display a second external overlay:',native)
         report['video_cues']='pass'
+        # Popup diagnostics must reflect actual completed translations rather
+        # than treating "subtitle session started" as successful translation.
+        await video.bring_to_front()
+        await popup.get_by_role('button',name='检查字幕状态').click()
+        await popup.get_by_text('译文缓存 2 条',exact=False).wait_for(timeout=10000)
+        await popup.get_by_text('实际：原生字幕轨直接替换',exact=False).wait_for(timeout=10000)
+        report['caption_diagnostics']='pass'
         await popup.get_by_role('button',name='停止字幕翻译').click()
         await video.locator('.pit-caption-overlay').wait_for(state='detached',timeout=10000)
+        restored=await video.evaluate("""()=>{
+          const v=document.getElementById('lecture');
+          return {mode:v.textTracks[0].mode,
+            lines:[...v.textTracks[0].cues].map(c=>c.text)};
+        }""")
+        assert restored['mode']=='showing',restored
+        assert restored['lines']==[
+          'Hello world from the lecture video',
+          'A second overlapping lecture subtitle'
+        ],restored
         report['video_stop']='pass'
         print('WXT NATIVE VIDEO CAPTIONS AND STOP: PASS',flush=True)
 
@@ -185,6 +231,7 @@ async def main():
         # reopen the downloaded PDF with the extension's pinned PDF.js.
         file_laboratory=await ctx.new_page()
         await file_laboratory.goto(f'chrome-extension://{eid}/file-lab.html')
+        await file_laboratory.locator('.pit-workbench-nav a[href="#pdf-bilingual-lab"]').click()
         pdf_input=file_laboratory.locator('.pdf-bilingual-lab input[type=file]')
         for kind,raw_pdf in [('digital',pdf_fixture()),('scanned',scanned_pdf_fixture())]:
           await pdf_input.set_input_files({

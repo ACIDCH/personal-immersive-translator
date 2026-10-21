@@ -1,3 +1,5 @@
+// @ts-ignore Shared geometry guard has independent Node regression tests.
+import {validateOcrOverlayRegions} from '../../src/lib/ocr-geometry.js';
 /** Create a bilingual side-by-side PNG without removing or inventing pixels
  * from the original. High-quality inpainting is a separate future engine.
  */
@@ -105,12 +107,9 @@ export async function inplaceImagePng(
     if(!ctx)throw Error('Canvas 不可用');
     ctx.drawImage(bitmap,0,0);
     const original=ctx.getImageData(0,0,width,height);
-    const boxes=regions.map((region,i)=>{
-      const b=region.bbox;
-      const x0=Math.max(0,Math.floor(b.x0)-2),y0=Math.max(0,Math.floor(b.y0)-2);
-      const x1=Math.min(width,Math.ceil(b.x1)+2),y1=Math.min(height,Math.ceil(b.y1)+2);
-      if(x1-x0<12||y1-y0<9||!translations[i]?.trim())throw Error('文字区域过小或译文为空');
-      return {x0,y0,x1,y1,text:translations[i]};
+    const boxes=validateOcrOverlayRegions(regions,width,height).map((b:Rect,i:number)=>{
+      if(!translations[i]?.trim())throw Error('文字区域译文为空');
+      return {...b,text:translations[i]};
     });
     const boxColors:{box:typeof boxes[number];background:number[];size:number}[]=[];
     // Validate every region *before* painting anything; the output is atomic.
