@@ -52,7 +52,7 @@ async def main():
           assert count>=8,('service list unexpectedly incomplete',count)
           for index in range(count):
             card=cards.nth(index)
-            assert await card.get_by_role('button',name='测试此服务',exact=False).count()==1,(
+            assert await card.locator('button[aria-label^="测试此服务 "]').count()==1,(
                 'missing per-provider real test action',index)
           await opts.screenshot(path='pit-delivery-options.png',full_page=True)
           popup=await ctx.new_page()
