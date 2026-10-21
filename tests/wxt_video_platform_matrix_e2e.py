@@ -33,6 +33,12 @@ async def main():
             const url=String(input?.url||input);
             if(url.startsWith('https://api.cognitive.microsofttranslator.com/')){
               const body=JSON.parse(opts.body);
+              // An intentionally incomplete provider response must never be
+              // applied to just one of two simultaneous player windows.
+              if(body.some(x=>x.Text.includes('Malformed speaker')))
+                return new Response(JSON.stringify([
+                  {translations:[{text:'错误：只有第一行译文'}]}
+                ]),{status:200,headers:{'content-type':'application/json'}});
               return new Response(JSON.stringify(body.map(x=>({translations:[{text:'译文:'+x.Text}]}))),
                 {status:200,headers:{'content-type':'application/json'}});
             }
@@ -232,6 +238,37 @@ async def main():
           'in_player_replacement':True,'restored_on_stop':True})
         await page.close()
 
+        # P0: a provider can succeed at HTTP level while returning only
+        # one of two translated speaker windows. Never mutate one in player.
+        malformed='https://www.youtube.com/watch?v=pit-malformed-provider-reply'
+        async def malformed_html(route):
+          await route.fulfill(status=200,content_type='text/html',body='''<html><body>
+           <div class="ytp-caption-window-container">
+             <div><span class="ytp-caption-segment">Malformed speaker one</span></div>
+             <div><span class="ytp-caption-segment">Malformed speaker two</span></div>
+           </div></body></html>''')
+        await ctx.route(malformed,malformed_html)
+        page=await ctx.new_page()
+        await page.goto(malformed);await page.bring_to_front()
+        await popup.get_by_role('button',name='翻译视频字幕').click()
+        await popup.wait_for_function("""async()=>{
+          const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+          const x=await chrome.tabs.sendMessage(tab.id,{
+            type:'PIT_CAPTIONS_DIAGNOSTICS'
+          });
+          return x?.status==='error'&&x.translationCount===0;
+        }""",timeout=23000)
+        assert await page.locator('.ytp-caption-segment').all_inner_texts()==[
+          'Malformed speaker one','Malformed speaker two'
+        ]
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(el)=>getComputedStyle(el).display==='none'")
+        await popup.get_by_role('button',name='停止字幕翻译').click()
+        results.append({'platform':'youtube-incomplete-provider-response',
+          'fixture_visible_caption':'pass','partial_mutation_prevented':True,
+          'no_silent_overlay':True})
+        await page.close()
+
         # P0 regression: known video platforms often load their caption
         # layer only after PIT has started. Do not fail at first empty frame.
         delayed='https://www.youtube.com/watch?v=pit-delayed-captions'
@@ -308,6 +345,6 @@ async def main():
       finally:
         Path('wxt-platform-caption-matrix.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
         await ctx.close()
-  assert len(results)==11 and all(r['fixture_visible_caption']=='pass' for r in results),results
+  assert len(results)==12 and all(r['fixture_visible_caption']=='pass' for r in results),results
 
 if __name__=='__main__':asyncio.run(main())
