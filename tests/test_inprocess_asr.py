@@ -92,6 +92,19 @@ class LocalModelTests(unittest.TestCase):
         self.assertTrue(fast.model_loaded())
         self.assertEqual(text1,"SPEECH FROM OWNED OFFLINE MODEL")
 
+    def test_faster_whisper_language_probability_forwarded_only_if_reported(self):
+        class FakeInfo:
+            language="fr"
+            language_probability=.87
+        class Multilingual(FakeWhisperModel):
+            def transcribe(self,samples,**kwargs):
+                return iter([FakeSegment()]),FakeInfo()
+        result=fast.transcribe_local(pcm_audio(),factory=Multilingual,
+                                    return_metadata=True)
+        self.assertEqual(result["language"],"fr")
+        self.assertAlmostEqual(result["languageConfidence"],.87)
+        self.assertEqual(len(result["segments"]),1)
+
     def test_wrong_samplerate_and_duration_fail_closed(self):
         with self.assertRaises(ValueError):
             fast.transcribe_local(pcm_audio(48000),factory=FakeWhisperModel)
@@ -101,8 +114,8 @@ class LocalModelTests(unittest.TestCase):
         headers={"X-PIT-Token":"test-local-secret-at-least-16"}
         with patch.object(bridge,"ASR_BACKEND","faster"),\
              patch.object(bridge,"model_available",return_value=True),\
-             patch.object(bridge,"transcribe_local",side_effect=lambda data:
-                          fast.transcribe_local(data,factory=FakeWhisperModel)):
+             patch.object(bridge,"transcribe_local",side_effect=lambda data,**options:
+                          fast.transcribe_local(data,factory=FakeWhisperModel,**options)):
             rejected=client.post("/asr",
                 files={"audio":("clip.wav",pcm_audio(),"audio/wav")})
             accepted=client.post("/asr",headers=headers,
@@ -111,6 +124,7 @@ class LocalModelTests(unittest.TestCase):
         self.assertEqual(rejected.status_code,401)
         self.assertEqual(accepted.status_code,200,accepted.text)
         self.assertEqual(accepted.json()["text"],"SPEECH FROM OWNED OFFLINE MODEL")
+        self.assertEqual(accepted.json()["segments"][0]["text"],"SPEECH FROM OWNED OFFLINE MODEL")
         self.assertEqual(health.status_code,200)
         self.assertEqual(health.json()["speech_asr_backend"],"faster")
         self.assertTrue(health.json()["speech_asr_model_loaded"])
