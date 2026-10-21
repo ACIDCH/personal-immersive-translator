@@ -305,6 +305,12 @@ export function NativeWebControls(){
        ?String(reply.provider):standardProvider;
      setCaptionInspection([
        state,'译文缓存 '+count+' 条',
+       '当前可见字幕窗口 '+(Number(reply.siteCaptionGroups)||0),
+       '字幕轨已加载事件 '+(Number(reply.nativeLoadedCues)||0),
+       '播放器：'+String(reply.playback||'unknown'),
+       reply.status==='waiting-for-CC'?
+         (reply.captionControlFound?'请先开启播放器 CC 并播放到有字幕的位置':
+           '未检测到可见 CC；确认视频提供字幕且已播放'):'',
        '常规翻译引擎：'+effectiveProvider,
        '识别来源：'+String(reply.source||'unknown'),
        '字幕语言：'+String(reply.language||'unknown'),

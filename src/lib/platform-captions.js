@@ -4,11 +4,16 @@
   'use strict';
   const rules=[
     {id:'youtube',hosts:[/(^|\.)youtube\.com$/i,/(^|\.)youtube-nocookie\.com$/i],
-      selectors:['.ytp-caption-window-container .ytp-caption-segment','.ytp-caption-segment']},
+      selectors:['.ytp-caption-window-container .ytp-caption-segment',
+        '.ytp-caption-segment',
+        '.ytp-caption-window-container .caption-visual-line',
+        '.ytp-caption-window-container .captions-text',
+        '.ytp-caption-window-container .caption-window span']},
     {id:'bilibili',hosts:[/(^|\.)bilibili\.com$/i],
       selectors:[
-        '.bpx-player-subtitle-panel-major-group span',
+        '.bpx-player-subtitle-panel-position .bpx-player-subtitle-panel-text',
         '.bpx-player-subtitle-panel-text',
+        '.bpx-player-subtitle-panel-major-group span',
         '.bpx-player-subtitle-item',
         '.bilibili-player-video-subtitle .subtitle-item'
       ]},
@@ -84,39 +89,48 @@
     return compact(parts.join(' '));
   }
   function readVisibleCaptions(doc,hostname,visible=isVisible){
-    const rule=identify(hostname);
-    if(rule.id==='generic')return {provider:'generic',text:'',reason:'no-adapter'};
-    discardStalePatches();
-    for(const selector of rule.selectors){
-      let nodes;
-      try{nodes=[...doc.querySelectorAll(selector)].slice(0,35)}catch{continue;}
-      const lines=[];
-      for(const node of nodes){
-        if(node.closest?.('.pit-caption-overlay'))continue;
-        // Empty trailing spans remain owned by PIT after a split caption
-        // is collapsed into its first leaf. Their parent remains visible.
-        if(!visible(node)&&!(inline.has(node)&&node.parentElement&&visible(node.parentElement)))continue;
-        // Netflix and Panopto often wrap leaf spans with an ancestor selected
-        // by the fallback. Never concatenate parent and child copies.
-        if(nodes.some(other=>other!==node && node.contains?.(other) && visible(other)))continue;
-        const text=displayedText(node,visible);
-        if(text && lines.at(-1)!==text && !lines.includes(text))lines.push(text);
-      }
-      if(lines.length)return {provider:rule.id,text:compact(lines.join(' ')),selector};
-    }
-    return {provider:rule.id,text:'',reason:'no-visible-captions'};
+    // Detection and mutation must share the same visible leaf grouping.
+    const found=groupedLeaves(doc,hostname,visible);
+    return {provider:found.provider,
+      text:compact(found.groups.map(g=>g.text).join(' ')),
+      selector:found.selector,reason:found.reason};
   }
   // A YouTube "caption window" may contain multiple text spans, but several
   // windows can be shown at once for different speakers. Never concatenate
   // independent player-owned windows and then try to write one translation
   // into a different DOM subtree.
+  // Inspect only real visible DOM, including bounded open Shadow DOM roots;
+  // never cross an iframe origin or access closed player internals.
+  // The 1.5s discovery cache avoids rescanning long video pages per tick.
+  let rootCacheDoc=null,rootCacheAt=0,rootCache=[];
+  function captionRoots(doc){
+    const now=Date.now();
+    if(rootCacheDoc===doc && now-rootCacheAt<1500)
+      return rootCache.filter(root=>root===doc||root.host?.isConnected);
+    const found=[doc],queue=[{root:doc,depth:0}],seen=new Set(found);
+    while(queue.length&&found.length<18){
+      const {root,depth}=queue.shift();
+      if(depth>=3)continue;
+      let elements;
+      try{elements=root.querySelectorAll('*');}catch{continue;}
+      for(let i=0;i<Math.min(elements.length,3500);i++){
+        const shadow=elements[i].shadowRoot;
+        if(!shadow||seen.has(shadow))continue;
+        seen.add(shadow);found.push(shadow);queue.push({root:shadow,depth:depth+1});
+        if(found.length>=18)break;
+      }
+    }
+    rootCacheDoc=doc;rootCacheAt=now;rootCache=found;
+    return found;
+  }
   function groupedLeaves(doc,hostname,visible=isVisible){
     const rule=identify(hostname);
     if(rule.id==='generic')return {provider:rule.id,groups:[],reason:'no-adapter'};
     discardStalePatches();
+    for(const root of captionRoots(doc)){
     for(const selector of rule.selectors){
       let selected;
-      try{selected=[...doc.querySelectorAll(selector)].slice(0,35);}
+      try{selected=[...root.querySelectorAll(selector)].slice(0,35);}
       catch{continue;}
       const parents=new Map(),seen=new Set();
       for(const node of selected){
@@ -144,6 +158,7 @@
           .filter(Boolean).join(' '))
       })).filter(group=>group.text);
       if(found.length)return {provider:rule.id,selector,groups:found};
+    }
     }
     return {provider:rule.id,groups:[],reason:'no-visible-captions'};
   }

@@ -544,12 +544,40 @@
     if(msg?.type==='PIT_CAPTIONS_START' && ['standard','ai'].includes(msg.mode)){void settingsReady.then(()=>{manuallyStopped=false;respond(start(msg.mode,msg.cues,msg.expectedUrl,msg.captionSourceLanguage));quickToggle();});return true;}
     else if(msg?.type==='PIT_CAPTIONS_STOP'){manuallyStopped=true;stop();quickToggle();respond({ok:true});}
     else if(msg?.type==='PIT_PREFERENCES_CHANGED'){void refreshConfig().catch(()=>{});}
-    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',renderRoute:state.renderRoute,translationCount:state.cache.map.size,
-      active:state.active,renderMode:config.subtitleRenderMode||'in-player',
-      status:!config.enabled?'disabled':state.failedAt?'error':!state.active?'disabled':
-        state.renderRoute==='unsupported'?'unsupported':
-        (['native-track','platform-dom'].includes(state.renderRoute)&&state.cache.map.size>0)?'translated':
-        state.seenAny?'pending':'waiting-for-CC',lastError});}
+    else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){
+      const v=pickVideo();
+      const tracks=v?[...v.textTracks]:[];
+      const visible=platform?.readVisibleCaptionGroups?.(document,location.hostname)?.groups||[];
+      let loadedCues=0,currentNativeCues=0;
+      for(const track of tracks){
+        if(!['captions','subtitles'].includes(track.kind))continue;
+        try{
+          const cues=track.cues?[...track.cues]:[];
+          loadedCues+=cues.length;
+          currentNativeCues+=cues.filter(c=>v &&
+            c.startTime<=v.currentTime+.15&&c.endTime>=v.currentTime-.10).length;
+        }catch{}
+      }
+      const visibleGroups=visible.length;
+      const currentCaption=visibleGroups>0||currentNativeCues>0;
+      const rendered=['native-track','platform-dom'].includes(state.renderRoute)&&
+        state.cache.map.size>0&&currentCaption;
+      const ccControl=Boolean(document.querySelector(
+        '.ytp-subtitles-button,.bpx-player-ctrl-subtitle,[data-uia="control-captions"],[aria-label*="Captions"]'));
+      respond({ok:true,platform:platformId(),videos:allVideos(document).length,
+        visibleVideo:Boolean(v?.getClientRects().length),
+        playback:v?(v.paused?'paused':'playing'):'no-video',
+        source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',
+        language:state.manualSource||state.track?.language||'unknown',
+        tracks:tracks.map(t=>({language:t.language,kind:t.kind,mode:t.mode})),
+        siteCaptionGroups:visibleGroups,nativeLoadedCues:loadedCues,nativeActiveCues:currentNativeCues,
+        captionControlFound:ccControl,provider:config.providerId||'inherit',
+        renderRoute:state.renderRoute,translationCount:state.cache.map.size,
+        active:state.active,renderMode:config.subtitleRenderMode||'in-player',
+        status:!config.enabled?'disabled':state.failedAt?'error':!state.active?'disabled':
+          state.renderRoute==='unsupported'&&currentCaption?'unsupported':
+          rendered?'translated':currentCaption?'pending':'waiting-for-CC',lastError});
+    }
   });
   settingsReady=refreshConfig().catch(()=>{});
   // Event-driven discovery; existing 450 ms session timer remains the only poll.
