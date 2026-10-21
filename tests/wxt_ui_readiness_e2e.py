@@ -81,7 +81,7 @@ async def main():
                               ('双语 PDF · BabelDOC','pdf-bilingual-lab'),
                               ('文档 · 图片 OCR','document-lab')]:
             await file.locator('.pit-workbench-nav a[href="#'+target+'"]').click()
-            assert await file.locator('#'+target).is_visible(),name
+            await file.locator('#'+target).wait_for(state='visible',timeout=8000)
           await file.screenshot(path='pit-delivery-filelab.png',full_page=True)
           print('PIT PREDELIVERY UI: PASS',
                 json.dumps({'services':count,'layouts':checks},ensure_ascii=False),
