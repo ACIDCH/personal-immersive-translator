@@ -202,7 +202,8 @@
   async function request(texts,requestedMode,context,pinTask=false) {
     const answer=await chrome.runtime.sendMessage({
       type:'TRANSLATE_BATCH',texts,mode:requestedMode,
-      pageContext:'article',taskId:pinTask?taskId:'gesture-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)),
+      pageContext:'article',pageLanguage:document.documentElement.lang||'',
+      taskId:pinTask?taskId:'gesture-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)),
       userInitiated:requestedMode==='ai',context
     });
     if(!answer?.ok)throw Error(answer?.error||'翻译服务未响应');
