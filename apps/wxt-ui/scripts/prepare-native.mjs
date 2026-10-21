@@ -41,7 +41,8 @@ const copies=[
  ['audio-capture-worklet.js','src/audio-capture-worklet.js'],
  ['live-captions.js','src/live-captions.js'],
  ['lib/wav.js','src/lib/wav.js'],
- ['lib/live-pipeline.js','src/lib/live-pipeline.js']
+ ['lib/live-pipeline.js','src/lib/live-pipeline.js'],
+ ['lib/asr-response.js','src/lib/asr-response.js']
 ];
 for(const [src,dst] of copies){
  const path=join(source,src);
