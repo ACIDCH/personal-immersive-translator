@@ -141,6 +141,7 @@ async def main():
                 await options.locator('form[data-ready="1"]').wait_for(timeout=12000)
                 await options.locator('[name="standardProvider"]').select_option('google-free')
                 await options.locator('[name="target"]').select_option('zh')
+                await options.locator('.options-nav a[href="#advanced"]').click()
                 await options.locator('[data-key="translateToBottom"]').check()
                 await options.get_by_role('button',name='保存设置').click()
                 popup=await ctx.new_page()
