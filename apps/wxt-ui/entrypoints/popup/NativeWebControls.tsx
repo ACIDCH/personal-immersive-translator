@@ -451,7 +451,7 @@ export function NativeWebControls(){
      <div className="native-actions">
        <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')})}>打开文件翻译工作台</button>
        <button type="button" disabled={working} onClick={()=>void screenshotToFileLab()}>截图当前网页 → 图片 OCR</button>
-       <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('pit-tools.html' as never)})}>PDF 高保真服务说明</button>
+       <button type="button" onClick={()=>void browser.tabs.create({url:browser.runtime.getURL('/file-lab.html')+'#pdf-bilingual-lab'})}>打开内置 PDF / BabelDOC 工作台</button>
      </div>
    </section>}
    {feature==='settings'&&<section className="pit-feature-section" aria-label="翻译设置与诊断">
