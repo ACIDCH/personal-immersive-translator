@@ -297,8 +297,13 @@ export function NativeWebControls(){
        reply.status==='ready'?'已读取原文字幕':
        '字幕功能未运行';
      const count=Math.max(0,Number(reply.translationCount)||0);
+     const config=await browser.runtime.sendMessage({type:'GET_SETTINGS'}).catch(()=>null);
+     const standardProvider=String(config?.settings?.standardProvider||'未读取');
+     const effectiveProvider=reply.provider&&reply.provider!=='inherit'
+       ?String(reply.provider):standardProvider;
      setCaptionInspection([
        state,'译文缓存 '+count+' 条',
+       '常规翻译引擎：'+effectiveProvider,
        '识别来源：'+String(reply.source||'unknown'),
        '字幕语言：'+String(reply.language||'unknown'),
        '目标：'+(reply.renderMode==='replace-track'?'优先播放器内原位替换':'用户设置的兼容显示'),
