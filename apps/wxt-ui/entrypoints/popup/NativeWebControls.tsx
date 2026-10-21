@@ -294,7 +294,9 @@ export function NativeWebControls(){
      if(!reply?.ok)throw Error('字幕脚本未就绪，请先开启视频字幕翻译');
      const state=reply.status==='error'?'翻译失败':
        reply.status==='waiting-for-CC'?'等待播放器字幕':
-       reply.status==='ready'?'已读取原文字幕':
+       reply.status==='pending'?'已读取原文，等待实际原位译文':
+       reply.status==='translated'?'已在播放器原位显示译文':
+       reply.status==='unsupported'?'播放器不支持安全原位替换':
        '字幕功能未运行';
      const count=Math.max(0,Number(reply.translationCount)||0);
      const config=await browser.runtime.sendMessage({type:'GET_SETTINGS'}).catch(()=>null);
@@ -310,7 +312,7 @@ export function NativeWebControls(){
        '实际：'+({['native-track']:'原生字幕轨直接替换',['platform-dom']:'播放器网页字幕原位替换',
          overlay:'兼容叠加层（非原位替换）',
          unsupported:'原位替换被播放器限制，未显示外置字幕',none:'尚未显示任何译文'} as Record<string,string>)[reply.renderRoute||'none'],
-       count===0&&reply.status==='ready'?'已读取原文，但尚不能证明翻译成功':'',
+       reply.status==='pending'?'字幕捕获成功不等于翻译及原位显示成功':'',
        reply.lastError?'最近错误：'+String(reply.lastError).slice(0,180):''
      ].filter(Boolean).join(' · '));
    }catch(error){

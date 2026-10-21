@@ -99,12 +99,13 @@
     // TreeWalker avoids accumulating the translation into subsequent requests.
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
     const control=scope==='full'&&el.matches(FULL_CONTROLS);
+    // Full-page candidates include site-header headings and labels. The
+    // text collector must not silently re-exclude them as in smart mode.
+    const exclusions=scope==='full'?SKIP.replace(',button,nav,footer,header',''):SKIP;
     const parts=[];let textNode,rawChars=0,truncated=false;
     while((textNode=walker.nextNode())) {
       const parent=textNode.parentElement;
-      if(parent?.closest?.(control
-        ?SKIP.replace(',button,nav,footer,header','')
-        :SKIP))continue;
+      if(parent?.closest?.(exclusions))continue;
       const value=textNode.nodeValue||'';
       // A 5,000-node stop silently truncated rich articles whose text is
       // split across many spans. Bound by actual characters, not DOM nodes.

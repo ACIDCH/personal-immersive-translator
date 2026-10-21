@@ -191,6 +191,13 @@
   function render(text, cueText='') {
     if(state.boundUrl && currentRecordingUrl()!==state.boundUrl){stop();return;}
     if(!state.overlay) return;
+    // Strict original-player mode never displays external subtitles or status text.
+    // Waiting, HTTP and ASR failures belong in diagnostics, not on the video.
+    if(config.subtitleRenderMode==='replace-track'){
+      state.overlay.replaceChildren();
+      state.overlay.style.display='none';
+      return;
+    }
     if(state.overlay.parentNode!== (document.fullscreenElement || document.documentElement)) {
       (document.fullscreenElement || document.documentElement).append(state.overlay);
     }
@@ -225,6 +232,7 @@
     overlay.className='pit-caption-overlay';
     overlay.setAttribute('role','status');
     overlay.setAttribute('aria-live','off');
+    overlay.style.display='none';
     (document.fullscreenElement || document.documentElement).append(overlay);
     return overlay;
   }
@@ -298,6 +306,7 @@
       const groups=visible?.groups||[];
       const text=groups.map(g=>g.text).join(' ');
       if(!text){
+        state.renderRoute='none';
         state.latestDomText='';
         render(state.seenAny?'':'正在等待播放器显示原文字幕；请开启 CC 字幕。');
         return;
@@ -330,6 +339,9 @@
       if(groups.every(g=>state.cache.has('dom:'+g.text))){
         applyTranslations();return;
       }
+      // A previously translated frame must not imply the publisher's new CC
+      // frame has also been translated or shown in place.
+      state.renderRoute='none';
       const budget=state.mode==='ai'?80:1200;
       if(state.requestCount>=budget){
         lastError='本次字幕翻译已达到安全请求上限';
@@ -425,14 +437,14 @@
   }
   function renderTimedCues(cues,time){
     const activeCues=core.activeCues(cues,time);
-    if(!activeCues.length){render('');return;}
+    if(!activeCues.length){state.renderRoute='none';render('');return;}
     if(inlineNativeTranslation(activeCues,time)){render('');return;}
-    // External overlay is an explicit compatibility mode, not a substitute
-    // for failed native replacement under the default strict setting.
-    if(config.subtitleRenderMode==='replace-track'&&!state.importedCues &&
-       activeCues.every(c=>state.cache.has(c.key))){
-      state.renderRoute='unsupported';
-      lastError='字幕已译出，但播放器不允许直接修改原生字幕轨。严格模式未启用外置字幕。';
+    // Strict mode never draws pending/error text over the player.
+    if(config.subtitleRenderMode==='replace-track'){
+      if(activeCues.every(c=>state.cache.has(c.key))){
+        state.renderRoute='unsupported';
+        lastError='字幕已译出，但播放器不允许直接修改原生字幕轨。严格模式未启用外置字幕。';
+      }else state.renderRoute='none';
       render('');return;
     }
     if(state.failedAt&&activeCues.some(c=>!state.cache.has(c.key))){
@@ -497,6 +509,10 @@
       reason:embeddedPlayerHint()||'没有可访问的视频元素或已显示的字幕。请在播放器中开启原文字幕，或在支持的播放器中导入字幕文件。'};
     const validImport=imported?.length
       ? core.normalizeCues(imported,video.currentTime).length>0 : false;
+    if(imported?.length && !validImport)
+      return {ok:false,reason:'导入字幕的时码或文本无效，未启动翻译。'};
+    if(validImport && config.subtitleRenderMode==='replace-track')
+      return {ok:false,reason:'导入字幕没有可修改的播放器原生轨道；请明确选用兼容字幕显示模式，或启用网站原有字幕。'};
     if(validImport && !video)return {ok:false,reason:'导入 SRT/VTT 需要可访问的视频时间轴，当前播放器不提供。'};
     const track=validImport ? null : video ? chooseTrack(video) : null;
     // Real platform players often create their TextTrack or visible caption
@@ -530,7 +546,10 @@
     else if(msg?.type==='PIT_PREFERENCES_CHANGED'){void refreshConfig().catch(()=>{});}
     else if(msg?.type==='PIT_CAPTIONS_DIAGNOSTICS'){const v=pickVideo();respond({ok:true,platform:platformId(),videos:allVideos(document).length,visibleVideo:Boolean(v?.getClientRects().length),source:state.importedCues?'imported-file':state.domMode?'dom-caption':state.track?'texttrack (human/auto unknown)':'none',language:state.manualSource||state.track?.language||'unknown',tracks:v?[...v.textTracks].map(t=>({language:t.language,kind:t.kind,mode:t.mode})):[],provider:config.providerId||'inherit',renderRoute:state.renderRoute,translationCount:state.cache.map.size,
       active:state.active,renderMode:config.subtitleRenderMode||'in-player',
-      status:!config.enabled?'disabled':state.failedAt?'error':state.active?(state.seenAny?'ready':'waiting-for-CC'):'disabled',lastError});}
+      status:!config.enabled?'disabled':state.failedAt?'error':!state.active?'disabled':
+        state.renderRoute==='unsupported'?'unsupported':
+        (['native-track','platform-dom'].includes(state.renderRoute)&&state.cache.map.size>0)?'translated':
+        state.seenAny?'pending':'waiting-for-CC',lastError});}
   });
   settingsReady=refreshConfig().catch(()=>{});
   // Event-driven discovery; existing 450 ms session timer remains the only poll.

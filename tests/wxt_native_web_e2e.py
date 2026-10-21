@@ -212,7 +212,8 @@ async def main():
                       .search-panel{display:flex;gap:10px;margin-top:20px}
                       .search-panel input,.search-panel button{min-width:0;max-width:160px}
                     </style></head><body>
-                    <header><nav><a href="/careers">Working At Philips</a></nav></header>
+                    <header><nav><a href="/careers">Working At Philips</a></nav>
+                      <h2 id="site-mission">Better lives begin with better care</h2></header>
                     <main><section class="hero">
                     <div class="hero-column">
                       <h1 id="hero-title"><span>What you choose to do</span>
@@ -236,6 +237,10 @@ async def main():
                 await hero.goto(landing);await hero.bring_to_front()
                 await popup.get_by_role('button',name='翻译当前网页').click()
                 await hero.locator('#hero-title > .pit-flow-translation').wait_for(timeout=18000)
+                await hero.locator('#site-mission > .pit-flow-translation').wait_for(timeout=18000)
+                assert (await hero.locator('#site-mission > .pit-flow-translation').inner_text()
+                  ).startswith('译文:Better lives begin'),(
+                    'Full mode must translate visible headings in site headers')
                 hero_layout=await hero.evaluate("""()=>{
                   const title=document.querySelector('#hero-title');
                   const trans=title.querySelector('.pit-flow-translation');

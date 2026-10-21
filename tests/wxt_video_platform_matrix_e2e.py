@@ -281,8 +281,10 @@ async def main():
         await page.bring_to_front()
         await popup.get_by_role('button',name='翻译视频字幕').click()
         await popup.get_by_role('button',name='停止字幕翻译').wait_for(timeout=10000)
-        await page.locator('.pit-caption-translated').get_by_text(
-          '正在等待播放器显示原文字幕',exact=False).wait_for(timeout=11000)
+        await page.locator('.pit-caption-overlay').wait_for(state='attached',timeout=11000)
+        assert await page.locator('.pit-caption-overlay').evaluate(
+          "(el)=>getComputedStyle(el).display==='none'"),(
+          'Strict mode cannot show an external waiting message before CC exists')
         before=await sw.evaluate("""()=>globalThis.pitPendingTranslationCount||0""")
         await page.evaluate("""()=>{
           const layer=document.createElement('div');
@@ -327,6 +329,14 @@ async def main():
           'in_player_replacement':True,'restored_on_stop':True})
         await page.close()
 
+        # Imported cues have no publisher track to change. Explicitly opt
+        # into non-native compatibility rendering for this separate test.
+        await settings.evaluate("""async()=>{
+          const key='pit_settings_v1';
+          const saved=(await chrome.storage.local.get(key))[key];
+          saved.videoSettings={...saved.videoSettings,subtitleRenderMode:'in-player'};
+          await chrome.storage.local.set({[key]:saved});
+        }""")
         url='https://example.org/manual-subtitles'
         async def source_html(route):
           await route.fulfill(status=200,content_type='text/html',
@@ -339,7 +349,8 @@ async def main():
           'buffer':b'1\n00:00:00,000 --> 00:00:20,000\nManual subtitle for lecture\n\n'})
         await popup.get_by_role('button',name='翻译视频字幕').click()
         await page.locator('.pit-caption-translated').get_by_text('译文:',exact=False).wait_for(timeout=26000)
-        results.append({'platform':'user-srt','fixture_visible_caption':'pass'})
+        results.append({'platform':'user-srt','fixture_visible_caption':'pass',
+          'explicit_compatibility_mode':True,'native_replacement':False})
         await popup.get_by_role('button',name='停止字幕翻译').click()
         print('WXT PLATFORM MATRIX:',json.dumps(results,ensure_ascii=False),flush=True)
       finally:
