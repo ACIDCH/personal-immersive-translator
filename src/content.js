@@ -202,7 +202,12 @@
     if(!el.isConnected || !translation || sourceText(el)!==source)return false;
     const heading=el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]');
     const inline=scope==='full'&&el.matches(FULL_CONTROLS);
-    const withinBlock=el.matches('p,blockquote,figcaption,[role="paragraph"]');
+    // Only direct CSS grid/flex children need in-item rendering to avoid
+    // creating an additional grid/flex item. Normal article paragraphs retain
+    // the proven sibling markup and locator compatibility.
+    const parentDisplay=el.parentElement?getComputedStyle(el.parentElement).display:'';
+    const withinBlock=el.matches('p,blockquote,figcaption,[role="paragraph"]')&&
+      /^(grid|inline-grid|flex|inline-flex)$/.test(parentDisplay);
     const contained=heading||inline||withinBlock||el.matches('li,td,th');
     const node=document.createElement(contained?'span':'div');
     node.className='pit-translation'+(isAI?' pit-ai':'')+
