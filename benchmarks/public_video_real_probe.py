@@ -185,7 +185,7 @@ async def observe_native_public(ctx,popup):
               const overlay=document.querySelector('.pit-caption-overlay');
               return {text:cue?.text||'',mode:t?.mode||'absent',
                 overlayHidden:!overlay||getComputedStyle(overlay).display==='none',
-                moved:!!cue && cue.text!==original && /[\\u3400-\\u9fff]/.test(cue.text)};
+                moved:!!cue && cue.text!==original && /[㐀-鿿]/.test(cue.text)};
             }""",{'start':observed['startTime'],'original':observed['original']})
             diag=await diagnostics(popup)
             if diag:
