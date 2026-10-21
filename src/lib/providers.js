@@ -95,6 +95,43 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
   const target = opts.target || 'zh';
   let result;
   switch (provider) {
+    case 'google-free': {
+      // Adapted from the MIT-licensed GoogleService in
+      // ymcwiki/open-immersive-translate (Copyright 2026 ymcwiki).
+      // Google public translate endpoint is undocumented and may be rate
+      // limited or withdrawn. This is distinct from paid Google Cloud API.
+      // We send only the exact text intentionally submitted for translation.
+      const output=[];
+      for(const text of texts){
+        if(source===target){output.push(text);continue;}
+        const translated=[];
+        for(const part of splitPublicText(text,1300)){
+          if(!part.trim()){translated.push(part);continue;}
+          const u=new URL('https://translate.googleapis.com/translate_a/single');
+          u.searchParams.set('client','gtx');
+          u.searchParams.set('sl',source);
+          u.searchParams.set('tl',target==='zh'?'zh-CN':target);
+          u.searchParams.set('dt','t');
+          u.searchParams.set('q',part);
+          let response;
+          try{response=await fetchFn(u.toString(),{method:'GET',signal:AbortSignal.timeout(15000)});}
+          catch(e){throw new TranslationError('Google 免费接口连接失败或超时：'+String(e?.message||e).slice(0,120));}
+          if(!response.ok)throw new TranslationError(
+            'Google 免费接口 HTTP '+response.status+'，可能被限流或暂不可用',response.status);
+          let data;
+          try{data=await response.json();}
+          catch{throw new TranslationError('Google 免费接口返回内容无法解析');}
+          if(!Array.isArray(data)||!Array.isArray(data[0]))
+            throw new TranslationError('Google 免费接口返回数据结构无效');
+          const result=data[0].map(row=>
+            Array.isArray(row)&&typeof row[0]==='string'?row[0]:'').join('');
+          if(!result.trim())throw new TranslationError('Google 免费接口返回空译文');
+          translated.push(result);
+        }
+        output.push(translated.join(''));
+      }
+      return toPlainStringArray(output,texts.length);
+    }
     case 'mymemory': {
       // Public external MT requires explicit provider selection; Chrome
       // native failures NEVER trigger an automatic remote upload.
