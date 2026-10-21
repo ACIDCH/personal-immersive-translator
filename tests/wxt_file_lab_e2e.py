@@ -519,6 +519,7 @@ async def main():
         assert not await page.get_by_role('button',name='取消批量处理').count()
         report['batch_user_cancel']='pass'
         print('WXT BATCH USER CANCEL / NO PARTIAL ZIP: PASS',flush=True)
+        await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         await page.get_by_role("button",name="图片 OCR").click()
         image=Image.new('RGB',(920,170),'white')
         d=ImageDraw.Draw(image)
