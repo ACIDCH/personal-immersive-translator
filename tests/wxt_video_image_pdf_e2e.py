@@ -127,7 +127,7 @@ async def main():
           const cues=track?.cues?[...track.cues]:[];
           return cues.length===expected.length &&
             cues.every((cue,i)=>cue.text===expected[i]);
-        }""",expected,timeout=22000)
+        }""",arg=expected,timeout=22000)
         native=await video.evaluate("""()=>{
           const video=document.getElementById('lecture');
           const overlay=document.querySelector('.pit-caption-overlay');
