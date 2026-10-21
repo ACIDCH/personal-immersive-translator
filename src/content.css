@@ -1,4 +1,21 @@
-.pit-translation { display:block !important; font: inherit !important; font-size:.94em !important; line-height:1.6 !important; opacity:.9; color:#1965a8 !important; padding:6px 10px !important; margin:5px 0 12px !important; border-left:3px solid #3a88ce !important; background:rgba(65,125,190,.07) !important; white-space:pre-wrap !important; text-align:left !important; overflow-wrap:anywhere !important; }
+/* Default immersive rendering should track the site's text width, not
+   draw full-width blue callouts across responsive landing page layouts. */
+.pit-translation { display:block !important; box-sizing:border-box !important; max-width:100% !important;
+ font:inherit !important; font-size:.94em !important; line-height:1.45 !important;
+ opacity:.92; color:inherit !important; padding:0 !important;
+ margin:.28em 0 .58em !important; border:0 !important; background:transparent !important;
+ white-space:pre-wrap !important; text-align:inherit !important; overflow-wrap:break-word !important; }
+.pit-translation.pit-ai { color:inherit !important; border:0 !important; background:transparent !important; }
+.pit-translation.pit-flow-translation {display:block !important;box-sizing:border-box !important;
+ font-size:.78em !important;line-height:1.35 !important;font-weight:400 !important;
+ letter-spacing:normal !important;max-width:100% !important;white-space:normal !important;
+ margin:.14em 0 0 !important;padding:0 !important;border:0 !important;
+ background:transparent !important;color:inherit !important;text-align:inherit !important;}
+/* Keeping the translated span inside headings preserves CSS grid/flex width.
+   Translation-only mode hides the source glyphs, not the heading container. */
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"]){display:block !important;font-size:0 !important;}
+.pit-original-concealed:is(h1,h2,h3,h4,h5,h6,[role="heading"])>.pit-flow-translation{
+ display:block !important;font-size:clamp(18px,2vw,30px) !important;}
 .pit-translation.pit-ai { color:#8156b2 !important; border-color:#a475da !important; background:rgba(125,80,185,.07) !important; }
 .pit-toast { position:fixed !important; bottom:24px !important; right:24px !important; z-index:2147483647 !important; max-width:380px !important; border-radius:9px !important; background:#1c283b !important; color:white !important; padding:10px 15px !important; font:14px/1.5 system-ui,sans-serif !important; box-shadow:0 6px 22px rgba(0,0,0,.22) !important; }
 
