@@ -46,6 +46,14 @@ class CloudDocumentTests(unittest.TestCase):
         self.client=TestClient(cloud.app)
         self.auth={"Authorization":"Bearer "+TOKEN}
 
+    def test_railway_process_health_is_independent_of_engine_and_secrets(self):
+        with patch.dict(os.environ,{"PIT_CLOUD_PDF_TOKEN":""}):
+            live=self.client.get("/livez")
+            self.assertEqual(live.status_code,200)
+            self.assertEqual(live.json(),{"status":"alive"})
+            self.assertNotIn("key",live.text.lower())
+            self.assertEqual(self.client.get("/health").status_code,401)
+
     def test_authentication_denies_unsolicited_pdf_and_health(self):
         self.assertEqual(self.client.get("/health").status_code,401)
         self.assertEqual(self.client.post("/v1/pdf/translate",
