@@ -9,10 +9,11 @@ export default defineConfig({
   // WXT auto-imports prevents an erroneous wxt/utils/storage import.
   imports:false,
   manifest:{
-    name:'多模态翻译 — 核心集成测试版',
-    short_name:'多模态翻译',
-    description:'Bilingual web translation, visible captions, local OCR, Office translation and optional local PDF/ASR services.',
+    name:'PIT · 沉浸式翻译',
+    short_name:'PIT 翻译',
+    description:'Personal Immersive Translator (PIT): bilingual webpages, in-player subtitles, file and image translation.',
     minimum_chrome_version:'125',
+    version:'0.4.4',
     // MV3 permits packaged WASM evaluation, not remote executable code.
     content_security_policy:{
       extension_pages:"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
