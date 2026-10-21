@@ -96,41 +96,62 @@ export async function translateBatch(texts, opts, fetchFn = fetch) {
   let result;
   switch (provider) {
     case 'google-free': {
-      // Adapted from the MIT-licensed GoogleService in
-      // ymcwiki/open-immersive-translate (Copyright 2026 ymcwiki).
-      // Google public translate endpoint is undocumented and may be rate
-      // limited or withdrawn. This is distinct from paid Google Cloud API.
-      // We send only the exact text intentionally submitted for translation.
-      const output=[];
-      for(const text of texts){
-        if(source===target){output.push(text);continue;}
-        const translated=[];
-        for(const part of splitPublicText(text,1300)){
-          if(!part.trim()){translated.push(part);continue;}
+      // MIT-derived Google public adapter from ymcwiki/open-immersive-translate,
+      // detailed attribution: docs/THIRD_PARTY_TRANSLATION_ADAPTERS.md.
+      // Like KISS, use bounded batches and deduplicate identical source
+      // blocks. Do not route to a paid endpoint when this one rate-limits.
+      if(source===target)return [...texts];
+      const unique=[...new Set(texts)];
+      const pieces=unique.map(text=>splitPublicText(text,1300));
+      const jobs=pieces.flatMap((parts,owner)=>parts.map((text,index)=>({text,owner,index})));
+      if(jobs.length>48)throw new TranslationError(
+        '免 Key 接口单批超过 48 个小请求，请缩小网页/文件翻译批次');
+      const completed=pieces.map(parts=>Array(parts.length).fill(''));
+      let position=0,failed=null;
+      async function worker(){
+        while(position<jobs.length&&!failed){
+          const job=jobs[position++];
+          if(!job.text.trim()){completed[job.owner][job.index]=job.text;continue;}
           const u=new URL('https://translate.googleapis.com/translate_a/single');
           u.searchParams.set('client','gtx');
           u.searchParams.set('sl',source);
           u.searchParams.set('tl',target==='zh'?'zh-CN':target);
           u.searchParams.set('dt','t');
-          u.searchParams.set('q',part);
-          let response;
-          try{response=await fetchFn(u.toString(),{method:'GET',signal:AbortSignal.timeout(15000)});}
-          catch(e){throw new TranslationError('Google 免费接口连接失败或超时：'+String(e?.message||e).slice(0,120));}
-          if(!response.ok)throw new TranslationError(
-            'Google 免费接口 HTTP '+response.status+'，可能被限流或暂不可用',response.status);
-          let data;
-          try{data=await response.json();}
-          catch{throw new TranslationError('Google 免费接口返回内容无法解析');}
-          if(!Array.isArray(data)||!Array.isArray(data[0]))
-            throw new TranslationError('Google 免费接口返回数据结构无效');
-          const result=data[0].map(row=>
-            Array.isArray(row)&&typeof row[0]==='string'?row[0]:'').join('');
-          if(!result.trim())throw new TranslationError('Google 免费接口返回空译文');
-          translated.push(result);
+          u.searchParams.set('q',job.text);
+          try{
+            let response;
+            try{
+              response=await fetchFn(u.toString(),{
+                method:'GET',signal:AbortSignal.timeout(15000)
+              });
+            }catch(e){
+              throw new TranslationError('Google 免费接口连接失败或超时：'+
+                String(e?.message||e).slice(0,120));
+            }
+            if(!response.ok)throw new TranslationError(
+              'Google 免费接口 HTTP '+response.status+'，可能被限流或暂不可用',
+              response.status);
+            let data;
+            try{data=await response.json();}
+            catch{throw new TranslationError('Google 免费接口返回内容无法解析');}
+            if(!Array.isArray(data)||!Array.isArray(data[0]))
+              throw new TranslationError('Google 免费接口返回数据结构无效');
+            const translated=data[0].map(row=>
+              Array.isArray(row)&&typeof row[0]==='string'?row[0]:'').join('');
+            if(!translated.trim())throw new TranslationError('Google 免费接口返回空译文');
+            completed[job.owner][job.index]=translated;
+          }catch(error){
+            failed=error;
+            throw error;
+          }
         }
-        output.push(translated.join(''));
       }
-      return toPlainStringArray(output,texts.length);
+      // Three in-flight requests balance real website latency against an
+      // unofficial endpoint's rate limits. All text is committed only after
+      // the full batch succeeds; unrelated pages never share results.
+      await Promise.all(Array.from({length:Math.min(3,jobs.length)},()=>worker()));
+      const translated=new Map(unique.map((text,i)=>[text,completed[i].join('')]));
+      return toPlainStringArray(texts.map(text=>translated.get(text)),texts.length);
     }
     case 'mymemory': {
       // Public external MT requires explicit provider selection; Chrome
