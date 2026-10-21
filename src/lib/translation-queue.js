@@ -35,3 +35,34 @@ export class PriorityTranslationQueue {
  }
  get waiting(){return this.pending.length;}
 }
+
+/**
+ * Yield between bounded public-MT sub-batches. A single very long article
+ * used to monopolize the service-worker serial queue with many HTTP calls,
+ * making subtitle updates appear several seconds too late. A video job
+ * arriving during an article slice is next in priority; no in-flight request
+ * is cancelled or silently rerouted to a paid provider.
+ */
+export async function translateKeylessSliced(queue,texts,opts,translate){
+ if(!Array.isArray(texts)||!texts.length)return [];
+ const slices=[];let batch=[],size=0;
+ for(const text of texts){
+  if(typeof text!=='string')throw Error('Invalid public translation text');
+  if(batch.length&&(batch.length>=2||size+text.length>2600)){
+   slices.push(batch);batch=[];size=0;
+  }
+  batch.push(text);size+=text.length;
+ }
+ if(batch.length)slices.push(batch);
+ const translated=[];
+ for(const slice of slices){
+  const values=await queue.enqueue(()=>translate(slice,opts),{
+   context:opts?.requestContext||'article'
+  });
+  if(!Array.isArray(values)||values.length!==slice.length||
+     values.some(t=>typeof t!=='string'||!t.trim()))
+   throw Error('Public provider returned an incomplete sub-batch');
+  translated.push(...values);
+ }
+ return translated;
+}
