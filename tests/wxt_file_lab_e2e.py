@@ -148,7 +148,7 @@ async def main():
         assert await service_link.get_attribute('target')=='_blank',(
           'Settings must open in another tab to preserve in-flight file jobs')
         await page.locator('.pit-workbench-engine').get_by_text('文件翻译服务',exact=False).wait_for(timeout=15000)
-        assert await page.locator('#pit-workbench-provider option').count()==7
+        assert await page.locator('#pit-workbench-provider option').count()==8
         report['unified_file_workbench']='pass'
         await page.locator('.pit-workbench-nav a[href="#document-lab"]').click()
         assert page.url.endswith('/file-lab.html#document-lab'),page.url
